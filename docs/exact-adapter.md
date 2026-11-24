@@ -29,7 +29,44 @@ Pinned SDK and read depth: [research memo](research/exact.md).
   This is not a rich workspace renderer, offline writer, authentication layer or
   mobile-web replacement for a native build.
 
-## Reproduce without root-package edits
+## Chromium/Exact conformance
+
+This is separate from the [bounded checker and offline replay](check-interactions.md).
+Use the same Node/npm and run `npm run adapters:install` in this repository.
+Install [Bun 1.4.2](https://github.com/oven-sh/bun/releases/tag/bun-v1.4.2),
+[rustup](https://rustup.rs/) and a Linux C toolchain (e.g. `build-essential` on
+Ubuntu). Exact's setup uses its locked dependencies, including Rust 1.97.0,
+web Rust nightly-2026-08-21, wasm-bindgen 0.2.127, Binaryen 132, the pinned
+Hermes host bundle and Playwright Core 1.64.1 with its matching Chromium.
+Keep the Exact checkout and template outside this repository.
+
+```sh
+tools_dir=$(mktemp -d "$HOME/maya-exact.XXXXXX")
+export EXACT_ROOT="$tools_dir/exact"
+export EXACT_TEMPLATE="$tools_dir/template"
+export BUN="$(command -v bun)" # Or the absolute path to the Bun 1.4.2 binary.
+export EXACT_FEEDBACK=0
+"$BUN" --version
+git clone https://github.com/expo/exact "$EXACT_ROOT"
+git -C "$EXACT_ROOT" checkout --detach d8863f736172954b605c3bff22f51337c6983170
+"$BUN" "$EXACT_ROOT/scripts/exact.mjs" setup
+"$BUN" "$EXACT_ROOT/scripts/exact.mjs" setup --check --platform web
+node "$EXACT_ROOT/node_modules/playwright-core/cli.js" install chromium
+"$BUN" "$EXACT_ROOT/scripts/exact.mjs" new "$EXACT_TEMPLATE" \
+  --name Derived --bundle-id research.derived.exact
+
+npm run application:review:test
+# Or replay the lost-then-snapshot prefix using the trace from check-interactions.md:
+# npm run application:review:test -- "$trace"
+```
+
+If Chromium reports missing Linux libraries, install them using the same
+Playwright CLI's `install-deps chromium` command (requires system package
+access). The conformance runner loads Playwright from `EXACT_ROOT`, copies
+only the template launcher and package manifest, and builds in a fresh OS
+temporary directory. It does not need a prebuilt app or any Android or iOS build.
+
+## Standalone gateway and optional native demo
 
 ```sh
 # Shared backend in fresh isolated data; gateway serves compiled web at its origin.

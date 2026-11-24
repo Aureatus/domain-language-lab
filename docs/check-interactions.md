@@ -1,8 +1,16 @@
 # Check interactions
 
+From a clean Linux clone, use Node.js 22.18 or newer (CI uses Node.js
+24.22.3 with npm 11.19.1). No browser, Exact, Lean, or native build is needed
+for the bounded checker and offline replay.
+
 ```sh
+npm run adapters:install
 npm run check:interactions -- leave/browser.domain leave.request --actor maya
 ```
+
+The install uses the Effect adapter's lockfile (Effect 4.1.4). Expect
+`"status": "bounded-pass"` for the Maya example.
 
 No additional application declarations. Like `inspect:action`, the command selects example inputs, or takes `--args JSON`. It executes one isolated backend walkthrough to obtain **real snapshots and receipts**, then checks different orders in which a viewer could observe them. It does not re-execute the domain for each order.
 
@@ -17,14 +25,40 @@ These are small model schedules, not claims that each renderer exposes an actor 
 ## Reproduce the negative control
 
 ```sh
+scratch=$(mktemp -d)
+trace="$scratch/snapshot-fault.json"
 npm run check:interactions -- leave/browser.domain leave.request --actor maya \
-  --mutant snapshot-unlocks --out /tmp/opencode/snapshot-fault.json
-# Expected exit 1. The output file must not already exist.
+  --mutant snapshot-unlocks --out "$trace"
+# Expected exit 1 with rule submission.no-fresh-submit-before-receipt.
 npm run inspect:action -- leave/browser.domain leave.request \
-  --replay /tmp/opencode/snapshot-fault.json
-npm run application:review:test -- /tmp/opencode/snapshot-fault.json
+  --replay "$trace"
 ```
 
-The explicit mutant changes the test projection, not either shipped renderer. Failure replay checks the model contract and checker/projection source fingerprints and reruns the oracle, reporting whether the same rule fails at the same step. The Chromium test runs the supported lost-then-snapshot prefix against the two **unmodified** web renderers and expects safe controls. `npm test` includes the model check, mutation detection, and offline replay on a non-leave fixture. The separate browser command needs Chromium and the pinned Exact build tools.
+The mutant enables Submit after `snapshot → draft → submit → lost → snapshot`,
+before a matching receipt arrives. The inspector should print
+`Failure replay: reproduced (submission.no-fresh-submit-before-receipt)`.
+The output file must not already exist. Keep it for the optional browser
+replay below, or remove it with `rm -r "$scratch"` when finished.
+
+CI runs the normal checker, verifies the mutant's exit, rule, event sequence
+and enabled Submit control, then replays its trace. It also runs these targeted tests:
+
+```sh
+node --test application/interaction-check.test.mjs application/action-review.test.mjs application/submission.test.mjs
+```
+
+## Optional renderer conformance
+
+After [setting up Chromium and Exact](exact-adapter.md#chromiumexact-conformance),
+run the same prefix against the two unmodified web renderers:
+
+```sh
+npm run application:review:test -- "$trace"
+```
+
+The explicit mutant changes the test projection, not either shipped renderer.
+Offline replay checks the model contract and checker/projection source fingerprints
+and reruns the oracle. The Chromium test expects both renderers to keep Submit
+disabled and Check enabled without a receipt.
 
 “Shortest” means the shortest observed failing prefix across the enumerated schedules, including the initial snapshot and draft setup. A pass is bounded by the selected command, input, real backend capture, modeled event families, oracle and controls. Concurrent refresh requests, browser geometry, native hosts, and arbitrary transport failures are outside this check.

@@ -1,0 +1,40 @@
+name: Interaction check
+
+on: [push, pull_request]
+
+permissions:
+  contents: read
+
+jobs:
+  maya-leave-request:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24.22.3
+      - run: npm run adapters:install
+      - run: npm run check:interactions -- leave/browser.domain leave.request --actor maya
+      - run: node --test application/interaction-check.test.mjs application/action-review.test.mjs application/submission.test.mjs
+      - name: Reject and replay the snapshot-unlocks mutant
+        shell: bash
+        run: |
+          scratch=$(mktemp -d)
+          trap 'rm -rf "$scratch"' EXIT
+          trace="$scratch/snapshot-fault.json"
+          status=0
+          npm run --silent check:interactions -- leave/browser.domain leave.request --actor maya \
+            --mutant snapshot-unlocks --out "$trace" > "$scratch/summary.json" || status=$?
+          cat "$scratch/summary.json"
+          test "$status" -eq 1
+          node --input-type=module - "$scratch/summary.json" <<'NODE'
+          import assert from 'node:assert/strict';
+          import {readFileSync} from 'node:fs';
+          const summary = JSON.parse(readFileSync(process.argv[2], 'utf8'));
+          assert.equal(summary.status, 'failed');
+          assert.equal(summary.rule, 'submission.no-fresh-submit-before-receipt');
+          assert.deepEqual(summary.sequence, ['snapshot', 'draft', 'submit', 'lost', 'snapshot']);
+          assert.equal(summary.observedControls.submit, true);
+          NODE
+          npm run inspect:action -- leave/browser.domain leave.request --replay "$trace"
