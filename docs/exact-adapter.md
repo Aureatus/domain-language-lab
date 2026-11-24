@@ -69,6 +69,13 @@ access). The conformance runner loads Playwright from `EXACT_ROOT`, copies
 only the template launcher and package manifest, and builds in a fresh OS
 temporary directory. It does not need a prebuilt app or any Android or iOS build.
 
+On an older Linux host, you can run this setup in an Ubuntu 24.04 container
+(e.g. `docker run --rm -it --shm-size=1g ubuntu:24.04 bash`). Inside a fresh
+container, install `build-essential ca-certificates curl git pkg-config xz-utils`
+with apt, then install Node, Bun, and rustup and use a fresh clone. Replace
+`install chromium` above with `install --with-deps chromium` to install
+Chromium and its system libraries together.
+
 ## Standalone gateway and optional native demo
 
 ```sh
