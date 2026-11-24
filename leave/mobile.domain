@@ -1,0 +1,16 @@
+module "time-away-mobile" view
+import "./time-away.domain"
+import "./demo.domain"
+use "time-away"
+
+application
+  title "Time away mobile"
+  actor maya label "Maya Chen"
+  actor leo label "Leo Martin"
+  actor sam label "Sam Rivera"
+  view list leave label "Time off"
+    field start label "From" format date
+    field end label "Until" format date
+    field status label "Status"
+  end
+end

@@ -1,0 +1,64 @@
+# Executed non-leave syntax fixture; not a production application.
+domain "schema-groups"
+
+resource supply
+  fields
+    title string
+    balance
+      type integer
+      min 0
+      max 30
+    end
+    status
+      type string
+      enum "ready" "held" "spent"
+    end
+    manager string
+  end
+end
+
+relationships
+  supply.manager id "supply.supervisor"
+end
+
+action "supply.adjust"
+  inputs
+    key string
+    balance like supply.balance
+    status like supply.status
+  end
+  bindings
+    item from supply key input.key
+  end
+  requires
+    require balance <= 30 id "supply.capacity"
+  end
+  policies
+    allow when actor == item.manager id "supply.manager-only"
+  end
+  changes
+    update
+      set item.balance = balance id "supply.balance"
+      set item.status = status id "supply.status"
+    end
+  end
+  observations
+    item through "supply.supervisor"
+  end
+end
+
+initial revision 0
+  records supply
+    record depot version 0
+      title = "Depot"
+      balance = 5
+      status = "ready"
+      manager = "sam"
+    end
+  end
+end
+
+application
+  title "Supply fixture"
+  actor sam label "Sam"
+end

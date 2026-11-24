@@ -1,0 +1,6 @@
+{
+  "action": "leave.request",
+  "actor": "maya",
+  "args": {"start":"2026-11-23","end":"2026-11-25"},
+  "submissionId": "review-request-1"
+}

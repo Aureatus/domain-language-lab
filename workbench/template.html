@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Resolve / Semantic workbench</title>
+<style>
+/* Replaced with workspace.css by build.ts. */
+</style>
+</head>
+<body>
+<header class="topbar"><div class="brand"><h1>Semantic workbench</h1><span>Issue tracker / Ticket.resolve</span></div><span class="badge">216 recorded executions · offline</span></header>
+<span id="model-id" hidden></span>
+<main class="workspace">
+<aside class="left" aria-label="Model and scenario controls">
+<section class="section"><div class="heading"><h2>Resolution request</h2><span class="mono small muted">ticket-1</span></div><div class="context"><strong>Original resolution</strong><span class="small muted">Edit replaces this with “Changed resolution”.</span></div><div class="two"><label class="field"><span>Actor role</span><select id="role"><option value="support">Support</option><option value="reviewer">Reviewer</option><option value="viewer">Viewer</option></select></label><label class="field"><span>Priority</span><select id="priority"><option value="high">High</option><option value="normal">Normal</option></select></label></div></section>
+<section class="section"><div class="heading"><h2>Policy editor</h2><button id="reset" class="small" type="button">Reset</button></div><label class="field"><span>Support · high priority</span><select id="policy"><option value="approval">Require approval</option><option value="allow">Allow without approval</option><option value="deny">Deny resolution</option></select></label><table class="policy-table"><caption class="sr-only">Current policy decisions</caption><thead><tr><th scope="col">Role</th><th scope="col">Normal</th><th scope="col">High</th></tr></thead><tbody id="policy-table"></tbody></table><div class="eyebrow" style="margin:16px 0 8px">Baseline → edited policy</div><div id="diff" class="diff"></div><p class="small muted" style="margin-top:9px">All 6 role/priority decisions compared. This is not full behavioral equivalence.</p></section>
+<section><label class="switch"><input id="mutant" type="checkbox"><span><strong>Deliberate stale-approval mutant</strong><small>Accept any existing approval instead of checking its current binding.</small></span></label><p class="small muted" style="margin-top:10px">A fault-injected interpreter, not an alternate policy.</p></section>
+</aside>
+<section class="center" aria-label="Execution and state">
+<nav class="tabs" role="tablist" aria-label="Workbench panels"><button role="tab" id="tab-execution" aria-selected="true" aria-controls="panel-execution">Execution</button><button role="tab" id="tab-changes" aria-selected="false" aria-controls="panel-changes" tabindex="-1">Policy changes</button><button role="tab" id="tab-failures" aria-selected="false" aria-controls="panel-failures" tabindex="-1">Generated failures</button><button role="tab" id="tab-evidence" aria-selected="false" aria-controls="panel-evidence" tabindex="-1">Evidence</button></nav>
+<div id="panel-execution" role="tabpanel" aria-labelledby="tab-execution"><div class="heading"><h2 id="execution-heading">Approve → edit → execute</h2><span class="badge safe" id="mode">Safe interpreter</span></div>
+<div class="experiment"><div class="experiment-head"><div class="heading" style="margin-bottom:0"><span class="eyebrow">Request → selected schedule</span><span class="small muted">6 permutations</span></div><label for="schedule" class="sr-only">Action schedule</label><select id="schedule" class="schedule"></select></div>
+<div id="outcome" class="outcome" role="status"><span class="outcome-symbol" aria-hidden="true">↳</span><div><strong id="outcome-title"></strong><p id="outcome-note"></p></div></div>
+<div class="transport"><div class="transport-row"><button id="back" aria-label="Previous step">←</button><button id="play" class="primary">Play replay</button><button id="next" aria-label="Next step">→</button><button id="restart" aria-label="Restart replay">↺</button><span class="counter" id="counter"></span></div><label for="scrub" class="sr-only">Replay step</label><input id="scrub" type="range" min="0" max="4" value="4" step="1"><p class="small muted" style="margin-top:5px">Presentation order below; parent links are the interpreter’s recorded causality.</p></div>
+<div class="execution-grid"><section><h2>Recorded trace</h2><div class="timeline" id="timeline" aria-label="Recorded events"></div><details><summary>Causal inspection</summary><div id="causal"></div></details></section><section class="card"><h2>State at this step</h2><dl id="state"></dl></section></div></div>
+<section class="card relation"><div class="heading"><h2>Relationships → delivery intents</h2><span class="eyebrow" id="delivery-count"></span></div><div class="relation-row"><div class="node">Ticket.resolve<br><span class="muted">grouped commit</span></div><span class="arrow" aria-hidden="true">→</span><div class="node">openedBy ∪ watchers<br><span class="muted">deduplicated set</span></div></div><div class="relation-row"><div class="node" id="recipient-1">user-1 · opener + watcher</div><span class="arrow" aria-hidden="true">+</span><div class="node" id="recipient-2">user-2 · watcher</div></div><p>Configured paths come from the model. Highlighted recipients have recorded inbox intents at this replay step. No messages are sent. No bidirectional propagation is implemented.</p></section>
+</div><div id="panel-changes" role="tabpanel" aria-labelledby="tab-changes" hidden><h2>Policy changes</h2><p class="small muted">Only support / high priority is editable. Six decisions are compared, not full behavior.</p><div id="changes-content"></div></div>
+<div id="panel-failures" role="tabpanel" aria-labelledby="tab-failures" hidden><section class="card" aria-label="Generated property failure inspector">
+<h2>Generated &amp; shrunk failures</h2><p class="small muted">Separate build-time fault-injection run against the independent snapshot oracle. These histories use the baseline model, not the policy editor. Replay selects recorded API results; it never resubmits commands.</p>
+<label class="field"><span>Generated failure history</span><select id="property-history"></select></label>
+<div class="two"><label class="field"><span>History size</span><select id="property-size"><option value="shrunk">Shrunk history</option><option value="original">Original history</option></select></label><label class="field"><span>Replay interpreter</span><select id="property-mode"><option value="true">Deliberate mutant</option><option value="false">Safe interpreter</option></select></label></div>
+<p id="property-meta" class="small mono"></p><p id="property-bounds" class="small muted"></p>
+<div class="transport-row"><button id="property-replay">Replay from start</button><button id="property-next">Next action</button><button id="property-export">Export replay JSON</button></div>
+<label class="field"><span>Generated history replay step</span><input id="property-step" type="range" min="0" value="0" step="1"></label>
+<p id="property-result" role="status"></p><ol id="property-actions" class="small mono"></ol>
+<details><summary>Oracle discrepancy and recorded trace</summary><pre id="property-inspection"></pre></details>
+<p class="small muted property-warning">Shrinking preserves the failure kind using bounded chunk deletion, single deletion and listed value simplifications. No claim of global minimality. A sampled pass is not proof.</p><p id="property-notice" class="small" role="status"></p>
+</section></div>
+<div id="panel-evidence" role="tabpanel" aria-labelledby="tab-evidence" hidden><aside class="right" aria-label="Evidence and boundaries"><section class="section"><div class="heading"><h2>Evidence ledger</h2><span class="eyebrow">Build snapshot</span></div><p class="small muted">Evidence is attached, not upgraded by this visualization.</p><div class="evidence-card"><h3>Finite schedule exploration</h3><div id="finite-result" class="evidence-result"></div><p id="finite-note"></p><p style="margin-top:8px">Baseline model only · support/high · 6 schedules. Other editor cases are executions, not additional proofs.</p><details><summary>Read exact exploration</summary><pre id="finite-raw"></pre></details></div><div id="reports"></div></section>
+<section><h2>What this establishes</h2><ul class="boundary"><li>Actual prototype executions, precomputed at build time. Browser controls select finite cases; they do not run arbitrary code.</li><li>One ticket, one invocation, synchronous in-memory atomic commit. Trusted supplied actor roles.</li><li>Approval binds the actor, arguments, invocation, whole ticket and whole model.</li><li>The oracle compares recorded subjects. Interpreter trace completeness remains trusted.</li><li>No production runtime, network delivery, unbounded schedule guarantee or end-to-end proof.</li></ul><details><summary>Exact simulation scope</summary><p id="scope" class="small muted" style="margin-top:8px"></p></details><button id="download" class="download">↓ Download explanation JSON</button><p id="notice" role="status"></p></section></aside>
+</div></section></main><footer class="footer"><span>Build-time recordings · controls select finite cases, not arbitrary code</span><span>One ticket · fixed clock 1000 · no external delivery</span></footer>
+<script id="workbench-data" type="application/json">/*__WORKBENCH_DATA__*/</script>
+<script>
+'use strict';
+const DATA=JSON.parse(document.getElementById('workbench-data').textContent);
+const $=id=>document.getElementById(id);
+const tabs=[...document.querySelectorAll('[role=tab]')];
+function openPanel(tab){tabs.forEach(t=>{const active=t===tab;t.setAttribute('aria-selected',active);t.tabIndex=active?0:-1;$(t.getAttribute('aria-controls')).hidden=!active})}
+tabs.forEach((tab,index)=>{tab.addEventListener('click',()=>openPanel(tab));tab.addEventListener('keydown',e=>{let next;if(e.key==='ArrowRight')next=(index+1)%tabs.length;if(e.key==='ArrowLeft')next=(index+tabs.length-1)%tabs.length;if(e.key==='Home')next=0;if(e.key==='End')next=tabs.length-1;if(next!==undefined){e.preventDefault();openPanel(tabs[next]);tabs[next].focus()}})});
+// Keep the original select IDs as the finite-case input contract; real buttons make choices explicit.
+for(const id of ['policy','property-size','property-mode']){const select=$(id);const group=document.createElement('div');group.className='segments';group.setAttribute('role','group');group.setAttribute('aria-label',select.previousElementSibling.textContent);select.hidden=true;select.parentElement.after(group);for(const option of select.options){const button=document.createElement('button');button.type='button';button.dataset.choice=option.value;button.dataset.for=id;button.textContent=option.textContent;button.addEventListener('click',()=>{select.value=option.value;select.dispatchEvent(new Event('change'))});group.append(button)}}
+function syncChoices(){document.querySelectorAll('[data-choice]').forEach(button=>button.setAttribute('aria-pressed',$(button.dataset.for).value===button.dataset.choice))}
+document.addEventListener('change',syncChoices);
+const policyTable=document.querySelector('.policy-table');$('changes-content').append(policyTable,$('diff'));policyTable.style.marginTop='20px';
+// Secondary policy explanation belongs with the diff, not in the primary workflow.
+document.querySelector('.left .section:nth-child(2) .eyebrow')?.remove();
+document.querySelector('.left .section:nth-child(2) p')?.remove();
+syncChoices();
+const escape=value=>String(value??'—').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+let frame=4,selected=null,timer=null;
+let propertyStep=null;
+function propertySelection(){const example=DATA.generated.examples[Number($('property-history').value)];const size=$('property-size').value,mode=$('property-mode').value;return {example,history:size==='shrunk'?example.minimalHistory:example.originalHistory,recordings:example.recordings[size][mode],mutant:mode==='true'}}
+function renderProperty(){
+ syncChoices();
+ const {example,history,recordings,mutant}=propertySelection();if(propertyStep===null)propertyStep=history.length;propertyStep=Math.min(propertyStep,history.length);
+ const observed=recordings[propertyStep],report=DATA.generated.report;
+ $('property-meta').textContent='Run seed '+report.seed+' · sample '+example.sample+' · sample seed '+example.sampleSeed+' · original '+example.originalHistory.length+' → shrunk '+example.minimalHistory.length+' actions';
+ $('property-bounds').textContent=report.sampleCount+' generated samples · max '+report.bounds.maxSteps+' actions · shrink attempts '+example.attempts+' / '+report.bounds.shrinkBudget+' · '+example.minimality+' · budget exhausted: '+example.budgetExhausted;
+ $('property-step').max=history.length;$('property-step').value=propertyStep;$('property-next').disabled=propertyStep===history.length;
+ $('property-result').textContent=(mutant?'Deliberate mutant':'Safe interpreter')+' · step '+propertyStep+' / '+history.length+' · '+observed.result+(observed.failure?' · '+observed.failure.kind+' at action '+(observed.failure.index+1):' · sampled prefix only');
+ $('property-actions').innerHTML=history.map((action,index)=>'<li'+(index<propertyStep?'':' class="muted"')+'>'+escape(JSON.stringify(action))+(index+1===propertyStep?' ← replay cursor':'')+'</li>').join('');
+ $('property-inspection').textContent=JSON.stringify(observed,null,2);
+}
+DATA.generated.examples.forEach((example,index)=>{const option=document.createElement('option');option.value=index;option.textContent='Sample '+example.sample+' · seed '+example.sampleSeed;$('property-history').append(option)});
+for(const id of ['property-history','property-size','property-mode'])$(id).addEventListener('change',()=>{propertyStep=null;$('property-notice').textContent='';renderProperty()});
+$('property-replay').addEventListener('click',()=>{propertyStep=0;renderProperty()});
+$('property-next').addEventListener('click',()=>{propertyStep++;renderProperty()});
+$('property-step').addEventListener('input',()=>{propertyStep=Number($('property-step').value);renderProperty()});
+$('property-export').addEventListener('click',()=>{const {example,history,mutant}=propertySelection();const replay={...example.replay,history,staleApprovalMutant:mutant};const url=URL.createObjectURL(new Blob([JSON.stringify(replay,null,2)],{type:'application/json'}));const a=document.createElement('a');a.href=url;a.download='approval-property-replay.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);$('property-notice').textContent='Exact full selected history exported for replayHistory; cursor does not truncate export.'});
+renderProperty();
+const labels={initial:'Initial state',request:'Request resolution',approve:'Approve',edit:'Edit summary',execute:'Execute'};
+function current(){return DATA.cases[[$('policy').value,$('role').value,$('priority').value,$('schedule').value,$('mutant').checked].join('|')]}
+function stop(){if(timer)clearInterval(timer);timer=null;$('play').textContent='Play replay'}
+function rows(entries){return entries.map(([k,v])=>'<div class="state-row"><dt>'+escape(k)+'</dt><dd>'+escape(v)+'</dd></div>').join('')}
+function inspect(event){selected=event?.id??null;renderInspection(event);document.querySelectorAll('.event button').forEach(button=>button.classList.toggle('selected',button.dataset.event===selected))}
+function renderInspection(event){$('causal').innerHTML=event?'<dl>'+rows([['Event',event.id],['Kind',event.kind],['Parents',event.parents.join(', ')||'none · root']])+'</dl><p class="source">'+escape(event.source)+'</p><details><summary>Recorded event details</summary><pre>'+escape(JSON.stringify(event.details,null,2))+'</pre></details>':'<p class="empty">Select a recorded event to inspect its parents and source.</p>'}
+function renderReports(){
+ $('reports').innerHTML=Object.entries(DATA.reports).map(([kind,report])=>{
+  const title=kind==='lean'?'Lean / proof adapter':'Generated property histories';
+  if(report.availability!=='available')return '<div class="evidence-card"><h3>'+title+'</h3><div class="evidence-result">Unavailable</div><p>'+escape(report.reason)+'</p><p class="source">'+escape(report.path)+'</p></div>';
+  const d=report.data&&typeof report.data==='object'?report.data:{};const result=d.result??d.status??d.verdict??'Report attached · inspect below';
+  return '<div class="evidence-card"><h3>'+title+'</h3><div class="evidence-result">'+escape(typeof result==='object'?JSON.stringify(result):result)+'</div><p>'+escape(d.method??d.format??'Unrecognized schema; raw evidence preserved.')+'</p>'+(d.sampleCount!==undefined?'<p>'+escape(d.sampleCount)+' samples · seed '+escape(d.seed)+'</p>':'')+(typeof d.scope==='string'?'<p style="margin-top:8px">'+escape(d.scope)+'</p>':'')+'<p style="margin-top:8px">'+(kind==='lean'?'Read the report’s exact theorem, scope and trust boundary. This is not proof of the TypeScript interpreter.':'Sampled histories are not exhaustive or a formal proof. This report is not recomputed for editor changes.')+'</p><p class="source">'+escape(report.path)+'</p><details><summary>Read complete report</summary><pre>'+escape(JSON.stringify(report.data,null,2))+'</pre></details></div>';
+ }).join('');
+}
+function render(){
+ syncChoices();
+ const c=current(),f=c.frames[frame],mutant=$('mutant').checked,policy=DATA.policies[$('policy').value];
+ $('execution-heading').textContent=c.inputs.schedule.map((s,i)=>i===0?s[0].toUpperCase()+s.slice(1):s).join(' → ');
+ $('model-id').textContent=c.trace.modelHash.slice(0,16);$('mode').textContent=mutant?'Deliberate mutant':'Safe interpreter';$('mode').className='badge '+(mutant?'danger':'safe');
+ $('policy-table').innerHTML=Object.entries(policy.model.policy).map(([role,p])=>'<tr><th scope="row">'+role+'</th><td>'+p.normal+'</td><td class="'+(role==='support'&&p.high!=='approval'?'changed':'')+'">'+p.high+'</td></tr>').join('');
+ const changes=policy.diff.changes;$('diff').innerHTML=changes.length?changes.map(d=>'<span class="mono">'+escape(d.witness.role)+' / '+escape(d.witness.priority)+'</span><del>− '+escape(d.before)+'</del><ins>+ '+escape(d.after)+'</ins>').join(''):'<span class="muted">No policy change.</span><br><span class="mono">6 / 6 decisions unchanged</span>';
+ const violation=f.events.some(e=>c.violations.includes(e.id));const rejection=f.events.filter(e=>e.kind==='rejected').at(-1);const committed=f.events.some(e=>e.kind==='committed');
+ $('outcome').className='outcome'+(violation?' danger':'');
+ $('outcome-title').textContent=violation?'Stale approval accepted — counterexample':committed?'Resolution committed':rejection?'Action rejected · '+rejection.details.reason:frame===0?'Ready to replay':f.invocation?.state==='pending'?'Waiting for approval':'Invocation '+(f.invocation?.state??'not started');
+ $('outcome-note').textContent=violation?'The approved subject differs from the committed subject. The deliberately broken check let it through.':committed?'One grouped update; relationship-derived delivery intents follow the commit.':rejection?.details.reason==='stale-approval'?'The summary changed after approval. The safe interpreter refuses to commit.':'Step through the actual recorded actions; changing a control selects another precomputed run.';
+ $('counter').textContent=frame+' / 4 · '+labels[f.action];$('scrub').value=frame;$('back').disabled=frame===0;$('next').disabled=frame===4;
+ $('timeline').innerHTML=f.events.length?f.events.map((e,index)=>'<div class="event '+(f.events[index+1]?.parents.includes(e.id)?'linked':'')+'"><span class="event-dot">'+escape(e.id)+'</span><button type="button" data-event="'+escape(e.id)+'" class="'+(e.kind==='rejected'?'rejected ':'')+'"><span>'+escape(e.kind)+(e.details.reason?' · '+escape(e.details.reason):'')+'</span><span class="meta">'+(e.parents.length?'← '+escape(e.parents.join(', ')):'root')+'</span></button></div>').join(''):'<p class="empty">No events yet. The next step requests a resolution.</p>';
+ $('timeline').querySelectorAll('button').forEach(button=>button.addEventListener('click',()=>inspect(f.events.find(e=>e.id===button.dataset.event))));
+ inspect(f.events.find(e=>e.id===selected)??f.events.at(-1));
+ $('state').innerHTML=rows([['Ticket',f.ticket.id],['Status',f.ticket.status],['Version',f.ticket.version],['Resolution',f.ticket.resolution],['Resolved at',f.ticket.resolvedAt],['Invocation',f.invocation?.state],['Current argument',f.invocation?.summary],['Approval digest',f.invocation?.approval?f.invocation.approval.slice(0,12)+'…':'none']]);
+ $('delivery-count').textContent=f.deliveries.length+' intents';for(let n=1;n<=2;n++)$('recipient-'+n).classList.toggle('active',f.deliveries.some(d=>d.recipient==='user-'+n));
+ const exploration=DATA.exploration[mutant?'mutant':'safe'];$('finite-result').textContent=exploration.result;$('finite-note').textContent=exploration.failures.length+' violating schedule(s) / '+exploration.scope.schedules+' explored.';$('finite-raw').textContent=JSON.stringify(exploration,null,2);
+}
+DATA.schedules.forEach((schedule,i)=>{const option=document.createElement('option');option.value=i;option.textContent=schedule.map(s=>labels[s]).join(' → ');$('schedule').append(option)});
+$('schedule').value=0;
+for(const id of ['role','priority','policy','schedule','mutant'])$(id).addEventListener('change',()=>{stop();frame=4;selected=null;$('notice').textContent='';render()});
+$('back').addEventListener('click',()=>{stop();frame=Math.max(0,frame-1);render()});$('next').addEventListener('click',()=>{stop();frame=Math.min(4,frame+1);render()});$('restart').addEventListener('click',()=>{stop();frame=0;selected=null;render()});$('scrub').addEventListener('input',()=>{stop();frame=Number($('scrub').value);render()});
+$('play').addEventListener('click',()=>{if(timer){stop();return}if(frame===4)frame=0;render();$('play').textContent='Pause replay';timer=setInterval(()=>{frame++;render();if(frame>=4)stop()},1000)});
+$('reset').addEventListener('click',()=>{stop();$('policy').value='approval';$('role').value='support';$('priority').value='high';$('schedule').value=0;$('mutant').checked=false;frame=4;selected=null;render()});
+$('download').addEventListener('click',()=>{const c=current();const output={format:'semantic-workbench-explanation/1',kind:'simulated',scope:DATA.scope,inputs:c.inputs,initial:c.initial,frames:c.frames,trace:c.trace,violatingEvents:c.violations,policyDiff:DATA.policies[$('policy').value].diff,reports:DATA.reports,replay:{frame,selectedEvent:selected},presentation:{timing:'editorial-not-measured',eventOrder:'recorded order; causal links from trace parents'}};const url=URL.createObjectURL(new Blob([JSON.stringify(output,null,2)],{type:'application/json'}));const a=document.createElement('a');a.href=url;a.download='resolution-explanation.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);$('notice').textContent='Explanation JSON downloaded.'});
+document.addEventListener('visibilitychange',()=>{if(document.hidden)stop()});
+$('scope').textContent=DATA.scope;renderReports();render();
+</script>
+</body>
+</html>

@@ -1,0 +1,204 @@
+{
+  "format": "generated-lean-metadata/1",
+  "adapter": "shared-ir-lean-numeric/1",
+  "projection": "single-static-record-numeric-kernel/1",
+  "source_format": "semantic-core/v1",
+  "source_id": "numeric-capacity.v1",
+  "source_sha256": "0e9017b77ea27a31f2c59998a3180265a130c346df75b373cb05e4232257d6fa",
+  "obligation_sha256": "1a0a76953a58efccaef2aa14a8cdaaf273035b8cf245f5341370b2959fb0afa3",
+  "source": {
+    "format": "semantic-core/v1",
+    "id": "numeric-capacity.v1",
+    "resources": {
+      "capacity": {
+        "fields": {
+          "remaining": {
+            "type": "integer",
+            "min": 0
+          },
+          "previous": {
+            "type": "integer",
+            "min": 0
+          }
+        }
+      }
+    },
+    "relationships": [],
+    "actions": {
+      "capacity.take": {
+        "inputs": {
+          "amount": {
+            "type": "integer",
+            "min": 1
+          }
+        },
+        "bindings": [
+          {
+            "id": "capacity.record",
+            "resource": "capacity",
+            "key": {
+              "op": "literal",
+              "value": "main"
+            }
+          }
+        ],
+        "policies": [
+          {
+            "id": "capacity.allow",
+            "effect": "allow",
+            "when": {
+              "op": "literal",
+              "value": true
+            }
+          }
+        ],
+        "preconditions": [
+          {
+            "id": "capacity.available",
+            "when": {
+              "op": "le",
+              "left": {
+                "op": "input",
+                "name": "amount"
+              },
+              "right": {
+                "op": "field",
+                "binding": "capacity.record",
+                "field": "remaining"
+              }
+            }
+          }
+        ],
+        "updates": [
+          {
+            "id": "capacity.decrement",
+            "target": "capacity.record",
+            "field": "remaining",
+            "value": {
+              "op": "sub",
+              "left": {
+                "op": "field",
+                "binding": "capacity.record",
+                "field": "remaining"
+              },
+              "right": {
+                "op": "add",
+                "left": {
+                  "op": "input",
+                  "name": "amount"
+                },
+                "right": {
+                  "op": "literal",
+                  "value": 1
+                }
+              }
+            }
+          },
+          {
+            "id": "capacity.remember",
+            "target": "capacity.record",
+            "field": "previous",
+            "value": {
+              "op": "field",
+              "binding": "capacity.record",
+              "field": "remaining"
+            }
+          }
+        ],
+        "observe": []
+      }
+    }
+  },
+  "obligation": {
+    "format": "numeric-law/v1",
+    "id": "capacity.safe-decrement.v1",
+    "action": "capacity.take",
+    "ensures": {
+      "op": "and",
+      "left": {
+        "op": "le",
+        "left": {
+          "op": "literal",
+          "value": 0
+        },
+        "right": {
+          "op": "post",
+          "field": "remaining"
+        }
+      },
+      "right": {
+        "op": "eq",
+        "left": {
+          "op": "add",
+          "left": {
+            "op": "post",
+            "field": "remaining"
+          },
+          "right": {
+            "op": "input",
+            "name": "amount"
+          }
+        },
+        "right": {
+          "op": "pre",
+          "field": "remaining"
+        }
+      }
+    },
+    "witness": {
+      "pre": {
+        "remaining": 10,
+        "previous": 0,
+        "revision": 0,
+        "version": 0
+      },
+      "inputs": {
+        "amount": 3,
+        "clock": 0
+      },
+      "post": {
+        "remaining": 6,
+        "previous": 10,
+        "revision": 1,
+        "version": 1
+      }
+    }
+  },
+  "action_id": "capacity.take",
+  "binding": {
+    "id": "capacity.record",
+    "resource": "capacity",
+    "key": {
+      "op": "literal",
+      "value": "main"
+    }
+  },
+  "declaration_ids": [
+    "numeric-capacity.v1",
+    "capacity",
+    "capacity.take",
+    "capacity.record",
+    "capacity.available",
+    "capacity.decrement",
+    "capacity.remember"
+  ],
+  "excluded_policy_ids": [
+    "capacity.allow"
+  ],
+  "excluded_relationship_ids": [],
+  "exclusions": [
+    "all policies and authorization outcomes",
+    "relationships, observation, routing, events",
+    "other resources and actions",
+    "record lookup/missing records, string values and actor",
+    "commit tokens, stale snapshots, concurrency, persistence, external execution"
+  ],
+  "assumptions": [
+    "one existing statically selected record",
+    "single synchronous numeric step",
+    "valid safe integer state, inputs and clock required by successful result",
+    "authorization is NOT modeled"
+  ],
+  "correspondence": "Not proved. Executed finite differential tests only.",
+  "generated_sha256": "983aa2ab4bdc62673baf60ad264994c80543e893afb4c0924a353e3e49db6376"
+}

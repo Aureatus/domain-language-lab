@@ -1,0 +1,52 @@
+import {parseArgs} from 'node:util';
+import {readFile,writeFile} from 'node:fs/promises';
+import {createHash} from 'node:crypto';
+import {loadSource} from '../syntax/load.mjs';
+import {deriveApplication} from './derive.mjs';
+import {exampleArgs,actionReview} from './action-review.mjs';
+import {walkthrough} from './action-walkthrough.mjs';
+import {interactionOracle} from './interaction-check.mjs';
+import {checkerBuild} from './checker-build.mjs';
+
+const {values,positionals}=parseArgs({allowPositionals:true,options:{actor:{type:'string'},args:{type:'string'},json:{type:'boolean'},record:{type:'string'},replay:{type:'string'}}});
+const [entry,action]=positionals;
+if(!entry||!action||positionals.length!==2)throw Error('Usage: npm run inspect:action -- VIEW.domain ACTION [--actor ID] [--args JSON] [--json]');
+if(values.replay&&(values.args||values.record))throw Error('--replay cannot be combined with --args or --record.');
+const {declaration}=loadSource(entry),derived=deriveApplication(declaration),{contract}=derived;
+const contractId=createHash('sha256').update(JSON.stringify({model:derived.model,contract})).digest('hex');
+const trace=values.replay?JSON.parse(await readFile(values.replay,'utf8')):null;
+const actor=values.actor??trace?.actor??contract.actors[0].id;
+if(!contract.actors.some(a=>a.id===actor)||!Object.hasOwn(contract.actions,action))throw Error('Unknown actor or action.');
+if(trace&&(trace.format!=='action-events/v1'||trace.contractId!==contractId||trace.actor!==actor||trace.action!==action||!Array.isArray(trace.events)))throw Error('Event trace does not match the selected contract, action and actor.');
+const {args,selection}=trace??(values.args?{args:JSON.parse(values.args),selection:'explicit arguments'}:exampleArgs(derived,action,actor));
+if(trace?.mutant&&trace.mutant!=='snapshot-unlocks')throw Error('Unknown replay mutant.');
+const fold=actionReview(contract,actor,action,{mutant:trace?.mutant}),steps=[fold({type:'open'})];
+const check=interactionOracle(actor);let firstFailure=null;
+if(trace?.failure&&trace.checkerBuild!==await checkerBuild())throw Error('Incompatible counterexample: checker/projection build differs.');
+const events=[];
+for await(const event of trace?.events??walkthrough(declaration,{actor,action,args,submissionId:'review-request-1'})){
+  const snap=event.snapshot??event.result?.snapshot;
+  if(snap&&snap.contractId!==contractId)throw Error('Snapshot contract mismatch.');
+  let rule=null;
+  try{const step=fold(event);steps.push(step);if(trace?.failure)rule=check(event,step);}
+  catch(e){if(!trace?.failure)throw e;rule=`projection.error: ${e.message}`;}
+  events.push(event);
+  if(rule){firstFailure={rule,eventCount:events.length};break;}
+}
+if(values.record)await writeFile(values.record,JSON.stringify({format:'action-events/v1',contractId,action,actor,args,selection,events},null,2),{flag:'wx'});
+const replayStatus=!trace?.failure?undefined:firstFailure&&firstFailure.rule===trace.failure.rule&&firstFailure.eventCount===trace.failure.eventCount&&events.length===trace.events.length?'reproduced':'not-reproduced';
+if(replayStatus==='not-reproduced')process.exitCode=1;
+if(values.json)console.log(JSON.stringify({format:'action-review/v1',contractId,replayStatus,firstFailure,mutant:trace?.mutant,provenance:trace?'unauthenticated file replay':'isolated backend execution',entry,actor,action,selection,steps},null,2));
+else{
+  console.log(`${contract.actions[action].label} · ${actor}\n${selection}: ${JSON.stringify(args)}\n${trace?'Offline replay; file provenance is not authenticated.':'Isolated database.'} Input and transport schedule simulated; receipts and snapshots recorded in the original run.\n`);
+  for(const s of steps){
+    if(s.step===1&&trace?.mutant)console.log(`Replaying deliberate test fault: ${trace.mutant} (${trace.failure?.rule??'unspecified rule'})`);
+    const actions=Object.keys(s.controls).filter(k=>s.controls[k]).join(', ')||'none';
+    console.log(`${s.step}. ${s.event}${s.performedBy?' by '+s.performedBy:''} [${s.source}] → ${s.submission}; submission lifecycle permits: ${actions}`);
+    if(s.message)console.log(`   ${s.message}`);
+    console.log(`   Draft: ${JSON.stringify(s.draft)} · Inbox: ${s.inbox.length} · Original receipt: ${s.receipt?.status??'not observed'}`);
+    for(const v of s.views)console.log(`   ${v.label}: ${v.phase==='initial'?(v.placeholder??'deferred'):v.records.map(r=>Object.values(r.fields).join(' · ')).join('; ')||'empty'}`);
+    if(s.evidence)console.log(`   Evidence: ${s.evidence.phase} ${s.evidence.status} · ${s.evidence.invocationId}`);
+  }
+  if(replayStatus)console.log(`Failure replay: ${replayStatus} (${firstFailure?.rule??'no failing observation'})`);
+}

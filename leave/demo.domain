@@ -1,0 +1,26 @@
+module "time-away-demo" data
+import "./time-away.domain"
+use "time-away"
+
+initial revision 0
+  records employee
+    record maya version 0
+      name = "Maya Chen"
+      balance = 5
+      manager = "sam"
+    end
+    record leo version 0
+      name = "Leo Martin"
+      balance = 5
+      manager = "sam"
+    end
+  end
+  records settings
+    record "leave-rule" version 0
+      threshold = 3
+      manager = "sam"
+    end
+  end
+  records leave
+  end
+end

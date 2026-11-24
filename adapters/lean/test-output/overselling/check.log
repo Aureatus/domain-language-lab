@@ -1,0 +1,18 @@
+Generated.lean:47:37: error: omega could not prove the goal:
+a possible counterexample may satisfy the constraints
+  0 ≤ f ≤ 9007199254740991
+  0 ≤ e ≤ 9007199254740991
+  0 ≤ d ≤ 9007199254740990
+  0 ≤ c ≤ 9007199254740990
+  1 ≤ b ≤ 9007199254740990
+  -9007199254740992 ≤ b - f ≤ -1
+  0 ≤ a ≤ 9007199254740991
+where
+ a := s.previous
+ b := i.amount
+ c := s.revision
+ d := s.version
+ e := i.clock
+ f := s.remaining
+'Generated.preserves' depends on axioms: [sorryAx]
+'Generated.positive_witness' does not depend on any axioms

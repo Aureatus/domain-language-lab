@@ -1,0 +1,95 @@
+# Shared domain; no records, actors, presentation or renderer code.
+module "time-away" domain
+domain "time-away"
+
+resource employee
+  fields
+    name string
+    balance
+      type integer
+      min 0
+    end
+    manager string
+  end
+end
+
+resource settings singleton key "leave-rule"
+  fields
+    threshold integer min 1
+    manager string
+  end
+end
+
+resource leave
+  fields
+    owner string
+    manager string
+    start string
+    end string
+    days integer min 1
+    status string enum "approved"
+  end
+end
+
+relationships
+  employee.manager
+  leave.owner
+  leave.manager
+  settings.manager
+end
+
+action "leave.request" identity request
+  inputs
+    employeeId reference employee as employee
+    leaveId string
+    start like leave.start
+    end like leave.end
+    days like leave.days
+  end
+
+  preconditions
+    days <= employee.balance id "leave.enough-days"
+  end
+  policies
+    deny when not actor == employeeId id "leave.owner-only"
+    allow when days < settings.threshold id "leave.short-break"
+    approve by employee.manager when days >= settings.threshold id "leave.manager-approval"
+  end
+
+  # One atomic group: all right-hand expressions read the same prestate.
+  changes
+    update
+      set employee.balance = employee.balance - days id "leave.deduct-days"
+    end
+    create leave key leaveId id "leave.create" as saved
+      owner = employeeId
+      manager = employee.manager
+      start = input.start
+      end = input.end
+      days = input.days
+      status = "approved"
+    end
+  end
+  observations
+    employee through "employee.manager"
+    saved through "leave.owner"
+    saved through "leave.manager"
+  end
+end
+
+action "settings.change" identity edit
+  inputs
+    threshold like settings.threshold
+  end
+  policies
+    allow when actor == settings.manager id "settings.manager-only"
+  end
+  changes
+    update
+      set settings.threshold = threshold id "settings.set-threshold"
+    end
+  end
+  observations
+    settings through "settings.manager"
+  end
+end

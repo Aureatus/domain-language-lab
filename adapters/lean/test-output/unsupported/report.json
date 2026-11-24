@@ -1,0 +1,11 @@
+{
+  "format": "generated-lean-evidence/1",
+  "status": "unsupported",
+  "theorem_axioms": {},
+  "tool": {
+    "executable": "/tmp/opencode/elan/toolchains/leanprover--lean4---v4.19.0/bin/lean",
+    "version": null
+  },
+  "scope": "Generated numeric kernel only; no runtime correspondence or full-action theorem.",
+  "detail": "Invalid shared IR: Unsupported operator mul"
+}

@@ -1,0 +1,211 @@
+{
+  "format": "generated-lean-evidence/1",
+  "status": "tool_error",
+  "theorem_axioms": {},
+  "tool": {
+    "executable": "/nonexistent/lean"
+  },
+  "scope": "Generated numeric kernel only; no runtime correspondence or full-action theorem.",
+  "metadata": {
+    "format": "generated-lean-metadata/1",
+    "adapter": "shared-ir-lean-numeric/1",
+    "projection": "single-static-record-numeric-kernel/1",
+    "source_format": "semantic-core/v1",
+    "source_id": "numeric-capacity.v1",
+    "source_sha256": "1db239fe7cd453475ece6dc6fd76856cad4881a086ade7e6b1142ca97742daf1",
+    "obligation_sha256": "092b109e71eb7d9d2ea21d86427369571093df82d1074225a1206e6e9e7ad725",
+    "source": {
+      "format": "semantic-core/v1",
+      "id": "numeric-capacity.v1",
+      "resources": {
+        "capacity": {
+          "fields": {
+            "remaining": {
+              "type": "integer",
+              "min": 0
+            },
+            "previous": {
+              "type": "integer",
+              "min": 0
+            }
+          }
+        }
+      },
+      "relationships": [],
+      "actions": {
+        "capacity.take": {
+          "inputs": {
+            "amount": {
+              "type": "integer",
+              "min": 1
+            }
+          },
+          "bindings": [
+            {
+              "id": "capacity.record",
+              "resource": "capacity",
+              "key": {
+                "op": "literal",
+                "value": "main"
+              }
+            }
+          ],
+          "policies": [
+            {
+              "id": "capacity.allow",
+              "effect": "allow",
+              "when": {
+                "op": "literal",
+                "value": true
+              }
+            }
+          ],
+          "preconditions": [
+            {
+              "id": "capacity.available",
+              "when": {
+                "op": "le",
+                "left": {
+                  "op": "input",
+                  "name": "amount"
+                },
+                "right": {
+                  "op": "field",
+                  "binding": "capacity.record",
+                  "field": "remaining"
+                }
+              }
+            }
+          ],
+          "updates": [
+            {
+              "id": "capacity.decrement",
+              "target": "capacity.record",
+              "field": "remaining",
+              "value": {
+                "op": "sub",
+                "left": {
+                  "op": "field",
+                  "binding": "capacity.record",
+                  "field": "remaining"
+                },
+                "right": {
+                  "op": "input",
+                  "name": "amount"
+                }
+              }
+            },
+            {
+              "id": "capacity.remember",
+              "target": "capacity.record",
+              "field": "previous",
+              "value": {
+                "op": "field",
+                "binding": "capacity.record",
+                "field": "remaining"
+              }
+            }
+          ],
+          "observe": []
+        }
+      }
+    },
+    "obligation": {
+      "format": "numeric-law/v1",
+      "id": "capacity.safe-decrement.v1",
+      "action": "capacity.take",
+      "ensures": {
+        "op": "and",
+        "left": {
+          "op": "le",
+          "left": {
+            "op": "literal",
+            "value": 0
+          },
+          "right": {
+            "op": "post",
+            "field": "remaining"
+          }
+        },
+        "right": {
+          "op": "eq",
+          "left": {
+            "op": "add",
+            "left": {
+              "op": "post",
+              "field": "remaining"
+            },
+            "right": {
+              "op": "input",
+              "name": "amount"
+            }
+          },
+          "right": {
+            "op": "pre",
+            "field": "remaining"
+          }
+        }
+      },
+      "witness": {
+        "pre": {
+          "remaining": 10,
+          "previous": 0,
+          "revision": 0,
+          "version": 0
+        },
+        "inputs": {
+          "amount": 3,
+          "clock": 0
+        },
+        "post": {
+          "remaining": 7,
+          "previous": 10,
+          "revision": 1,
+          "version": 1
+        }
+      }
+    },
+    "action_id": "capacity.take",
+    "binding": {
+      "id": "capacity.record",
+      "resource": "capacity",
+      "key": {
+        "op": "literal",
+        "value": "main"
+      }
+    },
+    "declaration_ids": [
+      "numeric-capacity.v1",
+      "capacity",
+      "capacity.take",
+      "capacity.record",
+      "capacity.available",
+      "capacity.decrement",
+      "capacity.remember"
+    ],
+    "excluded_policy_ids": [
+      "capacity.allow"
+    ],
+    "excluded_relationship_ids": [],
+    "exclusions": [
+      "all policies and authorization outcomes",
+      "relationships, observation, routing, events",
+      "other resources and actions",
+      "record lookup/missing records, string values and actor",
+      "commit tokens, stale snapshots, concurrency, persistence, external execution"
+    ],
+    "assumptions": [
+      "one existing statically selected record",
+      "single synchronous numeric step",
+      "valid safe integer state, inputs and clock required by successful result",
+      "authorization is NOT modeled"
+    ],
+    "correspondence": "Not proved. Executed finite differential tests only.",
+    "generated_sha256": "66080db5bb4bb8f51afb8f2607cd57a934542d3f4420f47db71015f4beffc140"
+  },
+  "generator_sha256": "6c0feae435abd94b70305014cc5910a5b94eca3dc27106850af7c436b6e683c1",
+  "template_sha256": "7458cdda1a17abc625848b01a90a640dfb060b3f1c9f1c57b79b41393ca749c3",
+  "runner_sha256": "7dc1248342e8546e938ebebd28296981ced804470c420eb3b71d2956f263e4e0",
+  "semantic_core_sha256": "cad4c4b85442a5720a1ad59cf710286d4c4ae8adb0d73d93af55780f5f071edd",
+  "detail": "Pinned Lean 4.19.0 unavailable or mismatched"
+}
