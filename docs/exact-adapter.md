@@ -35,9 +35,12 @@ This is separate from the [bounded checker and offline replay](check-interaction
 Use the same Node/npm and run `npm run adapters:install` in this repository.
 Install [Bun 1.4.2](https://github.com/oven-sh/bun/releases/tag/bun-v1.4.2),
 [rustup](https://rustup.rs/) and a Linux C toolchain (e.g. `build-essential` on
-Ubuntu). Exact's setup uses its locked dependencies, including Rust 1.97.0,
-web Rust nightly-2026-08-21, wasm-bindgen 0.2.127, Binaryen 132, the pinned
-Hermes host bundle and Playwright Core 1.64.1 with its matching Chromium.
+Ubuntu). On Linux x86-64, use glibc 2.36 or newer (e.g. Ubuntu 24.04);
+the pinned Hermes compiler does not start on Ubuntu 22.04's glibc 2.35.
+Exact's setup uses its locked dependencies, including Rust 1.97.0, web Rust
+nightly-2026-08-21, wasm-bindgen 0.2.127, Binaryen 132, the Hermes
+`hermes-vanilla-d412d3bd8512-v6` host bundle and Playwright Core 1.64.1 with
+its matching Chromium.
 Keep the Exact checkout and template outside this repository.
 
 ```sh
