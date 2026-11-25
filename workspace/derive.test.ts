@@ -5,9 +5,12 @@ import {inventoryModel, runtime as v1, initialState as initialV1, invocation as 
 import {inventoryV2Model, runtime as v2, initialState as initialV2, invocation as invokeV2} from '../inventory/v2/model.ts';
 import {issueModel, issueState} from '../semantic/issues.ts';
 import {createInterpreter} from '../semantic/core.ts';
+import type {Model as V1Model} from '../semantic/types.ts';
+import type {Model as V2Model} from '../semantic/v2/types.ts';
 
 test('tools preserve exact schema/policy/precondition declarations in both profiles', () => {
-  for (const model of [inventoryModel, inventoryV2Model, issueModel]) {
+  const models:(V1Model|V2Model)[]=[inventoryModel,inventoryV2Model,issueModel];
+  for (const model of models) {
     for (const tool of deriveTools(model)) {
       const action=model.actions[tool.name];assert.ok(action);
       assert.deepEqual(tool.inputs, action.inputs);

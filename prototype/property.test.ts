@@ -74,7 +74,7 @@ test('argument, resource and whole-model changes invalidate snapshots; reapprova
     { kind: 'policy', role: 'viewer', priority: 'normal', decision: 'allow' },
   ];
   for (const change of changes) {
-    const history = [request, approve, change, execute];
+    const history:Action[] = [request, approve, change, execute];
     assert.equal(replayHistory(data(history)).coverage.staleRejections, 1);
     assert.equal(replayHistory(data(history, true)).failure?.kind, 'stale-approval-commit');
     const repaired = replayHistory(data([request, approve, change, approve, execute, execute]));

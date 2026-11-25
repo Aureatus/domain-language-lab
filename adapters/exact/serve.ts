@@ -9,7 +9,7 @@ import {createApplicationServer} from '../../application/server.ts';
 import {encodeJson} from '../effect/json.ts';
 import {loadSource} from '../../syntax/load.ts';
 
-export async function startGateway(declaration,{root,directory,port=0}){
+export async function startGateway(declaration:unknown,{root,directory,port=0}:{root:string;directory:string;port?:number}){
   await mkdir(directory,{recursive:true});
   const backend=await createApplicationServer(declaration,{directory});
   const server=createServer(async(req,res)=>{
@@ -27,7 +27,7 @@ export async function startGateway(declaration,{root,directory,port=0}){
       }
       const file=resolve(root,path==='/'?'index.html':'.'+path);
       if(!file.startsWith(resolve(root)+'/'))throw Error('Invalid path');
-      const types={'.html':'text/html','.js':'text/javascript','.mjs':'text/javascript','.css':'text/css','.json':'application/json','.wasm':'application/wasm'};
+      const types:Record<string,string>={'.html':'text/html','.js':'text/javascript','.mjs':'text/javascript','.css':'text/css','.json':'application/json','.wasm':'application/wasm'};
       const data=await readFile(file);res.writeHead(200,{'content-type':types[extname(file)]??'application/octet-stream'});res.end(data);
     }catch(e){if(!res.headersSent)res.writeHead(500,{'content-type':'application/json'});res.end(encodeJson({error:errorMessage(e)}));}
   });

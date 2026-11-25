@@ -41,11 +41,11 @@ test('diagnostic guards use interpreter semantics; evidence preserves actual out
   const two=requestInvocation({id:'changed-inputs',actor:'maya',start:'2026-11-26',end:'2026-11-27',clock:1});
   const pending=runtime.prepare(changed,two),explanation=explainEvaluation(changed,two,pending);
   assert.deepEqual(explanation.checks.map(c=>c.value),[false,false,true,true]);
-  assert.equal(explanation.inputs.manager,'leo');assert.deepEqual(explanation.outcome.requirements[0].approvers,['leo']);
+  assert.equal(explanation.inputs.manager,'leo');assert.deepEqual(present(explanation.outcome.requirements?.[0]).approvers,['leo']);
 });
 test('generic evidence HTTP is nonmutating on preview, local-only and matches real saved results',async()=>{
   const server=await createLeaveServer({directory:await mkdtemp('/tmp/opencode/leave-explain-test-')});
-  const post=async(path,body,headers={})=>fetch(`${server.url}/api/${path}`,{method:'POST',headers:{'content-type':'application/json',...headers},body:JSON.stringify(body)});
+  const post=async(path:string,body:object,headers:Record<string,string>={})=>fetch(`${server.url}/api/${path}`,{method:'POST',headers:{'content-type':'application/json',...headers},body:JSON.stringify(body)});
   try{
     const body={actor:'maya',action:'leave.request',args:{start:'2026-11-23',end:'2026-11-25'}};
     let r=await(await post('actions/preview',body)).json();assert.equal(r.evidence.outcome.status,'pending');assert.equal(r.evidence.outcome.events.length,0);
@@ -53,7 +53,7 @@ test('generic evidence HTTP is nonmutating on preview, local-only and matches re
     r=await(await post('actions/execute',body)).json();assert.equal(r.status,'pending');assert.equal(r.evidence.outcome.status,r.status);assert.equal(r.snapshot.state.records.employee.maya.values.balance,5);
     const p=r.snapshot.pending[0];
     r=await(await post('approvals/grant',{actor:'sam',requestId:p.id,policyId:p.requirements[0].policyId})).json();assert.equal(r.status,'approved');
-    r=await(await post('approvals/resume',{actor:'sam',requestId:p.id})).json();assert.equal(r.status,'committed');assert.deepEqual(r.evidence.outcome.events.map(e=>e.kind),['action','change','create']);assert.equal(r.evidence.outcome.events[1].after,r.snapshot.state.records.employee.maya.values.balance);
+    r=await(await post('approvals/resume',{actor:'sam',requestId:p.id})).json();assert.equal(r.status,'committed');assert.deepEqual(r.evidence.outcome.events.map((e:{kind:string})=>e.kind),['action','change','create']);assert.equal(r.evidence.outcome.events[1].after,r.snapshot.state.records.employee.maya.values.balance);
     assert.equal((await post('actions/preview',body,{origin:'https://example.com'})).status,403);
     // Fetch normalizes Host; use an actual HTTP request to exercise this boundary.
     const badHost=await new Promise((resolve,reject)=>{const req=httpRequest(`${server.url}/api/preview`,{method:'POST',headers:{host:'example.com','content-type':'application/json','x-leave-explain':'1'}},res=>{res.resume();res.on('end',()=>resolve(res.statusCode));});req.on('error',reject);req.end(JSON.stringify(body));});

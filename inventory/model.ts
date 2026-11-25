@@ -9,9 +9,9 @@ const integer = (min: number): FieldSchema => ({type:'integer',min});
 const string: FieldSchema = {type:'string'};
 function action(kind: string): Action {
   const prefix = `reservation.${kind}`, stock = `${prefix}.stock`, slot = `${prefix}.slot`;
-  const s = name => field(stock,name), r = name => field(slot,name);
-  const condition = (name,when) => ({id:`${prefix}.${name}`,when});
-  const update = (target,name,value) => ({id:`${prefix}.set.${name}`,target,field:name,value});
+  const s = (name:string) => field(stock,name), r = (name:string) => field(slot,name);
+  const condition = (name:string,when:Expr) => ({id:`${prefix}.${name}`,when});
+  const update = (target:string,name:string,value:Expr) => ({id:`${prefix}.set.${name}`,target,field:name,value});
   const reserve = kind === 'reserve';
   return {
     inputs:{stockId:string,slotId:string,...(reserve ? {quantity:integer(1),expiresAt:integer(0)} : {})},
@@ -35,7 +35,7 @@ export const inventoryModel = {
   actions:Object.fromEntries(['reserve','cancel','expire'].map(k=>[`reservation.${k}`,action(k)]))
 } satisfies Model;
 export const runtime = createInterpreter(inventoryModel);
-const record = values => ({version:0,values});
+const record = (values:Record<string,Scalar|string[]>) => ({version:0,values});
 export const initialState = validateState(inventoryModel,{revision:0,records:{stock:{camera:record({capacity:5,available:5,watchers:['warehouse','alice','bob'],operator:'warehouse'})},reservation:{
   slotA:record({stockId:'camera',owner:'alice',quantity:0,expiresAt:0,status:'free'}),
   slotB:record({stockId:'camera',owner:'bob',quantity:0,expiresAt:0,status:'free'}),

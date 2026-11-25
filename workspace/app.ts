@@ -23,7 +23,7 @@ type Snapshot = {
 };
 const entities:Record<string,string>={'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'};
 const esc = (value:unknown) => String(value ?? '').replace(/[&<>"']/g, c => entities[c] ?? c);
-const json = value => JSON.stringify(value, null, 2);
+const json = (value:unknown) => JSON.stringify(value, null, 2);
 let snapshot:Snapshot|undefined, stream:EventSource|undefined, generation = 0, requestSerial = 0, busy = false;
 const drafts = new Map<string,{fields:Record<string,string>;clock:string;tool:string}>();
 const context = () => ({profile: profileInput.value, actor: actorInput.value});
@@ -105,8 +105,8 @@ function connect() {
   stream.onerror = () => { if(gen === generation) $('connection').textContent = 'Reconnecting · waiting for server'; };
   stream.addEventListener('change', event => { if (gen !== generation) return; try { $('relationship').textContent = json(JSON.parse(event.data)); } catch { $('relationship').textContent = event.data; } refresh(gen); });
 }
-const help = {stale:'The captured state changed. Submit a fresh action; old grants cannot authorize a new request.',consumed:'This request already resumed. Inspect durable history; use a new invocation for new work.',precondition:'Check capacity, lifecycle status and expiry. At expiry, resume is no longer valid.',denied:'This simulated actor is not permitted by the declared policy.',approval:'Required grants are missing. Switch to an approver listed in Request Why.'};
-async function command(endpoint, body) {
+const help:Record<string,string> = {stale:'The captured state changed. Submit a fresh action; old grants cannot authorize a new request.',consumed:'This request already resumed. Inspect durable history; use a new invocation for new work.',precondition:'Check capacity, lifecycle status and expiry. At expiry, resume is no longer valid.',denied:'This simulated actor is not permitted by the declared policy.',approval:'Required grants are missing. Switch to an approver listed in Request Why.'};
+async function command(endpoint:'execute'|'approve'|'resume', body:object) {
   if (busy) return; busy = true; const gen = generation;
   try {
     const response = await fetch(`/api/${endpoint}`, {method:'POST',headers:{'Content-Type':'application/json'},body:json(body)});
@@ -114,7 +114,7 @@ async function command(endpoint, body) {
     if (gen !== generation) return;
     const outcome = value.status === 'duplicate' ? value.result : value;
     $('result').dataset['status'] = outcome.status;
-    $('result').innerHTML = `<strong>${esc(value.status)}${outcome.code ? ` · ${esc(outcome.code)}` : ''}</strong><p>${esc(outcome.reason ?? (outcome.status === 'pending' ? 'Awaiting approval. Stock has not changed.' : 'Server result received.'))} ${esc(help[outcome.code] ?? '')}</p><details><summary>Exact server result</summary><pre>${esc(json(value))}</pre></details>`;
+    $('result').innerHTML = `<strong>${esc(value.status)}${outcome.code ? ` · ${esc(outcome.code)}` : ''}</strong><p>${esc(outcome.reason ?? (outcome.status === 'pending' ? 'Awaiting approval. Stock has not changed.' : 'Server result received.'))} ${esc(typeof outcome.code==='string'&&Object.hasOwn(help,outcome.code)?help[outcome.code]:'')}</p><details><summary>Exact server result</summary><pre>${esc(json(value))}</pre></details>`;
     await refresh(gen);
   } catch(error) { if(gen === generation) { $('result').dataset['status']='error'; $('result').textContent=`Command not confirmed: ${errorMessage(error)}. Check connection and history before retrying.`; } }
   finally { busy = false; }

@@ -15,7 +15,6 @@ const page = await context.newPage();
 const video = page.video();
 type Mark={selector:string;caption:string;beforeSeconds:number;pulseSeconds?:number;afterSeconds?:number};
 const marks:Mark[] = [];
-let started;
 try {
   await page.goto(pathToFileURL(resolve('artifacts/workbench.html')).href);
   await page.evaluate(() => {
@@ -34,11 +33,11 @@ try {
     document.addEventListener('mousemove',e=>{pointer.style.transform=`translate(${e.clientX}px,${e.clientY}px)`});
     document.addEventListener('pointerdown',e=>{pulse.style.left=e.clientX+'px';pulse.style.top=e.clientY+'px';pulse.classList.remove('active');void pulse.offsetWidth;pulse.classList.add('active')});
   });
-  started=Date.now();
+  const started=Date.now();
   let cursor={x:1070,y:120};
   await page.mouse.move(cursor.x,cursor.y);
-  const wait = ms => page.waitForTimeout(ms); // editorial pacing, not agent polling
-  async function caption(text){await page.locator('#demo-caption').evaluate((el,text)=>el.textContent=text,text)}
+  const wait = (ms:number) => page.waitForTimeout(ms); // editorial pacing, not agent polling
+  async function caption(text:string){await page.locator('#demo-caption').evaluate((el,text)=>el.textContent=text,text)}
   async function click(selector:string,text:string,hold=2100,evidence=false){
     await caption(text);
     const target=page.locator(selector);

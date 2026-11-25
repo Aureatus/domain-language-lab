@@ -3,9 +3,11 @@
 import {readFileSync} from 'node:fs';
 import {relative} from 'node:path';
 import {createInterpreter} from '../semantic/v2/core.ts';
+import type {Committed,Preparation,State} from '../semantic/v2/types.ts';
+import type {buildInvocation} from '../application/derive.ts';
 import {leaveModel,sourceMap} from './model.ts';
 
-export function declaration(id,value,path){
+export function declaration<T>(id:string,value:T,path:string){
   const span=sourceMap[id];if(!span)throw Error(`Missing declaration ${id}`);
   const source=readFileSync(span.filename,'utf8').split('\n');
   const line=span.start.line;
@@ -14,7 +16,7 @@ export function declaration(id,value,path){
 // Diagnostic replay, NOT instrumentation of the original execution. Each boolean
 // expression is passed unchanged to the existing interpreter as a precondition.
 // This deliberately avoids a second expression evaluator or copied domain rules.
-export function explainEvaluation(state,invocation,result,{phase='preview',grantStatus}:{phase?:string;grantStatus?:string}={}){
+export function explainEvaluation(state:State,invocation:ReturnType<typeof buildInvocation>,result:Preparation|Committed,{phase='preview',grantStatus}:{phase?:string;grantStatus?:string}={}){
   const a=leaveModel.actions[invocation.action];
   if(!a)throw Error(`Unknown leave action: ${invocation.action}`);
   const checks=[...a.policies.map((p,i)=>({p,kind:p.effect,path:`actions.${invocation.action}.policies[${i}]`})),...a.preconditions.map((p,i)=>({p,kind:'precondition',path:`actions.${invocation.action}.preconditions[${i}]`}))].map(({p,kind,path})=>{
@@ -23,14 +25,15 @@ export function explainEvaluation(state,invocation,result,{phase='preview',grant
     const r=createInterpreter(probe).prepare(state,invocation);
     return {...declaration(p.id,p,path),kind,value:r.status==='prepared'?true:r.status==='rejected'&&r.code==='precondition'?false:null,diagnostic:r.status==='rejected'?r.code:undefined};
   });
+  const employeeId=invocation.args['employeeId'],employee=typeof employeeId==='string'?state.records['employee']?.[employeeId]:undefined;
   return {format:'leave-explanation/v1',phase,
     method:'Read-only diagnostic re-evaluation with semantic/v2/core.ts, not a live execution-order or parser trace. Each guard is evaluated independently, even if original execution stopped earlier.',
     representation:'Experimental text source parsed into semantic-core/v2 and validated by the existing interpreter. Source spans come from the parser; no compiler correctness proof.',
     invocation,revision:state.revision,
-    inputs:{days:invocation.args.days,threshold:state.records.settings['leave-rule'].values.threshold,balance:state.records.employee[invocation.args.employeeId]?.values.balance,manager:state.records.employee[invocation.args.employeeId]?.values.manager},
+    inputs:{days:invocation.args['days'],threshold:state.records['settings']?.['leave-rule']?.values['threshold'],balance:employee?.values['balance'],manager:employee?.values['manager']},
     host:'application/inputs.ts utc-weekday-range/v1 converts dates to UTC Monday–Friday days. The local server supplies simulated actor, operation ID and wall clock. No holiday calendar.',
     checks,group:[...a.updates.map((u,i)=>declaration(u.id,u,`actions.${invocation.action}.updates[${i}]`)),...a.inserts.map((u,i)=>declaration(u.id,u,`actions.${invocation.action}.inserts[${i}]`))],
-    outcome:{status:result.status,code:result.code,grantStatus,requirements:result.request?.requirements,events:result.events??[]},
+    outcome:{status:result.status,code:result.status==='rejected'?result.code:undefined,grantStatus,requirements:result.status==='pending'?result.request.requirements:undefined,events:result.status==='committed'?result.events:[]},
     adapter:phase==='preview'?'prepare only; no persistence, domain commit or published facts.':result.status==='pending'?'Durable pending request saved. No domain commit, deduction or committed facts.':grantStatus==='approved'?'Grant saved in one transaction; resume is a separate transaction with fresh clock and full-state freshness checks.':'Effect/SQLite adapter owns atomic domain state, operation result and outbox persistence.',
     ui:'application/browser.ts derives forms/views from the shared application contract. This optional excerpt adapter is demonstration tooling, not required application code. SSE is not recipient-secured delivery.'};
 }

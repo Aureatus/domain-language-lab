@@ -9,7 +9,7 @@ test('delayed snapshots cannot undo pending/grant updates, including across reop
   const directory=await mkdtemp('/tmp/opencode/snapshot-order-');
   let server=await createApplicationServer(declaration,{directory});
   const snapshot=async()=>await(await fetch(`${server.url}/api/snapshot`)).json();
-  const post=async(path,body)=>await(await fetch(`${server.url}/api/${path}`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)})).json();
+  const post=async(path:string,body:object)=>await(await fetch(`${server.url}/api/${path}`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)})).json();
   try{
     const before=await snapshot();
     const pending=await post('actions/execute',{actor:'maya',action:'leave.request',args:{start:'2026-11-23',end:'2026-11-25'}});
