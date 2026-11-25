@@ -1,8 +1,8 @@
-# Unnamed language research
+# Premise
 
-A research and design repository for an Ash-inspired domain language with Effect/Alchemy execution, relationship-derived behavior, rich renderer-independent applications, and first-class explanation and verification outputs.
+Premise is an experimental, Ash-inspired domain language: state the premises, and derive applications, checks, and proofs from them. The research explores Effect/Alchemy execution, relationship-derived behavior, rich renderer-independent applications, and first-class explanation and verification outputs.
 
-**Status:** executable action IRs, inventory/reservation consumers, Effect execution with SQLite persistence and policy-derived approval/resumption, and generated v1 Lean numeric proofs, alongside the earlier live issue workspace. Language syntax and wider contracts remain proposals. No production compiler, runtime correspondence proof, or semantic video generator is implemented; the MP4s are actual browser recordings. The language remains unnamed.
+**Status:** executable action IRs, inventory/reservation consumers, Effect execution with SQLite persistence and policy-derived approval/resumption, and generated v1 Lean numeric proofs, alongside the earlier live issue workspace. Language syntax and wider contracts remain proposals. No production compiler, runtime correspondence proof, or semantic video generator is implemented; the MP4s are actual browser recordings.
 
 ## Start here
 

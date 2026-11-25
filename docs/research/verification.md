@@ -4,7 +4,7 @@ Research memo · 2026-11-11 · design proposal, no implementation or tool execut
 
 ## Recommendation
 
-Give the unnamed Ash-like language one typed, versioned semantic core and several verification adapters. Make laws first-class declarations associated with resources, actions, policies, relationships, event transitions, and semantic UI interactions. Start with executable properties and replayable state-machine tests; add bounded model checking for workflows and Lean proofs for a deliberately small pure fragment. Treat compilation correctness as a separate obligation. Effect and Alchemy integrations are execution boundaries, not automatically verified semantics.
+Give Premise one typed, versioned semantic core and several verification adapters. Make laws first-class declarations associated with resources, actions, policies, relationships, event transitions, and semantic UI interactions. Start with executable properties and replayable state-machine tests; add bounded model checking for workflows and Lean proofs for a deliberately small pure fragment. Treat compilation correctness as a separate obligation. Effect and Alchemy integrations are execution boundaries, not automatically verified semantics.
 
 **Current Bend 2 is directly relevant:** it has laws, proof definitions, and a Lean-formalized kernel path. It is not the old Bend/HVM project. Its own documentation explicitly limits the guarantee to modeled semantics and identifies translation/backend gaps. Borrow its law ergonomics and visible obligations, not a blanket “bug-free application” claim.
 

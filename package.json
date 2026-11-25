@@ -1,5 +1,5 @@
 {
-  "name": "unnamed-language-experiment",
+  "name": "premise",
   "private": true,
   "type": "module",
   "engines": { "node": ">=22.18.0" },
