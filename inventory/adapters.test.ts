@@ -43,7 +43,7 @@ test('competing reservation fibers satisfy independent capacity oracle in either
     const store = await run(makeStore(initialState));
     const calls = [invocation('raceA', 'reserve'), invocation('raceB', 'reserve', 'slotB', 'bob')];
     if (reverse) calls.reverse();
-    const outcomes = await run(Effect.all(calls.map(call => execute(runtime, store, call)), {concurrency: 'unbounded'}));
+    const outcomes = await run(Effect.forEach(calls, call => execute(runtime, store, call), {concurrency: 'unbounded'}));
     assert.equal(outcomes.filter(r => r.status === 'committed').length, 1);
     assert.equal(outcomes.filter(r => r.status === 'rejected' && r.code === 'precondition').length, 1);
     const published = await run(SynchronizedRef.get(store));

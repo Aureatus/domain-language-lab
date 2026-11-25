@@ -53,5 +53,5 @@ export function deriveChange(model:Model, events:readonly Event[], {sequence, pe
     for (const recipient of event.recipients) recipients.set(recipient.recipient, recipient);
   }
   if (pending) add({view: 'pending'});
-  return {sequence, invalidations: [...invalidations.values()], recipients: [...recipients.values()], reason};
+  return {...(sequence===undefined?{}:{sequence}), invalidations: [...invalidations.values()], recipients: [...recipients.values()], reason};
 }

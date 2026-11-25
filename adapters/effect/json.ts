@@ -97,7 +97,7 @@ export const DurableInvocationSchema = openObject({
   action: Schema.String,
   actor: Schema.String,
   args: Schema.JsonObject,
-  clock: Schema.Number,
+  clock: Schema.Finite,
 });
 
 export const DurableCommittedOutcomeSchema = openObject({

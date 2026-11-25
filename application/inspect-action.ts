@@ -27,7 +27,7 @@ const {args,selection}=trace??(values.args?{args:decodeJsonObject(values.args),s
 if(!args||typeof args!=='object'||Array.isArray(args))throw Error('Expected action arguments object.');
 const mutant=trace?.['mutant'];
 if(mutant&&mutant!=='snapshot-unlocks')throw Error('Unknown replay mutant.');
-const fold=actionReview(contract,actor,action,{mutant:mutant==='snapshot-unlocks'?mutant:undefined}),steps=[fold({type:'open'})];
+const fold=actionReview(contract,actor,action,mutant==='snapshot-unlocks'?{mutant}:{}),steps=[fold({type:'open'})];
 const check=interactionOracle(actor);let firstFailure: {rule:string;eventCount:number} | null=null;
 if(trace?.['failure']&&trace['checkerBuild']!==await checkerBuild())throw Error('Incompatible counterexample: checker/projection build differs.');
 const events: unknown[]=[];

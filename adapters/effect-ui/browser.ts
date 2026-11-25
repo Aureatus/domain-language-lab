@@ -14,16 +14,17 @@ const SavedSubmissionCodec=Schema.fromJsonString(Schema.NullOr(Schema.Struct({
 const encodeStorageKey=Schema.encodeSync(StorageKeyCodec);
 const decodeSavedSubmission=Schema.decodeUnknownSync(SavedSubmissionCodec);
 const encodeSavedSubmission=Schema.encodeSync(SavedSubmissionCodec);
+const decodeSavedArgs=Schema.decodeUnknownSync(Schema.Record(Schema.String,Schema.String));
 const SubmissionBodySchema=Schema.Struct({actor:Schema.String,action:Schema.String,args:Schema.Record(Schema.String,Schema.Unknown)});
 const SnapshotSchema=Schema.Struct({
-  contractId:Schema.String,snapshotVersion:Schema.Number,
+  contractId:Schema.String,snapshotVersion:Schema.Finite,
   availability:Schema.Record(Schema.String,Schema.Record(Schema.String,Schema.Boolean)),
   defaults:Schema.Record(Schema.String,Schema.Record(Schema.String,Schema.Record(Schema.String,Schema.Unknown)))
 });
-const ReceiptSchema=Schema.Struct({status:Schema.String,message:Schema.optional(Schema.String),snapshot:Schema.optional(SnapshotSchema)});
+const ReceiptSchema=Schema.Struct({status:Schema.String,message:Schema.optionalKey(Schema.String),snapshot:Schema.optionalKey(SnapshotSchema)});
 const SubmissionSchema=Schema.Struct({
-  phase:Schema.Literals(['editing','submitting','unknown','checking','retryable','known']),id:Schema.optional(Schema.String),
-  body:Schema.optional(SubmissionBodySchema),result:Schema.optional(ReceiptSchema),message:Schema.optional(Schema.String)
+  phase:Schema.Literals(['editing','submitting','unknown','checking','retryable','known']),id:Schema.optionalKey(Schema.String),
+  body:Schema.optionalKey(SubmissionBodySchema),result:Schema.optionalKey(ReceiptSchema),message:Schema.optionalKey(Schema.String)
 });
 const EventSchema=Schema.Union([
   Schema.Struct({type:Schema.Literal('submit'),id:Schema.String,body:SubmissionBodySchema}),
@@ -62,7 +63,7 @@ function actionForm({actor,action,fields,contractId,snapshot,client,storage}:{
   const Execute=Command.make('Execute',{args:{submission:SubmissionSchema,persist:Schema.Boolean}},({submission,persist})=>Effect.promise(async()=>{
     const {id,body}=submission;
     if(!id||!body)return observe({type:'lost'});
-    try{if(persist)storage.setItem(key,encodeSavedSubmission({id,body:{...body,args:Schema.decodeUnknownSync(Schema.Record(Schema.String,Schema.String))(body.args)}}));}
+    try{if(persist)storage.setItem(key,encodeSavedSubmission({id,body:{...body,args:decodeSavedArgs(body.args)}}));}
     catch{return observe({type:'invalid',message:'Could not store the submission identity. The request was not sent.'});}
     try{
       return observeReceipt(await client.execute({...body,submissionId:id}));

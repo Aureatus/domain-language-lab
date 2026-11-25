@@ -20,7 +20,8 @@ export async function startGateway(declaration,{root,directory,port=0}){
         res.setHeader('connection','close');
         if(path==='/api/events'){res.writeHead(404);res.end();return;}
         let bytes=0;const chunks: Buffer[]=[];for await(const c of req){bytes+=c.length;if(bytes>16384)throw Error('Request too large');chunks.push(c);}
-        const r=await fetch(backend.url+path,{method:req.method,headers:{'content-type':'application/json'},...(req.method==='POST'?{body:Buffer.concat(chunks)}:{})});
+        const method=req.method??'GET';
+        const r=await fetch(backend.url+path,{method,headers:{'content-type':'application/json'},...(method==='POST'?{body:Buffer.concat(chunks)}:{})});
         res.writeHead(r.status,{'content-type':'application/json','cache-control':'no-store'});res.end(await r.text());return;
       }
       const file=resolve(root,path==='/'?'index.html':'.'+path);

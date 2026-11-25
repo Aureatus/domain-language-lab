@@ -58,7 +58,7 @@ function replayHistory(value: unknown): History {
   const commands = value['commands'] ?? value['failingPrefix'];
   if (!Array.isArray(commands) || !commands.every(isOperation)) throw new TypeError('Expected replay operations');
   if (value['observations'] !== undefined && !Array.isArray(value['observations'])) throw new TypeError('Expected replay observations');
-  return {seed:value['seed'], commands, observations:value['observations']};
+  return {seed:value['seed'], commands, ...(value['observations']===undefined?{}:{observations:value['observations']})};
 }
 const count = (value: Value | undefined) => {
   assert.ok(typeof value === 'number');
@@ -256,7 +256,8 @@ export function checkHistory(commands: Operation[], observations: Observation[])
       } else assert.deepEqual(events, previousEvents, 'noncommitting operation must not publish');
       previousEvents = copy(events);
     } catch (error) {
-      return {status:'counterexample', index, command:op, expected, actual:observations[index]?.result, cause:{name:error.name, message:error.message, expected:error.expected, actual:error.actual}, failingPrefix:commands.slice(0, index + 1)};
+      const actual=observations[index]?.result;
+      return {status:'counterexample', index, command:op, ...(expected===undefined?{}:{expected}), ...(actual===undefined?{}:{actual}), cause:{name:error.name, message:error.message, expected:error.expected, actual:error.actual}, failingPrefix:commands.slice(0, index + 1)};
     }
   }
   return {status:'passed', steps:commands.length};

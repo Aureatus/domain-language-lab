@@ -1,8 +1,10 @@
 import * as Effect from 'effect/Effect';
 import * as Context from 'effect/Context';
+import * as Data from 'effect/Data';
 import * as Layer from 'effect/Layer';
 import type { ConstraintDecoder } from 'effect/Schema';
 import { DatabaseSync } from 'node:sqlite';
+import {errorMessage} from '../../errors.ts';
 import { createInterpreter, jsonSnapshot, validateState } from '../../semantic/core.ts';
 import { createInterpreter as createV2, validateState as validateV2State } from '../../semantic/v2/core.ts';
 import {
@@ -72,12 +74,15 @@ function validateStored(db, modelKey, model) {
 }
 
 /** Open a synchronous SQLite store. Caller owns the database file and filesystem durability policy. */
+class DurableStoreError extends Data.TaggedError('DurableStoreError')<{message:string;cause?:unknown}> {}
+const durableError = (cause:unknown) => cause instanceof DurableStoreError ? cause : new DurableStoreError({message:errorMessage(cause),cause});
+
 export const makeDurableStore = (path: string, { busyTimeout = 5000 } = {}) => Effect.try({
   try: () => {
     const db = new DatabaseSync(path, { timeout: busyTimeout });
     initialize(db);
     return db;
-  }, catch: error => error,
+  }, catch: durableError,
 });
 
 export const makeDurableRuntime = model => profile(model).create(model);
@@ -91,7 +96,7 @@ export const durableExecute = (runtime, db, invocation, { beforeCommit }: {befor
     try {
       const hasStore = db.prepare('SELECT value FROM durable_meta WHERE key=?').get('format');
       if (!hasStore) {
-        throw new Error('Durable store has not been initialized; call initializeDurableState first.');
+        throw new DurableStoreError({message:'Durable store has not been initialized; call initializeDurableState first.'});
       }
       if (db.prepare('SELECT id FROM durable_operations WHERE id=?').get(command.id)) {
         db.exec('COMMIT'); return conflict();
@@ -126,7 +131,7 @@ export const durableExecute = (runtime, db, invocation, { beforeCommit }: {befor
       try { db.exec('ROLLBACK'); } catch { /* transaction may already have ended */ }
       throw error;
     }
-  }, catch: error => error,
+  }, catch: durableError,
 });
 
 /** Create/replace only the initial binding, never an arbitrary running-state setter. */
@@ -136,17 +141,17 @@ export const initializeDurableState = (runtime, db, initialState) => Effect.try(
     db.exec('BEGIN IMMEDIATE');
     try {
       const existing = db.prepare('SELECT value FROM durable_meta WHERE key=?').get('format');
-      if (existing) throw new Error('Durable store is already initialized.');
+      if (existing) throw new DurableStoreError({message:'Durable store is already initialized.'});
       const put = db.prepare('INSERT INTO durable_meta(key,value) VALUES(?,?)');
       put.run('format', FORMAT); put.run('model_key', canonical(runtime.model)); put.run('state_json', canonical(state));
       db.exec('COMMIT');
       return state;
     } catch (error) { try { db.exec('ROLLBACK'); } catch {} throw error; }
-  }, catch: error => error,
+  }, catch: durableError,
 });
 
 export const durableState = (runtime, db) => Effect.try({
-  try: () => { db.exec('BEGIN'); try { const state = validateStored(db, canonical(runtime.model), runtime.model); db.exec('COMMIT'); if (state === null) throw new Error('Durable store is not initialized.'); return state; } catch (e) { try { db.exec('ROLLBACK'); } catch {} throw e; } }, catch: error => error,
+  try: () => { db.exec('BEGIN'); try { const state = validateStored(db, canonical(runtime.model), runtime.model); db.exec('COMMIT'); if (state === null) throw new DurableStoreError({message:'Durable store is not initialized.'}); return state; } catch (e) { try { db.exec('ROLLBACK'); } catch {} throw e; } }, catch: durableError,
 });
 
 const exactKeys = (value, required: readonly string[], optional: readonly string[] = []) => {
@@ -228,7 +233,7 @@ export const durableApprove = (runtime, db, source, host) => Effect.try({
         return rejected('already-granted', 'Policy already has a persisted grant.');
       return runtime.approve(decodeWith(DurablePendingRequestSchema, pending.request_json), {policyId: command.policyId, approver: host.authenticatedApprover});
     });
-  }, catch: error => error,
+  }, catch: durableError,
 });
 
 /** No receipt parameter: only receipts from the transactional grant ledger are used. */
@@ -238,14 +243,14 @@ export const durableResume = (runtime, db, source, options: {beforeCommit?: (res
     const command = jsonSnapshot(source);
     exactKeys(command, ['id', 'invocationId', 'clock']); exactKeys(options, [], ['beforeCommit']);
     identity(command.id); identity(command.invocationId);
-    if (!Number.isSafeInteger(command.clock) || command.clock < 0) throw new TypeError('Expected a nonnegative safe clock.');
+    if (!Number.isSafeInteger(command.clock) || command.clock < 0) throw new DurableStoreError({message:'Expected a nonnegative safe clock.'});
     return operation(runtime, db, {...command, kind: 'resume'}, options.beforeCommit, (state, pending) => {
       const original = db.prepare('SELECT command_json FROM durable_invocations WHERE id=?').get(command.invocationId);
       const receipts = db.prepare('SELECT receipt_json FROM durable_grants WHERE invocation_id=? ORDER BY policy_id').all(command.invocationId)
         .map(row => decodeWith(DurableReceiptSchema, row.receipt_json));
       return runtime.resume(state, decodeWith(DurableInvocationSchema, original.command_json), decodeWith(DurablePendingRequestSchema, pending.request_json), receipts, {clock: command.clock});
     });
-  }, catch: error => error,
+  }, catch: durableError,
 });
 
 /** Read-only CLI/UI projection; grants in this projection confer no authority. */
@@ -254,29 +259,29 @@ export const durablePending = (runtime, db, invocationId) => Effect.try({
     requireV2(runtime); identity(invocationId);
     db.exec('BEGIN');
     try {
-      if (validateStored(db, canonical(runtime.model), runtime.model) === null) throw new Error('Durable store is not initialized.');
+      if (validateStored(db, canonical(runtime.model), runtime.model) === null) throw new DurableStoreError({message:'Durable store is not initialized.'});
       const pending = db.prepare('SELECT * FROM durable_pending WHERE invocation_id=?').get(invocationId);
       const grants = db.prepare('SELECT receipt_json FROM durable_grants WHERE invocation_id=? ORDER BY policy_id').all(invocationId)
         .map(row => { const receipt = decodeWith(DurableReceiptSchema, row.receipt_json); return {policyId: receipt.policyId, approver: receipt.approver}; });
       const result = pending ? jsonSnapshot({invocationId, status: pending.status, request: decodeWith(DurablePendingRequestSchema, pending.request_json), grants, resumeId: pending.resume_id}) : null;
       db.exec('COMMIT'); return result;
     } catch (error) { try { db.exec('ROLLBACK'); } catch {} throw error; }
-  }, catch: error => error,
+  }, catch: durableError,
 });
 
 /** Pull ordered unacknowledged facts. A crash after delivery and before ack can redeliver. */
 export const pullOutbox = (db: DatabaseSync, { limit = 100 } = {}) => Effect.try({
   try: () => {
-    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 1000) throw new TypeError('limit must be an integer from 1 to 1000');
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 1000) throw new DurableStoreError({message:'limit must be an integer from 1 to 1000'});
     return db.prepare('SELECT sequence,event_id,event_json FROM durable_outbox WHERE acknowledged=0 ORDER BY sequence LIMIT ?')
       .all(limit).map(row => ({ sequence: row['sequence'], eventId: row['event_id'], event: decodeWith(DurableEventSchema, row['event_json']) }));
-  }, catch: error => error,
+  }, catch: durableError,
 });
 export const acknowledgeOutbox = (db, sequence) => Effect.try({
-  try: () => { if (!Number.isSafeInteger(sequence) || sequence < 1) throw new TypeError('sequence must be a positive safe integer'); return db.prepare('UPDATE durable_outbox SET acknowledged=1 WHERE sequence=? AND acknowledged=0').run(sequence).changes === 1; }, catch: error => error,
+  try: () => { if (!Number.isSafeInteger(sequence) || sequence < 1) throw new DurableStoreError({message:'sequence must be a positive safe integer'}); return db.prepare('UPDATE durable_outbox SET acknowledged=1 WHERE sequence=? AND acknowledged=0').run(sequence).changes === 1; }, catch: durableError,
 });
 
-export const closeDurableStore = (db: DatabaseSync) => Effect.try({ try: () => db.close(), catch: error => error });
+export const closeDurableStore = (db: DatabaseSync) => Effect.try({ try: () => db.close(), catch: durableError });
 
 export const DurableStore = Context.Service<DatabaseSync>('DurableStore');
 export const durableStoreLayer = (path: string) => Layer.effect(DurableStore, Effect.acquireRelease(
