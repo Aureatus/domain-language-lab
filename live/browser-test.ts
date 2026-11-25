@@ -6,16 +6,30 @@ import { mkdir, writeFile, readFile } from 'node:fs/promises';
 import assert from 'node:assert/strict';
 import { runDerivedChecks } from './derive.ts';
 import { createApp } from './core.ts';
+import type { Result } from 'axe-core';
+
+declare const axe: typeof import('axe-core');
+declare global {
+  interface Window {
+    staleMutation: () => void;
+    staleReset: () => void;
+    heldResults: (() => void)[];
+    holdWorkerResults: boolean;
+    workerTerminations: number;
+    runningFrames: number;
+  }
+}
+
 const require=createRequire(import.meta.url);
 const axePath=require.resolve('axe-core/axe.min.js');
 const browser=await chromium.launch({headless:true});
 const context=await browser.newContext({viewport:{width:1440,height:940}});
 const page=await context.newPage();
-const errors=[];page.on('pageerror',e=>errors.push(e.message));
-const networkRequests=[];
+const errors: string[]=[];page.on('pageerror',e=>errors.push(e.message));
+const networkRequests: string[]=[];
 page.context().on('request',r=>{if(/^https?:/.test(r.url()))networkRequests.push(r.url())});
 await page.context().setOffline(true);
-const reports=[];
+const reports: {name: string; violations: Result[]}[]=[];
 const state=()=>page.evaluate(()=>structuredClone(window.liveWorkspace.core.state));
 const get=()=>page.evaluate(()=>({state:structuredClone(window.liveWorkspace.core.state),model:structuredClone(window.liveWorkspace.core.model)}));
 async function audit(name){await page.addScriptTag({path:axePath});const result=await page.evaluate(async()=>await axe.run(document,{runOnly:{type:'tag',values:['wcag2a','wcag2aa','wcag21aa']}}));reports.push({name,violations:result.violations});assert.deepEqual(result.violations.map(v=>({id:v.id,nodes:v.nodes.map(n=>n.target)})),[],name+' axe')}
@@ -114,6 +128,7 @@ try {
   assert.equal(await page.locator('[data-unavailable=resolve]').count(),0,'Applied declaration updates explanation affordance');
   assert.match(await page.locator('#tool-form .availability').innerText(),/Available for current inputs/);
   const tools=await page.locator('#tool-descriptors').textContent();
+  assert.ok(tools);
   assert.equal(JSON.parse(tools).find(t=>t.name==='resolve').allowedRoles.includes('member'),true);
   await tool('resolve',{issueId:id});
   s=await state();assert.equal(s.issues.at(-1).status,'resolved');assert.equal(s.events.at(-1).recipients.length,0);
@@ -176,7 +191,7 @@ try {
   await page.locator('#actor').selectOption('u2');assert.equal(await comment().inputValue(),'');
   await comment().fill('Unsent Jonah draft');await page.locator('#actor').selectOption('u1');
   assert.equal(await comment().inputValue(),'Unsent Maya draft');
-  if (!await page.locator('.lab').evaluate(e=>e.open)) await page.locator('.lab > summary').click();
+  if (!await page.locator('.lab').evaluate(e=>e instanceof HTMLDetailsElement && e.open)) await page.locator('.lab > summary').click();
   await page.locator('#tool-args').fill('{ draft JSON');
   assert.match(await page.locator('#tool-form .availability').innerText(),/enter valid JSON/);
   const beforeQuery=await workspace();
@@ -218,9 +233,19 @@ try {
   }
   await comment().fill('Draft held during history');
   await page.locator('.lab > summary').click();await page.locator('#tool-args').fill('{ history draft');
-  await page.evaluate(()=>{window.staleMutation=document.querySelector('[data-run=watch]').onclick});
+  await page.evaluate(()=>{
+    const button=document.querySelector<HTMLButtonElement>('[data-run=watch]');
+    const handler=button?.onclick;
+    if(!button || !handler) throw Error('Missing watch handler');
+    window.staleMutation=()=>handler.call(button,new PointerEvent('click'));
+  });
   await page.locator('#reset').click();
-  await page.evaluate(()=>{window.staleReset=document.querySelector('#confirm-reset').onclick});
+  await page.evaluate(()=>{
+    const button=document.querySelector<HTMLButtonElement>('#confirm-reset');
+    const handler=button?.onclick;
+    if(!button || !handler) throw Error('Missing reset handler');
+    window.staleReset=()=>handler.call(button,new PointerEvent('click'));
+  });
   await page.keyboard.press('Escape');
   await page.locator('#history > summary').click();await page.locator('#history-step').fill('0');
   const savedBeforePreview=await page.evaluate(()=>localStorage.getItem('relay.workspace.v1'));
@@ -281,7 +306,9 @@ try {
      window.heldResults=[];window.holdWorkerResults=false;window.workerTerminations=0;
      const NativeWorker=Worker;
      window.Worker=class extends NativeWorker {
-       set onmessage(handler) {super.onmessage=event=>{if(window.holdWorkerResults)window.heldResults.push(()=>handler(event));else handler(event)}}
+       set onmessage(handler: Worker['onmessage']) {
+         super.onmessage=handler && (event=>{if(window.holdWorkerResults)window.heldResults.push(()=>handler.call(this,event));else handler.call(this,event)});
+       }
        terminate(){window.workerTerminations++;super.terminate()}
      };
    });
@@ -292,13 +319,15 @@ try {
    const importWorker=async()=>{
      await workerPage.locator('#import-workspace').setInputFiles({name:'history.json',mimeType:'application/json',buffer:Buffer.from(historyJSON)});
      await workerPage.getByText('Imported workspace after core validation.').waitFor();
-     if(!await workerPage.locator('.lab').evaluate(e=>e.open))await workerPage.locator('.lab > summary').click();
+     if(!await workerPage.locator('.lab').evaluate(e=>e instanceof HTMLDetailsElement && e.open))await workerPage.locator('.lab > summary').click();
    };
    await importWorker();
    await workerPage.evaluate(()=>{
      window.runningFrames=0;
      const frame=()=>{if(document.querySelector('#cancel-derived-checks')){window.runningFrames++;requestAnimationFrame(frame)}};
-     document.querySelector('#run-derived-checks').click();requestAnimationFrame(frame);
+     const start=document.querySelector<HTMLButtonElement>('#run-derived-checks');
+     if(!start)throw Error('Missing declaration check control');
+     start.click();requestAnimationFrame(frame);
    });
    await workerPage.waitForFunction(()=>window.runningFrames>=3);
    await workerPage.locator('#issue-search').fill('CSV');
@@ -306,16 +335,28 @@ try {
    await workerPage.waitForFunction(()=>document.querySelectorAll('#derived-output tbody tr').length===280);
    assert.match(await workerPage.locator('#derived-output').innerText(),/passed · r1/);
    const expectedHistory=runDerivedChecks(history.exportWorkspace());
-   const actualRows=await workerPage.locator('#derived-output tbody tr').evaluateAll(rows=>rows.map(row=>[...row.cells].map(cell=>cell.textContent)));
+   const actualRows=await workerPage.locator('#derived-output tbody tr').evaluateAll(rows=>rows.map(row=>[...row.querySelectorAll('td')].map(cell=>cell.textContent)));
    assert.deepEqual(actualRows,expectedHistory.cases.map(c=>[c.id,c.action,c.actorId,JSON.stringify(c.expected),JSON.stringify(c.actual),c.status]));
    await workerPage.locator('#issue-search').fill('');
    // Cancellation terminates the actual worker, never runs a synchronous fallback.
-   await workerPage.evaluate(()=>{document.querySelector('#run-derived-checks').click();document.querySelector('#cancel-derived-checks').click()});
+   await workerPage.evaluate(()=>{
+     const start=document.querySelector<HTMLButtonElement>('#run-derived-checks');
+     if(!start)throw Error('Missing declaration check control');
+     start.click();
+     const cancel=document.querySelector<HTMLButtonElement>('#cancel-derived-checks');
+     if(!cancel)throw Error('Missing declaration check cancellation control');
+     cancel.click();
+   });
    assert.match(await workerPage.locator('#derived-output').innerText(),/unknown.*r1/s);
    assert.match(await workerPage.locator('#derived-output').innerText(),/Cancelled/);
    assert.ok(await workerPage.evaluate(()=>window.workerTerminations)>=2);
    const holdResult=async()=>{
-     await workerPage.evaluate(()=>{window.heldResults=[];window.holdWorkerResults=true;document.querySelector('#run-derived-checks').click()});
+     await workerPage.evaluate(()=>{
+       window.heldResults=[];window.holdWorkerResults=true;
+       const start=document.querySelector<HTMLButtonElement>('#run-derived-checks');
+       if(!start)throw Error('Missing declaration check control');
+       start.click();
+     });
      await workerPage.waitForFunction(()=>window.heldResults.length===1);
      assert.match(await workerPage.locator('#derived-output').innerText(),/Running/);
    };
@@ -337,7 +378,15 @@ try {
    await workerPage.locator('#return-live').click();await deliverStale();
    // A cancelled request followed by a new one cannot overwrite its replacement.
    await holdResult();
-   await workerPage.evaluate(()=>{window.oldDelivery=window.heldResults.shift();document.querySelector('#cancel-derived-checks').click();window.holdWorkerResults=false;document.querySelector('#run-derived-checks').click();window.oldDelivery()});
+   await workerPage.evaluate(()=>{
+     const oldDelivery=window.heldResults.shift();
+     const cancel=document.querySelector<HTMLButtonElement>('#cancel-derived-checks');
+     if(!cancel || !oldDelivery)throw Error('Missing cancellation control or held result');
+     cancel.click();window.holdWorkerResults=false;
+     const start=document.querySelector<HTMLButtonElement>('#run-derived-checks');
+     if(!start)throw Error('Missing declaration check control');
+     start.click();oldDelivery();
+   });
    assert.match(await workerPage.locator('#derived-output').innerText(),/Running/);
    await workerPage.waitForFunction(()=>document.querySelectorAll('#derived-output tbody tr').length===280);
    const budget=createApp();for(let i=0;i<500;i++)assert.equal(budget.setRule('watch',{notify:[]}).ok,true);
@@ -350,19 +399,21 @@ try {
    for(const mode of ['unavailable','startup-error','runtime-error','message-error','time-budget']) {
      const failure=await page.context().newPage();
      await failure.addInitScript(mode=>{
-       if(mode==='unavailable')window.Worker=undefined;
-       else if(mode==='startup-error')window.Worker=class{constructor(){throw Error('Worker resource allocation denied')}};
+       if(mode==='unavailable')Object.defineProperty(window,'Worker',{value:undefined});
+       else if(mode==='startup-error')Object.defineProperty(window,'Worker',{value:class{constructor(){throw Error('Worker resource allocation denied')}}});
        else {
-         window.Worker=class{
+         Object.defineProperty(window,'Worker',{value:class{
+           onerror?: (event: ErrorEvent) => void;
+           onmessageerror?: (event: MessageEvent) => void;
            postMessage(){
-             if(mode==='runtime-error')queueMicrotask(()=>this.onerror({preventDefault(){},message:'Worker resource failure'}));
-             if(mode==='message-error')queueMicrotask(()=>this.onmessageerror());
+             if(mode==='runtime-error')queueMicrotask(()=>this.onerror?.(new ErrorEvent('error',{message:'Worker resource failure'})));
+             if(mode==='message-error')queueMicrotask(()=>this.onmessageerror?.(new MessageEvent('messageerror')));
            }
            terminate(){}
-         };
+         }});
          if(mode==='time-budget'){
-           const nativeTimeout=window.setTimeout;
-           window.setTimeout=(callback,ms,...args)=>nativeTimeout(callback,ms===60000?0:ms,...args);
+           const nativeTimeout: Window['setTimeout']=window.setTimeout;
+           Object.defineProperty(window,'setTimeout',{value:(callback: TimerHandler,ms?: number,...args: unknown[])=>nativeTimeout(callback,ms===60000?0:ms,...args)});
          }
        }
      },mode);

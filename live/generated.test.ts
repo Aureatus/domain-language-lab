@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {runGenerated} from './generated.ts';
 import {readFile} from 'node:fs/promises';
 import {stripTypeScriptTypes} from 'node:module';
+import type {createApp} from './core.ts';
 
 test('fixed-seed generated live histories exercise every action and failure class',()=>{
   const report=runGenerated({seed:0x51eed,runs:40,maxSteps:80});
@@ -24,7 +25,7 @@ test('snapshot oracle detects nested corruption when deep freeze is deliberately
   const coreURL='data:text/javascript;base64,'+Buffer.from(stripTypeScriptTypes(weakened)).toString('base64');
   const runner=(await readFile(new URL('./generated.ts',import.meta.url),'utf8')).replace("'./core.ts'",JSON.stringify(coreURL));
   const {runGenerated:run}=await import('data:text/javascript;base64,'+Buffer.from(stripTypeScriptTypes(runner)).toString('base64'));
-  const report=run({runs:2,maxSteps:30,wrapper:{dispatch(action,args,actor){
+  const report=run({runs:2,maxSteps:30,wrapper:{dispatch(this: ReturnType<typeof createApp>,action,args,actor){
     const old=this.state;const result=this.dispatch(action,args,actor);
     old.users[0].name='Corrupted old snapshot';
     return result;

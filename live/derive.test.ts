@@ -21,7 +21,9 @@ test('declaration diff reports exact roles/routes, no-op and ordering without mu
   const reorder = describeChange(model, 'comment', {notify: ['watchers', 'opener', 'assignee']});
   assert.deepEqual(reorder.routes, {added: [], removed: []});
   assert.equal(reorder.unchanged, false);
-  assert.equal(describeChange(model, 'watch', {notify: ['opener']}).routes.added[0], 'opener');
+  const added = describeChange(model, 'watch', {notify: ['opener']});
+  assert.ok(added.routes);
+  assert.equal(added.routes.added[0], 'opener');
   assert.equal(capture(app), before);
   assert.equal(app.model, model);
   assert.deepEqual(patch, {allowedRoles: ['member'], notify: ['watchers']});
@@ -98,7 +100,7 @@ test('all-denied declarations pass negative cases but honestly report absent pos
   assert.equal(report.result, 'unknown');
   assert.equal(report.cases.filter(row => row.status === 'unknown').length, 6);
   assert.equal(report.cases.filter(row => row.status === 'passed').length, 36);
-  assert.ok(report.cases.filter(row => row.status === 'passed').every(row => row.expected.ok === false && row.actual.unchanged));
+  assert.ok(report.cases.filter(row => row.status === 'passed').every(row => 'ok' in row.expected && row.expected.ok === false && row.actual?.unchanged));
   assert.equal(capture(app), before);
 });
 
@@ -138,7 +140,7 @@ test('failed setup dispatch and exhausted history remain unknown rather than fal
   assert.match(reopen.reason, /Setup unavailable: resolve: Workspace history limit exceeded/);
   assert.equal(policy(report, 'comment', 'u1').status, 'unknown');
   assert.match(policy(report, 'comment', 'u1').reason, /Resource-bound/);
-  assert.ok(report.cases.filter(row => row.status === 'passed').every(row => row.expected.ok === false && row.actual.unchanged));
+  assert.ok(report.cases.filter(row => row.status === 'passed').every(row => 'ok' in row.expected && row.expected.ok === false && row.actual?.unchanged));
   assert.equal(capture(app), before);
 });
 
@@ -147,7 +149,9 @@ test('invalid reconstruction is reported explicitly as unknown', () => {
   assert.equal(report.result, 'unknown');
   assert.equal(report.revision, null);
   assert.equal(report.cases[0].status, 'unknown');
-  assert.match(report.cases[0].reason, /schema/);
+  const reason = report.cases[0].reason;
+  assert.ok(reason);
+  assert.match(reason, /schema/);
 });
 
 test('history and prepared setup forks preserve exact parent evidence without sampling its clock', () => {
@@ -161,5 +165,5 @@ test('history and prepared setup forks preserve exact parent evidence without sa
   assert.equal(policy(report,'reopen','u3','dispatch').status,'passed');
   assert.equal(calls,100);assert.equal(capture(app),before);
   assert.strictEqual(app.state,state);assert.strictEqual(app.model,model);
-  assert.ok(report.cases.filter(c=>c.expected.ok===false).every(c=>c.actual.unchanged));
+  assert.ok(report.cases.filter(c=>'ok' in c.expected && c.expected.ok===false).every(c=>c.actual?.unchanged));
 });

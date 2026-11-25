@@ -216,7 +216,7 @@ test('historical why retains rule, actor, relationship and change snapshots', ()
   const encoded = JSON.stringify(historical);
   accepted(runtime.dispatch('watch', {issueId: 'i1'}, 'u2')); // remove prior recipient path
   accepted(runtime.dispatch('assign', {issueId: 'i1', assignee: 'u1'}, 'u1'));
-  const patch = {notify: [], allowedRoles: ['lead']};
+  const patch: {notify: string[]; allowedRoles: string[]} = {notify: [], allowedRoles: ['lead']};
   accepted(runtime.setRule('comment', patch));
   patch.notify.push('watchers');
   assert.deepEqual(runtime.model.actions.comment.notify, []);
@@ -228,7 +228,7 @@ test('historical why retains rule, actor, relationship and change snapshots', ()
   assert.throws(() => { historical.actor.role = 'lead'; }, TypeError);
   assert.throws(() => { historical.changes[0].after[0].body = 'tampered'; }, TypeError);
   assert.throws(() => { runtime.state.users[0].role = 'member'; }, TypeError);
-  assert.throws(() => { runtime.model.actions.comment.inputs.type = 'unknown'; }, TypeError);
+  assert.throws(() => { Object.assign(runtime.model.actions.comment.inputs, {type: 'unknown'}); }, TypeError);
   const future = accepted(runtime.dispatch('comment', {issueId: 'i1', body: 'Future rule'}, 'u1'));
   assert.deepEqual(future.event.recipients, []);
   audit(runtime);
@@ -236,7 +236,7 @@ test('historical why retains rule, actor, relationship and change snapshots', ()
 
 test('invalid inputs, unknown IDs, actions, and invalid transitions never mutate', () => {
   const runtime = app();
-  for (const [action, args, actor] of [
+  const invalidCases: [string, unknown, string][] = [
     ['missing', {}, 'u1'], ['__proto__', {}, 'u1'], ['create', {title: 'Hi'}, 'missing'],
     ['create', {}, 'u1'], ['create', {title: '   '}, 'u1'],
     ['create', {title: 'x'.repeat(161)}, 'u1'], ['create', {title: 'Hi', priority: 'urgent'}, 'u1'],
@@ -246,7 +246,8 @@ test('invalid inputs, unknown IDs, actions, and invalid transitions never mutate
     ['assign', {issueId: 'i1', assignee: 'u2'}, 'u2'], ['assign', {issueId: 'i1', assignee: 'u3'}, 'u1'],
     ['comment', {issueId: 'missing', body: 'Hi'}, 'u1'], ['comment', {issueId: 'i1', body: ''}, 'u1'],
     ['reopen', {issueId: 'i1'}, 'u1'], ['watch', {issueId: 'i1', userId: 'u2'}, 'u1'],
-  ]) rejectedWithoutChange(runtime, action, args, actor);
+  ];
+  for (const [action, args, actor] of invalidCases) rejectedWithoutChange(runtime, action, args, actor);
   accepted(runtime.dispatch('resolve', {issueId: 'i1'}, 'u1'));
   rejectedWithoutChange(runtime, 'resolve', {issueId: 'i1'});
   audit(runtime);
@@ -385,7 +386,7 @@ test('exports are deeply detached frozen JSON and do not journal rejected operat
   rejectedWithoutChange(runtime, 'resolve', {issueId: 'i1'}, 'u2');
   assert.equal(runtime.setRule('comment', {notify: ['unknown']}).ok, false);
   assert.deepEqual(runtime.exportWorkspace(), first);
-  const patch = {notify: []};
+  const patch: {notify: string[]} = {notify: []};
   accepted(runtime.setRule('comment', patch));
   patch.notify.push('opener');
   assert.deepEqual(runtime.exportWorkspace().journal[1].patch.notify, []);

@@ -8,7 +8,7 @@ import assert from 'node:assert/strict';
 const dir=resolve('artifacts/live-video-v4');await mkdir(dir,{recursive:true});
 const browser=await chromium.launch({headless:true});
 const context=await browser.newContext({viewport:{width:1440,height:940},deviceScaleFactor:1,recordVideo:{dir,size:{width:1440,height:940}}});
-const page=await context.newPage();const video=page.video();const marks=[];let started;
+const page=await context.newPage();const video=page.video();const marks: {selector: string; caption: string; seconds: number}[]=[];let started;
 try {
   await page.goto(pathToFileURL(resolve('artifacts/live-issues.html')).href);
   await page.locator('#new-issue').waitFor();
@@ -18,7 +18,9 @@ try {
     const pointer=document.createElement('div');pointer.id='demo-pointer';pointer.innerHTML='<svg viewBox="0 0 30 38"><path d="M3 2 L3 29 L10 23 L16 35 L22 32 L16 20 L26 19 Z" fill="white" stroke="#202e3d" stroke-width="2.5" stroke-linejoin="round"/></svg>';
     const pulse=document.createElement('div');pulse.id='demo-pulse';const caption=document.createElement('div');caption.id='demo-caption';document.body.append(pointer,pulse,caption);
     // A modal lives in the top layer. Move the recording overlays into it while open.
-    new MutationObserver(()=>{const parent=document.querySelector('dialog[open]') || document.body;for(const el of [pointer,pulse,caption])if(el.parentElement!==parent)parent.append(el)}).observe(document.querySelector('dialog'),{attributes:true,attributeFilter:['open']});
+    const dialog=document.querySelector('dialog');
+    if(!dialog)throw Error('Recording dialog is missing');
+    new MutationObserver(()=>{const parent=dialog.open ? dialog : document.body;for(const el of [pointer,pulse,caption])if(el.parentElement!==parent)parent.append(el)}).observe(dialog,{attributes:true,attributeFilter:['open']});
     document.addEventListener('mousemove',e=>pointer.style.transform=`translate(${e.clientX}px,${e.clientY}px)`);
     document.addEventListener('pointerdown',e=>{pulse.style.left=e.clientX+'px';pulse.style.top=e.clientY+'px';pulse.classList.remove('active');void pulse.offsetWidth;pulse.classList.add('active')});
   });
@@ -80,6 +82,7 @@ try {
    const remaining=64000-(Date.now()-started);if(remaining>0){await caption('Local shared core: live work, declaration previews, generated checks, recovery, read-only history.');await wait(remaining)}
   await writeFile(resolve(dir,'interactions.json'),JSON.stringify({kind:'continuous-browser-recording',cursor:'DOM pointer follows actual mouse movement; pointerdown pulses',timing:'editorial pacing, not latency measurements',durationBeforeClose:(Date.now()-started)/1000,marks},null,2));
 } finally {await context.close();await browser.close()}
+if(!video)throw Error('Browser video was not recorded');
 const source=await video.path();const output=resolve('artifacts/live-issues-demo-v4.mp4');
 const result=spawnSync('ffmpeg',['-y','-i',source,'-vf','fps=30,format=yuv420p','-c:v','libx264','-crf','19','-preset','medium','-movflags','+faststart',output],{encoding:'utf8'});
 if(result.status!==0)throw Error(result.stderr);console.log(`Created ${output} from ${source}`);
