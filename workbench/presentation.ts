@@ -1,13 +1,14 @@
 import { mkdir, writeFile, readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { Runtime } from '../prototype/engine.ts';
+import type {Result} from '../prototype/engine.ts';
 import { model, ticket, support, reviewer } from '../prototype/model.ts';
 
-const cases = [];
+const cases: {policy:'approval'|'allow';mutant:boolean;frames:unknown[]}[] = [];
 for (const policy of ['approval', 'allow'] as const) for (const mutant of [false, true]) {
   const m = structuredClone(model); m.policy.support.high = policy;
   const r = new Runtime(m, ticket(), () => 1000), frames: unknown[] = [];
-  const step = (label: string, result: any) => frames.push({label,result:result?[result.status,result.reason||'']:null,ticket:[r.ticket.status,r.ticket.version,r.ticket.resolution],events:r.events.map(e=>[e.id,e.kind,e.details.reason||e.details.decision||e.details.approvalMatches||''])});
+  const step = (label: string, result: Result|null) => frames.push({label,result:result?[result.status,result.reason||'']:null,ticket:[r.ticket.status,r.ticket.version,r.ticket.resolution],events:r.events.map(e=>[e.id,e.kind,e.details.reason||e.details.decision||e.details.approvalMatches||''])});
   step('start', null); step('request', r.request(support, 'Fix the issue'));
   step('approve', r.approve(reviewer)); step('edit', r.editSummary('Fix the issue safely'));
   step('execute', r.execute({ staleApprovalMutant: mutant }));
