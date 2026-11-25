@@ -14,11 +14,13 @@ const pin = readFileSync(resolve(dir, 'lean-toolchain'), 'utf8').trim().split(':
 const local = resolve(process.env.ELAN_HOME || resolve(homedir(), '.elan'), 'bin/lean');
 // LEAN is an explicit executable override, never a shell command.
 const lean = process.env.LEAN || (existsSync(local) ? local : 'lean');
+const theoremAxioms:Record<string,string[]>={};
+const axiomsReported:string[]=[], trustedAssumptions:string[]=[];
 const report = {
   format: 'lean-proof-report/1', status: 'tool_error', source: 'proof/Approval.lean',
   source_sha256: createHash('sha256').update(readFileSync(resolve(dir, 'Approval.lean'))).digest('hex'),
-  tool: { name: 'Lean 4', version: 'unavailable' }, axioms_reported: [], theorem_axioms: {},
-  trusted_assumptions: [],
+  tool: { name: 'Lean 4', version: 'unavailable' }, axioms_reported: axiomsReported, theorem_axioms: theoremAxioms,
+  trusted_assumptions: trustedAssumptions,
   claim: 'In the explicit mathematical transition model, every committing step has current version/argument/policy-bound approval; a successful path exists and a concrete stale binding is rejected.',
   scope: 'Lean model only. TypeScript correspondence, hashing, runtime, transactions and external effects are not proved.',
   log: 'artifacts/lean-proof.log', detail: '',
