@@ -286,9 +286,9 @@ export const InventoryReplaySchema = openObject({
   format: Schema.String,
   host: Schema.String,
   model: Schema.JsonObject,
-  initial: DurableStateSchema,
+  initial: Schema.JsonObject,
   steps: Schema.Array(Schema.JsonObject),
-  final: DurableStateSchema,
+  final: Schema.JsonObject,
 });
 
 export { Schema };

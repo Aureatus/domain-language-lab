@@ -92,6 +92,8 @@ test('browser Inventory replay codec preserves exact observation and final-state
   assert.throws(() => decode(''));
   assert.throws(() => decode(encodeJson({ ...bundle, steps: null })));
   assert.throws(() => replay(decode(encodeJson({ ...bundle, final: { ...bundle.final, revision: 0 } }))), /Replay final mismatch/);
+  const reordered = { ...bundle, final: Object.fromEntries(Object.entries(bundle.final).reverse()) };
+  assert.throws(() => replay(decode(encodeJson(reordered))), /Replay final mismatch/);
 });
 
 test('DurableOutcomeSchema and DurableOperationOutcomeSchema validate discriminated unions and preserve extra fields', () => {
