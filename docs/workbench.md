@@ -39,7 +39,7 @@ This is an experimental renderer over one ticket and invocation, trusted roles, 
 With Playwright, Chromium and `@axe-core/playwright` available, run:
 
 ```sh
-node workbench/test-browser.mjs
+node workbench/test-browser.ts
 ```
 
 The test opens the artifact using `file://`; no preview service is used. It covers all 216 selectable runs, replay/play/pause/keyboard scrubbing, causal inspection, JSON export, report fallbacks, four responsive widths and desktop/mobile axe WCAG A/AA scans. Automated scans are not a complete accessibility audit. Missing tooling is an error, not a passing test.
@@ -49,7 +49,7 @@ For an isolated tooling install (no project dependencies changed):
 ```sh
 npm install --prefix /tmp/opencode/workbench-tooling playwright @axe-core/playwright
 /tmp/opencode/workbench-tooling/node_modules/.bin/playwright install chromium
-node workbench/test-browser.mjs
+node workbench/test-browser.ts
 ```
 
 The test first resolves local packages, then falls back to `/tmp/opencode/workbench-tooling/node_modules`. Override that fallback with `WORKBENCH_TOOLING` if needed. Screenshots are written outside the repository to `/tmp/opencode/workbench-checks/`.
@@ -60,7 +60,7 @@ Additional checks exercise every generated failure’s original/shrunk and safe/
 
 ```sh
 node workbench/build.ts
-node workbench/record-demo.mjs
+node workbench/record-demo.ts
 ffprobe -v error -show_entries format=duration,size:stream=codec_name,width,height,pix_fmt,r_frame_rate -of json artifacts/semantic-workbench-demo-v2.mp4
 ```
 

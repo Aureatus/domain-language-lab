@@ -12,8 +12,8 @@ The checks below were independently executed against these implementations.
 ## Reproduce
 
 ```sh
-node --test inventory/adapters.test.mjs adapters/lean/inventory.test.mjs
-node adapters/lean/inventory.mjs
+node --test inventory/adapters.test.ts adapters/lean/inventory.test.ts
+node adapters/lean/inventory.ts
 npm run proof:inventory # repository artifact destination
 ```
 
@@ -33,8 +33,8 @@ The integrated command `npm run proof:inventory` writes the positive evidence to
 
 ## Effect: full experimental inventory model, bounded tests
 
-`inventory/adapters.test.mjs` calls the existing Effect adapter with the actual
-`inventory/model.mjs` interpreter, not an action-name reimplementation. Tests cover:
+`inventory/adapters.test.ts` calls the existing Effect adapter with the actual
+`inventory/model.ts` interpreter, not an action-name reimplementation. Tests cover:
 
 - Reserve → cancel and reserve → early expiry rejection → expiry at the boundary.
   Every returned outcome, published state and routed event batch is compared with
@@ -57,7 +57,7 @@ of that interpreter; the race oracle supplies independent domain expectations.
 
 ## Lean: `inventory-stock-capacity/1`
 
-`adapters/lean/inventory.mjs` validates the complete original inventory AST, then
+`adapters/lean/inventory.ts` validates the complete original inventory AST, then
 extracts integer stock schemas (`capacity`, `available`), the `quantity` input
 schema, `reservation.reserve.capacity` guard and
 `reservation.reserve.set.available` update **from that AST**. There are no duplicate

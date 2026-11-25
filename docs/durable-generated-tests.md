@@ -3,9 +3,9 @@
 Run bounded histories against actual Node SQLite (requires the installed Effect adapter):
 
 ```sh
-node inventory/v2/generated.mjs --seed 0x51a7 --runs 6 --steps 30 --report /tmp/opencode/durable-generated-report.json
-node --test inventory/v2/generated.test.mjs
-node inventory/v2/generated.mjs --replay /tmp/opencode/durable-generated-report.json --report /tmp/opencode/durable-replayed.json
+node inventory/v2/generated.ts --seed 0x51a7 --runs 6 --steps 30 --report /tmp/opencode/durable-generated-report.json
+node --test inventory/v2/generated.test.ts
+node inventory/v2/generated.ts --replay /tmp/opencode/durable-generated-report.json --report /tmp/opencode/durable-replayed.json
 ```
 
 The positional report-path form remains supported. Defaults are seed `0x51a7`,

@@ -1,7 +1,7 @@
 # Standalone text frontend (experimental)
 
 Author **[`leave/time-away.domain`](../leave/time-away.domain)**. `.domain` is the
-current file extension for Premise source. `leave/model.mjs` is a
+current file extension for Premise source. `leave/model.ts` is a
 compatibility loading bridge, not another authoring language.
 
 The real lexer/parser elaborates text into the unchanged `semantic-core/v2` domain,
@@ -126,8 +126,8 @@ clipboard denial exposes a text fallback. Long lines scroll locally on mobile.
 Invalid source is escaped and accompanied by a diagnostic, not styled as verified.
 
 ```sh
-node syntax/highlight.mjs leave/time-away.domain artifacts/time-away-highlighted.html
-node syntax/highlight.mjs leave/time-away.domain artifacts/time-away-highlighted-inline.html --inline
+node syntax/highlight.ts leave/time-away.domain artifacts/time-away-highlighted.html
+node syntax/highlight.ts leave/time-away.domain artifacts/time-away-highlighted-inline.html --inline
 ```
 
 The self-contained inline variant is at most 728px wide and uses theme variables.
@@ -141,7 +141,7 @@ Parser and authoritative model/application errors are errors. Trailing whitespac
 tab indentation and genuinely unused AST inputs are advisory warnings. Adapter
 mappings and hidden host bindings count as intentional input use. `--json` outputs
 structured diagnostics; `--strict` exits 1 for warnings too. No repairs, suppression,
-unused-binding inference or safety proof. Use `node syntax/lint.mjs PATH --json`
+unused-binding inference or safety proof. Use `node syntax/lint.ts PATH --json`
 for JSON without npm's banner.
 
 `syntax/editor/` is a local VS Code-compatible `.domain` grammar, not an installed
@@ -151,7 +151,7 @@ JSON/regex tests do not establish editor-host rendering. Try with
 
 ## Evidence and limits
 
-`syntax/fixtures/prior-leave.mjs` is independently retained test-only pre-migration
+`syntax/fixtures/prior-leave.ts` is independently retained test-only pre-migration
 data. Full deep equality compares the entire domain, state and application
 metadata—not a regenerated output snapshot. The SQLite test creates an old-model
 pending request, reopens with migrated text and successfully grants/resumes. This

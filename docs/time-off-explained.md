@@ -14,14 +14,14 @@ The dark desktop pane stacks below the app on narrow screens. This is a declarat
 and result view, **not a parser trace, execution-order instrumentation, exact
 authored-source excerpt, proof or independent authority**.
 
-The optional `leave/explain.mjs` is retained as demonstration-only tooling for
+The optional `leave/explain.ts` is retained as demonstration-only tooling for
 historical contiguous-source excerpts and diagnostic replay. Tests still check its
 source correspondence and unchanged interpreter guard evaluation. The running
 application does not import it; no hidden leave protocol lives in the framework.
 
 ```sh
-node --test leave/explain.test.mjs
-node leave/explained-video.mjs --test
+node --test leave/explain.test.ts
+node leave/explained-video.ts --test
 ```
 
 The browser test exercises the real Maya/Leo/Sam lifecycle, separate durable grant
@@ -36,9 +36,9 @@ desktop/mobile overflow and page errors. Current artifacts use
 the original 140.12-second, 1920×1080 captioned browser recording, with no audio.
 It shows the **former handwritten UI/exact-source companion**, not this migration.
 The older narrated and explained recordings/audio are also preserved. The frame
-extraction tool `leave/explained-frames.mjs` still targets that historical MP4.
+extraction tool `leave/explained-frames.ts` still targets that historical MP4.
 
-`node leave/explained-video.mjs` now records the updated generic browser scenario
+`node leave/explained-video.ts` now records the updated generic browser scenario
 to a **new raw WebM path**, without overwriting those MP4s. It is functional recording
 tooling, not a newly authored/paced cinematic walkthrough. Recording a new video
 was not required or performed. Trust/identity/date/SQLite/SSE boundaries remain as

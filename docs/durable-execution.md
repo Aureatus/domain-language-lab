@@ -6,7 +6,7 @@ Delivery transport is not implemented.
 
 ## API
 
-`adapters/effect/durable.mjs` exports:
+`adapters/effect/durable.ts` exports:
 
 - `makeDurableRuntime(model)` — validates and snapshots the model through
   the interpreter selected by the exact `model.format`: `semantic-core/v1` or
@@ -127,7 +127,7 @@ execution, no proof audit. Earlier v1 work inspected selected `semantic/CONTRACT
 the installed `effect@4.1.4` API and Node v25.2.0 `node:sqlite`. Run:
 
 ```sh
-node --test adapters/effect/*.test.mjs semantic/*.test.mjs semantic/v2/*.test.mjs
+node --test adapters/effect/*.test.ts semantic/*.test.ts semantic/v2/*.test.ts
 ```
 
 Tests use database reopen, independent child processes, concurrent writer

@@ -21,7 +21,7 @@ Inspect a module without a server or a slow network:
 The generic demo browser already has an all-actor snapshot and can project the newly selected person's records immediately. Exact instead loads an actor-specific screen; during that switch, it gates retained rows on the response owner.
 
 ```sh
-node application/inspect-loading.mjs leave/browser.domain
+node application/inspect-loading.ts leave/browser.domain
 ```
 
 The inspector uses the same phase table and policy resolution as the implementation. Its scenarios are examples of input facts and expected presentation, not screenshots or recorded execution. The browser and Exact supply different transports (SSE snapshots vs polling), so they need not enter every phase on every interaction. The policy describes declared data views; action forms and submission feedback have separate lifecycles.

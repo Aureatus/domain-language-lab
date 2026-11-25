@@ -1,7 +1,7 @@
 # Live declaration impact and generated checks
 
-`live/derive.mjs` is a synchronous, dependency-free browser module. It imports
-`createApp` and the identity-branded `forkApp` helper from `live/core.mjs`. The API follows
+`live/derive.ts` is a synchronous, dependency-free browser module. It imports
+`createApp` and the identity-branded `forkApp` helper from `live/core.ts`. The API follows
 [`live/DERIVATION-CONTRACT.md`](../live/DERIVATION-CONTRACT.md).
 
 ## API
@@ -85,7 +85,7 @@ earlier workbench/Lean artifacts is involved.
 Run implementation regressions with:
 
 ```sh
-node --test live/derive.test.mjs live/core.test.mjs
+node --test live/derive.test.ts live/core.test.ts
 ```
 
 ## Interactive execution and measured performance

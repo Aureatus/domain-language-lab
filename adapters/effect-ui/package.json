@@ -3,9 +3,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "esbuild browser.mjs --bundle --format=esm --minify --outfile=dist/app.js",
-    "start": "npm run build && node serve.mjs",
-    "test": "npm run build && node --test browser.test.mjs"
+    "build": "esbuild browser.ts --bundle --format=esm --minify --outfile=dist/app.js",
+    "start": "npm run build && node serve.ts",
+    "test": "npm run build && node --test browser.test.ts"
   },
   "dependencies": {
     "@effect/ui": "https://pkg.pr.new/Effect-TS/ui/@effect/ui@0ba6f41c78d3d339bee404ab466daac8540f29ef",

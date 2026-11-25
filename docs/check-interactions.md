@@ -44,7 +44,7 @@ CI runs the normal checker, verifies the mutant's exit, rule, event sequence
 and enabled Submit control, then replays its trace. It also runs these targeted tests:
 
 ```sh
-node --test application/interaction-check.test.mjs application/action-review.test.mjs application/submission.test.mjs adapters/exact/test.mjs
+node --test application/interaction-check.test.ts application/action-review.test.ts application/submission.test.ts adapters/exact/test.ts
 ```
 
 ## Optional renderer conformance

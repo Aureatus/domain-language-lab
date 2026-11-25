@@ -2,12 +2,12 @@
 
 All declared actions get submission recovery on execute without a new form or policy declaration. Execution evidence answers “what happened to this submit?” A current snapshot answers “what is true now?” A recorded *pending* receipt remains pending even after the approval workflow completes; it should not be interpreted as a current inbox item.
 
-The shared JSON reducer is `application/submission.mjs`. It captures the body and identity before dispatch. Loss of a response leads to `unknown`: the UI offers a read-only check, not another submit. If checking also fails, the outcome is still unknown. A missing receipt allows retry of the captured command with the **original** ID. Absence is only an observation at lookup time; a late original request and its retry may race. Safe redelivery relies on the server's durable identity binding. A confirmed pre-execution validation error instead returns the form to editing.
+The shared JSON reducer is `application/submission.ts`. It captures the body and identity before dispatch. Loss of a response leads to `unknown`: the UI offers a read-only check, not another submit. If checking also fails, the outcome is still unknown. A missing receipt allows retry of the captured command with the **original** ID. Absence is only an observation at lookup time; a late original request and its retry may race. Safe redelivery relies on the server's durable identity binding. A confirmed pre-execution validation error instead returns the form to editing.
 
 Inspect a trace, then run the real cross-client scenario:
 
 ```sh
-node application/inspect-submission.mjs leave/browser.domain leave.request maya
+node application/inspect-submission.ts leave/browser.domain leave.request maya
 npm run application:submission:test
 ```
 

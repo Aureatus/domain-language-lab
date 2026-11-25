@@ -1,6 +1,6 @@
 # Rule impact and derived-check handoff
 
-Browser-safe module `live/derive.mjs` imports createApp from core.
+Browser-safe module `live/derive.ts` imports createApp from core.
 
 Exports:
 

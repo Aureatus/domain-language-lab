@@ -1,6 +1,6 @@
 # Live runtime: experimental issue tracker
 
-`live/core.mjs` is a dependency-free, browser-safe ES module implementing the
+`live/core.ts` is a dependency-free, browser-safe ES module implementing the
 [live integration contract](../live/CONTRACT.md). It is separate from the earlier
 approval prototype, precomputed workbench and Lean model. Their proofs do not
 establish correspondence with this runtime.
@@ -8,7 +8,7 @@ establish correspondence with this runtime.
 ## Exact API
 
 ```js
-import {createApp} from './core.mjs';
+import {createApp} from './core.ts';
 const app = createApp({clock: () => 1794391200000});
 const result = app.dispatch('comment', {issueId: 'i1', body: 'Reproduced.'}, 'u1');
 const why = result.ok ? app.explain(result.event.id) : result.reason;
@@ -227,7 +227,7 @@ by those proposals, not an implementation of their full language architecture.
 Run the independent live test file with:
 
 ```sh
-node --test live/core.test.mjs
+node --test live/core.test.ts
 ```
 
 Tests cover live workflows, policy/routing edits, denial/nonmutation, input/ID

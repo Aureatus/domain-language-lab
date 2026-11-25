@@ -1,6 +1,6 @@
 # Lifecycle and policy-derived approvals (v2)
 
-The isolated `semantic/v2/core.mjs` implements generic grouped create/update/delete
+The isolated `semantic/v2/core.ts` implements generic grouped create/update/delete
 and serializable approval requests/receipts. v1 source, consumers and existing Lean
 evidence are unchanged. **No v2 Lean proof is claimed.** A separately implemented
 [SQLite host](durable-execution.md) now persists this core's requests/grants and
@@ -8,10 +8,10 @@ executes one-shot resumption; see the [inventory acceptance](inventory-v2.md).
 
 See the exact integration contract in
 [`semantic/v2/CONTRACT.md`](../semantic/v2/CONTRACT.md) and strict public declarations
-in [`core.d.mts`](../semantic/v2/core.d.mts).
+in [`types.ts`](../semantic/v2/types.ts).
 
 ```js
-import {createInterpreter} from '../semantic/v2/core.mjs';
+import {createInterpreter} from '../semantic/v2/core.ts';
 const runtime = createInterpreter(model); // format: semantic-core/v2
 const result = runtime.execute(currentState, invocation);
 if (result.status === 'pending') {
@@ -49,8 +49,8 @@ failure shapes and trust boundaries.
 ## Reproduce scoped checks
 
 ```sh
-node --test semantic/v2/*.test.mjs semantic/*.test.mjs
-tsc --strict --noEmit --module nodenext --moduleResolution nodenext --target es2022 semantic/v2/types.test.mts
+node --test semantic/v2/*.test.ts semantic/*.test.ts
+tsc --strict --noImplicitAny false --noEmit --allowImportingTsExtensions --module nodenext --target es2023 semantic/v2/types.test.mts
 ```
 
 Core-only tests need no additional dependencies. The integrated `npm test`

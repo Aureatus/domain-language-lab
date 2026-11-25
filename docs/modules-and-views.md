@@ -12,7 +12,7 @@ time-away slice. Not a general package system, production compiler or native ren
 | `leave/browser.domain` | Browser presentation, actors and named host input mappings |
 | `leave/cli.domain` | Explicit alternative CLI presentation declaration |
 | `leave/mobile.domain` | Explicit alternative mobile presentation declaration |
-| `leave/model.mjs` | Compatibility bridge loading **browser.domain** |
+| `leave/model.ts` | Compatibility bridge loading **browser.domain** |
 
 All three view entries directly import/use the **same domain** and import the same
 demo module. Tests compare their entire domain and initial state, not only their
@@ -137,7 +137,7 @@ the complete response for scripts. Transport/usage errors exit nonzero. A valid
 HTTP response containing a semantic rejection is returned as data (exit zero);
 machine consumers must inspect `status`/`code`. Grant and resume remain separate.
 
-`application/client.mjs` is shared by browser and CLI, checks contract IDs and does
+`application/client.ts` is shared by browser and CLI, checks contract IDs and does
 no local authorization or execution. The browser retains SSE and snapshot ordering.
 Inbox filtering is display only; the server authorizes every operation. Local actor
 selection is **not authentication**. The existing endpoint envelopes remain:
@@ -164,7 +164,7 @@ npm run syntax:check -- leave/cli.domain
 npm run syntax:check -- leave/mobile.domain
 npm run syntax:lint -- leave/browser.domain --strict
 npm run syntax:reader -- leave/browser.domain artifacts/time-away-highlighted.html
-npm run application:count -- leave model.mjs server.mjs cli.domain mobile.domain \
+npm run application:count -- leave model.ts server.ts cli.domain mobile.domain \
   --report artifacts/model-derived-application-count.json
 npm test
 npm run application:test

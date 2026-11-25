@@ -13,8 +13,8 @@ The unified browser workspace now exposes this profile alongside v1:
 restart/reconnect, derived forms/tools and browser verification.
 
 ```sh
-node --test inventory/v2/*.test.mjs
-node inventory/v2/demo.mjs
+node --test inventory/v2/*.test.ts
+node inventory/v2/demo.ts
 ```
 
 The demo writes actual SQLite results to `artifacts/inventory-v2-report.json`.
@@ -27,7 +27,7 @@ copying upstream interpreter tests.
 
 ## Model and IDs
 
-`inventory/v2/model.mjs` exports `inventoryV2Model`, validated `initialState`,
+`inventory/v2/model.ts` exports `inventoryV2Model`, validated `initialState`,
 `runtime`, and `invocation(id, kind, options)`. The seed has stock ID `camera`,
 capacity/availability 8, and operator ID `warehouse`; reservations start empty.
 Every reserve invocation supplies a new `reservationId` (for example
@@ -48,7 +48,7 @@ creates that record at version 0 while grouped updates decrement stock.
 ## Executed durable acceptance
 
 This supersedes the earlier pending-integration status. The CLI uses the real
-`adapters/effect/durable.mjs` v2 API and Node SQLite, not an in-memory substitute:
+`adapters/effect/durable.ts` v2 API and Node SQLite, not an in-memory substitute:
 
 1. Reserve quantity 3 at clock 100: pending; stock remains 8, no reservation or facts.
 2. Close/reopen, then `durableApprove` with trusted-host identity `warehouse`.
@@ -66,7 +66,7 @@ Rejected operation outcomes themselves are persisted, not silently discarded.
 
 The report contains full observed before/after state, outbox, pending projections,
 API outcomes, checks and source/database paths. It is generated evidence, not an
-independent semantic authority. `inventory/v2/durable.test.mjs` additionally runs
+independent semantic authority. `inventory/v2/durable.test.ts` additionally runs
 each phase in a separate Node process and compares availability against an
 independent quantity oracle; the demo itself tests handle close/reopen only.
 

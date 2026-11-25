@@ -4,7 +4,7 @@ Implementation handoff for the next experimental slice. This browser-local app
 executes actions live. It does not replace the earlier verification workbench or
 claim persistence, authentication, distributed delivery or formal correspondence.
 
-## Core module: `live/core.mjs`
+## Core module: `live/core.ts`
 
 Export `createApp(options = {})`. Return a synchronous object:
 

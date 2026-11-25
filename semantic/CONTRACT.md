@@ -9,8 +9,8 @@ integration, inventory app, Effect dependency or Lean output is implemented here
 Browser and Node use the same dependency-free ES module:
 
 ```js
-import {createInterpreter} from './core.mjs';
-import {issueModel, issueState} from './issues.mjs';
+import {createInterpreter} from './core.ts';
+import {issueModel, issueState} from './issues.ts';
 
 const runtime = createInterpreter(issueModel);
 const invocation = {
@@ -23,8 +23,8 @@ if (result.status === 'committed') {
 }
 ```
 
-Types are in `core.d.mts` (TypeScript's declaration sibling for `core.mjs`).
-`issues.mjs` is an executable second-domain consumer, independent of `live/`.
+Types are in `types.ts`.
+`issues.ts` is an executable second-domain consumer, independent of `live/`.
 Tests edit its declarations and observe different state transitions.
 
 ## API
@@ -273,7 +273,7 @@ provided by this milestone.
 
 ## Verification
 
-Run `node --test semantic/*.test.mjs`. These are tests of this mapping/interpreter,
+Run `node --test semantic/*.test.ts`. These are tests of this mapping/interpreter,
 not copies of upstream suites. Browser compatibility is by dependency inspection
 (ES modules, standard JSON/Map/WeakMap/BigInt), not a browser execution claim.
 JSON input is bounded to depth 40, 100000 nodes and 100000 UTF-16 code units per

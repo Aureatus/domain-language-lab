@@ -78,7 +78,7 @@ not the date-unaware core's static analysis. No automatic inference expands acce
 ## Are actions checked against resources?
 
 **Yes, within this profile**, by parser checks plus authoritative v2 and application
-validation (`semantic/v2/core.mjs`, `application/derive.mjs`):
+validation (`semantic/v2/core.ts`, `application/derive.ts`):
 
 - Declared binding resources, input names, bound fields, update targets and selected
   relationship paths must exist. Observation resource/path compatibility is checked.
@@ -107,7 +107,7 @@ Only uniquely specified IDs derive: relationship `resource.field`, binding
 time-away binding IDs differ from that convention, so retain explicit annotations.
 Policy/precondition/change IDs remain explicit to avoid inventing durable identity.
 
-Full deep equality against `syntax/fixtures/prior-leave.mjs` covers domain, initial
+Full deep equality against `syntax/fixtures/prior-leave.ts` covers domain, initial
 state and presentation, including ordering and IDs. A persisted prior-model pending
 request reopens/grants/resumes under the migrated source. Source mutation tests now
 target the real grouped syntax and retain their original assertions. Browser mapping

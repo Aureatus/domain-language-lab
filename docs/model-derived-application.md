@@ -5,7 +5,7 @@ Status: implemented for the time-off vertical slice and a small non-leave **mode
 ## Authoring boundary
 
 The single author entry is now **[`leave/time-away.domain`](standalone-syntax.md)**,
-a standalone keyword/block text source. `leave/model.mjs` is a 10-line framework
+a standalone keyword/block text source. `leave/model.ts` is a 10-line framework
 loading bridge retaining the compatibility default export:
 
 ```js
@@ -14,18 +14,18 @@ loading bridge retaining the compatibility default export:
 
 `domain` is the actual data-only `semantic-core/v2` declaration. `initialState` is validated against it. `application` is versioned, data-only presentation/input configuration. It contains labels, the local actor menu, summaries/lists, input defaults, trusted input bindings and named adapters. It contains no templates, callbacks, copied permission guards, manager routing rules, handlers or browser functions.
 
-`leave/server.mjs` is an optional 11-line compatibility launcher for existing commands and the existing database filename. It passes the declaration to `createApplicationServer`. No application-specific server/client/HTML implementation remains. The former `leave/app.mjs`, `index.html`, CSS and explanation UI have been replaced by reusable assets in `application/` after inspecting their existing behavior. Original MP4s, audio and historical evidence artifacts are retained.
+`leave/server.ts` is an optional 11-line compatibility launcher for existing commands and the existing database filename. It passes the declaration to `createApplicationServer`. No application-specific server/client/HTML implementation remains. The former `leave/app.ts`, `index.html`, CSS and explanation UI have been replaced by reusable assets in `application/` after inspecting their existing behavior. Original MP4s, audio and historical evidence artifacts are retained.
 
 ### Executable authored-source count
 
 ```sh
-npm run application:count -- leave model.mjs server.mjs \
+npm run application:count -- leave model.ts server.ts \
   --report artifacts/model-derived-application-count.json
 ```
 
 The import-closure report now follows the explicit text loader URL and counts
 **3 production per-application files, 206 physical lines / 194 nonblank lines /
-5,679 bytes**: `leave/time-away.domain` (185 lines), `leave/model.mjs` (10) and the
+5,679 bytes**: `leave/time-away.domain` (185 lines), `leave/model.ts` (10) and the
 optional launcher (11). The text is the only application author entry; the bridge
 and launcher are counted rather than hidden. Framework imports, test/scenario/
 video/audio tooling and the optional demonstration-only source adapter are listed
@@ -37,11 +37,11 @@ report must be regenerated after source changes.
 
 ## Runtime derivation, not checked-in generated application files
 
-1. `application/derive.mjs` validates the domain with the existing v2 interpreter and validates metadata references, supported members, bindings, formats, defaults and widgets. Unsupported configurations throw at startup; there is no `eval` or executable configuration escape hatch.
+1. `application/derive.ts` validates the domain with the existing v2 interpreter and validates metadata references, supported members, bindings, formats, defaults and widgets. Unsupported configurations throw at startup; there is no `eval` or executable configuration escape hatch.
 2. It derives one `derived-application/v1` contract: actions, exact input schemas, fields/widgets, policy/precondition declarations, references, resource views and actor labels. Every domain action appears by default. Adding an input/action does not require adding a form or route.
-3. `application/server.mjs` uses that contract to build invocations, applies named host adapters, then calls the existing interpreter/Effect durable adapter. Core decisions and writes are never implemented in the UI or metadata.
+3. `application/server.ts` uses that contract to build invocations, applies named host adapters, then calls the existing interpreter/Effect durable adapter. Core decisions and writes are never implemented in the UI or metadata.
 4. `GET /api/contract` serves the same contract used by dispatch. Its `contractId` hashes the validated domain plus derived contract. Snapshots and action responses carry that ID. The browser refuses to use mismatched responses and asks for a reload.
-5. `application/browser.mjs` fetches the contract and creates labels, input controls, forms, summaries, resource lists and approval controls at runtime. `application/index.html` is an application-independent HTML shell served for both `/` and `/index.html`; its title/content are populated from the contract. CSS and renderer code are reusable framework assets. There is **no app HTML generation/build step**, and no generated asset to hand-edit.
+5. `application/browser.ts` fetches the contract and creates labels, input controls, forms, summaries, resource lists and approval controls at runtime. `application/index.html` is an application-independent HTML shell served for both `/` and `/index.html`; its title/content are populated from the contract. CSS and renderer code are reusable framework assets. There is **no app HTML generation/build step**, and no generated asset to hand-edit.
 
 The server serves full resource state to all local simulated identities. View composition and actor ownership filters are display features, **not row authorization**.
 
@@ -60,7 +60,7 @@ Visible `ids` inputs and richer widgets are explicitly unsupported rather than s
 
 ### Trusted date boundary
 
-`application/inputs.mjs` owns the named **`utc-weekday-range/v1`** adapter. The application provides only `{start,end,output}` input-name mappings. The framework validates string/string/integer schemas, distinct names and supported adapter version; it hides the computed output and derives date controls for the two source fields.
+`application/inputs.ts` owns the named **`utc-weekday-range/v1`** adapter. The application provides only `{start,end,output}` input-name mappings. The framework validates string/string/integer schemas, distinct names and supported adapter version; it hides the computed output and derives date controls for the two source fields.
 
 At preview and execution it validates real `YYYY-MM-DD` calendar dates, rejects reversed/weekend-only ranges, bounds the inclusive range (end minus start at most 3,660 days), and computes inclusive UTC Monday–Friday days. An optional supplied output must equal the computed value. It does not consult holidays/time zones/half-days, prevent overlapping requests, accrue leave or enforce future dates. This is **trusted host behavior outside the date-unaware semantic core**; direct core callers must uphold the same input contract. Named adapters contain trusted framework JavaScript, not sandboxed foreign code.
 
@@ -97,7 +97,7 @@ clock or support for restoring an older database beneath connected clients.
 
 `/?explain=1` uses the **same generic browser renderer and `application-evidence/v1` response projection**. It shows the actual selected action's policy/precondition/group AST, captured invocation and returned result/events. Current preview and saved action result can be selected separately; automatic previews/SSE do not replace saved evidence. This is declaration/result evidence, **not exact authored-source excerpts, execution-order instrumentation, a parser trace or a proof**. No leave-specific protocol/header is required.
 
-`leave/explain.mjs` remains an optional **demonstration-only source-excerpt adapter**
+`leave/explain.ts` remains an optional **demonstration-only source-excerpt adapter**
 with separately tested contiguous source selection and read-only diagnostic replay.
 It now uses parser-produced semantic ID spans in `leave/time-away.domain`, not
 the JS loading bridge. Neither the generic server nor browser imports it. The
@@ -111,8 +111,8 @@ for this migration.
 
 ```sh
 npm test
-node leave/browser-test.mjs
-node leave/explained-video.mjs --test
+node leave/browser-test.ts
+node leave/explained-video.ts --test
 npm run application:test
 ```
 

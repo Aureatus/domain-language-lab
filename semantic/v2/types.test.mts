@@ -1,4 +1,4 @@
-import {createInterpreter, type Model, type ApprovalRequest, type ApprovalReceipt, type Invocation, type State, type Policy} from './core.mjs';
+import {createInterpreter, type Model, type ApprovalRequest, type ApprovalReceipt, type Invocation, type State, type Policy} from './core.ts';
 
 // Compile-only integration contract; never executed as a runtime test.
 declare const model: Model;

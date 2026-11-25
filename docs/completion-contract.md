@@ -55,12 +55,12 @@ This does not rename either profile into a finished general-purpose language.
 
 ## Local workspace handoff
 
-New files live in `workspace/`. Backend owns `server.mjs`, `server.test.mjs`,
-`derive.mjs`, `derive.test.mjs`, and `docs/workspace-server.md`. Frontend owns
-`app.mjs`, `index.html`, `browser-test.mjs`, `video.mjs`, and
+New files live in `workspace/`. Backend owns `server.ts`, `server.test.ts`,
+`derive.ts`, `derive.test.ts`, and `docs/workspace-server.md`. Frontend owns
+`app.ts`, `index.html`, `browser-test.ts`, `video.ts`, and
 `docs/workspace-ui.md`. Do not edit each other's files.
 
-`createWorkspaceServer({directory, port:0})` exported from `workspace/server.mjs`
+`createWorkspaceServer({directory, port:0})` exported from `workspace/server.ts`
 returns a Promise of `{url, close()}`. `close()` awaits listener/DB cleanup and SSE
 closure. CLI uses `WORKSPACE_DIR` (default artifacts/workspace-data), `PORT`
 (default 4173), binds loopback, and serves the UI at `/`. Each profile has its own

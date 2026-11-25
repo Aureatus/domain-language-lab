@@ -4,7 +4,7 @@ Latest continuous demo: `artifacts/live-issues-demo-v4.mp4`, including current-a
 explanation, declaration preview, worker checks, reload recovery and read-only
 history. Rebuild/re-record with the commands below; earlier MP4s are retained.
 
-This experimental browser-local issue tracker executes the shared `live/core.mjs`
+This experimental browser-local issue tracker executes the shared `live/core.ts`
 at interaction time. Unlike the earlier workbench, it has no precomputed action
 histories. Open `artifacts/live-issues.html` directly; no server or dependencies are
 required to use the built artifact. Successful actions and rule edits are saved as
@@ -54,7 +54,7 @@ runtime correspondence, authentication, storage durability, external delivery, c
 clients, or general language implementation is claimed.
 
 **Run declaration checks** sends the exported workspace to an offline Blob Web
-Worker running `runDerivedChecks` from the shared bundled `live/derive.mjs`,
+Worker running `runDerivedChecks` from the shared bundled `live/derive.ts`,
 separately from the current-state audit and historic Lean
 artifacts. It derives cases from the applied declarations and current workspace,
 then validates/reconstructs once and runs actual tool dispatch in isolated trusted
@@ -116,9 +116,9 @@ search retains focus and caret while filtering.
 ## Reproduce
 
 ```sh
-node live/build.mjs
-node live/browser-test.mjs
-node live/record-demo.mjs
+node live/build.ts
+node live/browser-test.ts
+node live/record-demo.ts
 ffprobe -v error -show_entries format=duration:stream=codec_name,width,height,r_frame_rate -of json artifacts/live-issues-demo-v3.mp4
 ```
 
@@ -162,8 +162,8 @@ renderer/browser-test source, and selected core persistence API implementation.
 Independent execution: live build and Chromium browser suite. No external research
 or proof audit was performed for this renderer.
 
-Earlier current-availability slice scope: only `live/core.mjs`, `live/core.test.mjs`,
-`live/app.mjs`, `live/template.html`, `live/browser-test.mjs`, and the two live
+Earlier current-availability slice scope: only `live/core.ts`, `live/core.test.ts`,
+`live/app.ts`, `live/template.html`, `live/browser-test.ts`, and the two live
 guides. No action/journal semantics, derive/build/recording/package sources changed.
 Existing actor/issue drafts, per-tool JSON drafts, persistence and derived-check
 invalidation remain in place. Browser coverage adds keyboard-opened availability

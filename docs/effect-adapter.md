@@ -5,7 +5,7 @@ Status: bounded in-memory adapter for `semantic-core/v1`; not durable storage.
 ## Use
 
 Install with `npm ci --prefix adapters/effect` and import `makeRuntime`, `makeStore`,
-and `execute` from `index.mjs`. `execute(runtime, store, invocation)` is an Effect
+and `execute` from `index.ts`. `execute(runtime, store, invocation)` is an Effect
 value and must be run by the Effect runtime (for example `Effect.runPromise`).
 The invocation's `clock` is mandatory caller-supplied data; the adapter never
 reads a system clock.
@@ -45,4 +45,4 @@ and scoped to this single in-memory Ref. It does not establish interpreter
 correspondence beyond differential use of the same `createInterpreter`, nor
 database isolation or exactly-once external effects.
 
-Run `node --test adapters/effect/*.test.mjs` for actual Effect-runtime tests.
+Run `node --test adapters/effect/*.test.ts` for actual Effect-runtime tests.
