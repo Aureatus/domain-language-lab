@@ -55,7 +55,7 @@ async function body<S extends Schema.ConstraintDecoder<unknown>>(req:IncomingMes
   catch { throw failure(400, 'Malformed or unbounded JSON.'); }
 }
 const sequence = (db:DatabaseSync) => {
-  const n=db.prepare('SELECT (SELECT count(*) FROM durable_invocations) + (SELECT count(*) FROM durable_operations) AS n').get()?.n;
+  const n=db.prepare('SELECT (SELECT count(*) FROM durable_invocations) + (SELECT count(*) FROM durable_operations) AS n').get()?.['n'];
   if(typeof n!=='number')throw Error('Missing workspace sequence.');
   return n;
 };
@@ -76,9 +76,9 @@ function snapshot(binding, profile) {
   db.exec('BEGIN');
   try {
     const meta = Object.fromEntries(db.prepare('SELECT key,value FROM durable_meta').all().map(x => [x.key, x.value]));
-    if (meta.format !== 'durable-effect/v1' || meta.model_key !== canonical(runtime.model)) throw new Error('Durable model binding mismatch.');
-    const state = validate(runtime.model, jsonSnapshot(decodeJsonValue(meta.state_json)));
-    if (canonical(state) !== meta.state_json) throw new Error('Stored state is not canonical.');
+    if (meta['format'] !== 'durable-effect/v1' || meta['model_key'] !== canonical(runtime.model)) throw new Error('Durable model binding mismatch.');
+    const state = validate(runtime.model, jsonSnapshot(decodeJsonValue(meta['state_json'])));
+    if (canonical(state) !== meta['state_json']) throw new Error('Stored state is not canonical.');
     const pending = db.prepare('SELECT * FROM durable_pending ORDER BY invocation_id').all().map(row => {
       const request = decodeWith(DurablePendingRequestSchema, row.request_json);
       const original = runtime.execute(request.prestate, request.invocation);
@@ -207,7 +207,7 @@ export async function createWorkspaceServer({directory = resolve('artifacts/work
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  const instance = await createWorkspaceServer({directory: process.env.WORKSPACE_DIR ?? resolve('artifacts/workspace-data'), port: Number(process.env.PORT ?? 4173)});
+  const instance = await createWorkspaceServer({directory: process.env['WORKSPACE_DIR'] ?? resolve('artifacts/workspace-data'), port: Number(process.env['PORT'] ?? 4173)});
   console.log(`Local simulation workspace: ${instance.url}`);
   for (const signal of ['SIGINT', 'SIGTERM']) process.once(signal, () => { instance.close().catch(error => { console.error(error); process.exitCode = 1; }); });
 }

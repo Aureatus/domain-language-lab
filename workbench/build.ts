@@ -39,9 +39,9 @@ for (const decision of ['approval', 'allow', 'deny'] as Decision[]) {
           }
           let subject: unknown;
           const violations = runtime.events.flatMap(event => {
-            if (event.kind === 'approved') subject = event.details.subject;
-            return event.kind === 'committed' && event.details.decision === 'approval'
-              && !isDeepStrictEqual(subject, event.details.subject) ? [event.id] : [];
+            if (event.kind === 'approved') subject = event.details['subject'];
+            return event.kind === 'committed' && event.details['decision'] === 'approval'
+              && !isDeepStrictEqual(subject, event.details['subject']) ? [event.id] : [];
           });
           cases[[decision, role, priority, scheduleIndex, mutant].join('|')] = {
             inputs: { decision, role, priority, schedule: schedules[scheduleIndex], mutant, clock: 1000 },

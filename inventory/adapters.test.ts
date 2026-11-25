@@ -8,7 +8,7 @@ import {runtime, initialState, invocation} from './model.ts';
 
 const run = Effect.runPromise;
 const stock = (state: State) => {
-  const available = state.records.stock.camera.values.available;
+  const available = state.records['stock']['camera'].values['available'];
   assert.ok(typeof available === 'number');
   return available;
 };
@@ -32,8 +32,8 @@ test('actual inventory reserve/cancel/expire match interpreter state and routed 
     assert.equal(actual.status, i === 3 ? 'rejected' : 'committed');
     if (i === 3) { assert.equal(actual.status, 'rejected'); assert.equal(actual.code, 'precondition'); }
   }
-  assert.equal(state.records.reservation.slotA.values.status, 'cancelled');
-  assert.equal(state.records.reservation.slotB.values.status, 'expired');
+  assert.equal(state.records['reservation']['slotA'].values['status'], 'cancelled');
+  assert.equal(state.records['reservation']['slotB'].values['status'], 'expired');
   assert.equal(state.revision, 4);
   assert.ok(events.some(e => e.recipients.some(r => r.recipient === 'warehouse')));
 });
@@ -52,15 +52,15 @@ test('competing reservation fibers satisfy independent capacity oracle in either
     // Independent domain oracle: 5 units cannot satisfy two requests of 3.
     assert.equal(stock(published.state), 2);
     assert.equal(published.state.revision, 1);
-    assert.equal(published.state.records.stock.camera.version, 1);
-    assert.equal(published.state.records.reservation[slot].values.status, 'active');
-    assert.equal(published.state.records.reservation[slot].values.quantity, 3);
-    assert.equal(published.state.records.reservation[loser].values.status, 'free');
-    assert.equal(published.state.records.reservation[loser].version, 0);
-    const allocated = Object.values(published.state.records.reservation)
-      .filter(r => r.values.status === 'active').reduce((sum, r) => {
-        assert.ok(typeof r.values.quantity === 'number');
-        return sum + r.values.quantity;
+    assert.equal(published.state.records['stock']['camera'].version, 1);
+    assert.equal(published.state.records['reservation'][slot].values['status'], 'active');
+    assert.equal(published.state.records['reservation'][slot].values['quantity'], 3);
+    assert.equal(published.state.records['reservation'][loser].values['status'], 'free');
+    assert.equal(published.state.records['reservation'][loser].version, 0);
+    const allocated = Object.values(published.state.records['reservation'])
+      .filter(r => r.values['status'] === 'active').reduce((sum, r) => {
+        assert.ok(typeof r.values['quantity'] === 'number');
+        return sum + r.values['quantity'];
       }, 0);
     assert.equal(stock(published.state) + allocated, 5);
     const committed = outcomes[winner];

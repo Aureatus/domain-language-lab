@@ -83,7 +83,7 @@ test('separate processes serialize contenders against one SQLite state', async t
   assert.ok(outcomes.every(x => x.status === 0), outcomes.map(x => x.stderr).join('\n'));
   const db = await run(makeDurableStore(path));
   const state = await run(durableState(makeDurableRuntime(issueModel), db));
-  assert.equal(state.records.issues.i1.values.status, 'resolved');
+  assert.equal(state.records['issues']['i1'].values['status'], 'resolved');
   assert.equal((await run(pullOutbox(db))).length, 4);
   await run(closeDurableStore(db));
 });
@@ -96,8 +96,8 @@ test('two processes competing to reserve 3 from stock 5 admit only one', async t
   assert.equal(contenders[0].stdout.trim(), 'committed:');
   const db = await run(makeDurableStore(path)), rt = makeDurableRuntime(inventoryModel);
   const state = await run(durableState(rt, db));
-  assert.equal(state.records.stock.camera.values.available, 2, JSON.stringify(contenders.map(x => ({ status: x.status, stdout: x.stdout, stderr: x.stderr }))));
-  assert.equal(Object.values(state.records.reservation).filter(x => x.values.status === 'active').length, 1);
+  assert.equal(state.records['stock']['camera'].values['available'], 2, JSON.stringify(contenders.map(x => ({ status: x.status, stdout: x.stdout, stderr: x.stderr }))));
+  assert.equal(Object.values(state.records['reservation']).filter(x => x.values['status'] === 'active').length, 1);
   assert.equal((await run(pullOutbox(db))).length, 5);
   await run(closeDurableStore(db));
 });

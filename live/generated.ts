@@ -77,9 +77,9 @@ function trial(seed: number, maxSteps: number, wrapper?: Wrapper) {
     }
     const action=ACTIONS[step%ACTIONS.length], actor=pick(r,['u1','u2','u3','nobody']);
     const args: Args=action==='create'?{title:`generated ${seed}-${step}`,...(r()<.35?{}:{priority:pick(r,['normal','high'])})}: {issueId:r()<.12?'missing':pick(r,before.issues).id};
-    if(action==='assign') args.assignee=pick(r,['u1','u2','u3',null,'missing']);
-    if(action==='comment') args.body=r()<.12?'  ':`comment ${step}`;
-    if(!validateCandidate(before,action,args) && args.issueId==='missing') coverage.invalidReferences++;
+    if(action==='assign') args['assignee']=pick(r,['u1','u2','u3',null,'missing']);
+    if(action==='comment') args['body']=r()<.12?'  ':`comment ${step}`;
+    if(!validateCandidate(before,action,args) && args['issueId']==='missing') coverage.invalidReferences++;
     const allowed=permitted(before,modelBefore,action,actor), valid=validateCandidate(before,action,args), domain=valid&&domainValid(before,action,args), expected=allowed&&valid&&domain;
     const result=(wrapper?.dispatch ?? app.dispatch).call(app,action,args,actor); history.push({kind:'dispatch',action,args,actor});
     if(!snapshotsStable()) return {failed:true as const,history,why:'historical snapshot lost immutability'};
@@ -114,7 +114,7 @@ export function runGenerated({seed=0x51eed,runs=40,maxSteps=80,wrapper}: Options
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
-  const report=runGenerated({seed:Number(process.env.SEED??0x51eed),runs:Number(process.env.RUNS??40),maxSteps:Number(process.env.MAX_STEPS??80)});
+  const report=runGenerated({seed:Number(process.env['SEED']??0x51eed),runs:Number(process.env['RUNS']??40),maxSteps:Number(process.env['MAX_STEPS']??80)});
   await mkdir('artifacts',{recursive:true}); await writeFile('artifacts/live-generated-report.json',JSON.stringify(report,null,2)+'\n');
   console.log(JSON.stringify(report,null,2)); if(report.status==='counterexample') process.exitCode=1;
 }

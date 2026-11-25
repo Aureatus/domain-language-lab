@@ -20,15 +20,15 @@ function crossCheck(name, source, cases) {
   let lean = code.split('-- Independent source obligation:')[0];
   for (const [index, c] of cases.entries()) {
     const pre = structuredClone(initialState);
-    pre.records.stock.camera.values.available = c.available ?? 5;
+    pre.records['stock']['camera'].values['available'] = c.available ?? 5;
     const call = invocation(`cross${index}`, 'reserve', 'slotA', 'alice', 10, c.quantity ?? 3);
     const actual = createInterpreter(source).execute(pre, call);
     assert.ok(actual.status === 'committed' || actual.status === 'rejected');
     assert.equal(actual.status === 'committed' ? 'committed' : actual.code, c.expected);
     const expected = actual.status === 'committed'
-      ? `.committed ${record(actual.state.records.stock.camera.values.available, actual.state.revision, actual.state.records.stock.camera.version)}`
+      ? `.committed ${record(actual.state.records['stock']['camera'].values['available'], actual.state.revision, actual.state.records['stock']['camera'].version)}`
       : `.${actual.code}`;
-    if (c.post !== undefined) assert.equal(actual.state.records.stock.camera.values.available, c.post);
+    if (c.post !== undefined) assert.equal(actual.state.records['stock']['camera'].values['available'], c.post);
     lean += `example : step ${record(c.available ?? 5)} { quantity := ${c.quantity ?? 3}, clock := 10 } = ${expected} := by decide\n`;
   }
   lean += 'end Generated\n';
@@ -44,7 +44,7 @@ test('extracts actual numeric schemas and ASTs with complete original content bi
   const original = action(inventoryModel), projected = action(model);
   assert.deepEqual(projected.updates, [update(inventoryModel)]);
   assert.deepEqual(projected.preconditions, original.preconditions.filter(p => p.id === 'reservation.reserve.capacity'));
-  assert.deepEqual(model.resources.stock.fields, {capacity: inventoryModel.resources.stock.fields.capacity, available: inventoryModel.resources.stock.fields.available});
+  assert.deepEqual(model.resources['stock'].fields, {capacity: inventoryModel.resources.stock.fields.capacity, available: inventoryModel.resources.stock.fields.available});
   assert.deepEqual(projected.inputs, {quantity: original.inputs.quantity});
   assert.deepEqual(projected.bindings[0].key, {op: 'literal', value: 'camera'});
   assert.deepEqual(metadata.source, inventoryModel);
@@ -87,7 +87,7 @@ test('structural drift and unretained dependencies fail closed', () => {
 test('pinned Lean proves independent law and actual 5-to-2 witness', () => {
   const report = checkInventory(resolve(out, 'positive'));
   assert.equal(report.status, 'proof_checked', report.detail);
-  assert.deepEqual(report.theorem_axioms.positive_witness, []);
+  assert.deepEqual(report.theorem_axioms['positive_witness'], []);
   assert.deepEqual(Object.keys(report.theorem_axioms), ['preserves', 'positive_witness']);
   crossCheck('actual-reserve', inventoryModel, [
     {expected: 'committed', post: 2},

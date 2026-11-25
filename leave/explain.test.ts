@@ -34,10 +34,10 @@ test('diagnostic guards use interpreter semantics; evidence preserves actual out
   const inv={...requestInvocation({id:'deny',actor:'maya',start:'2026-11-20',end:'2026-11-20',clock:1}),actor:'leo'};
   const r=runtime.execute(initialState,inv);assert.equal(withStatus(r, "rejected").code,'denied');
   assert.equal(explainEvaluation(initialState,inv,r).checks[0].value,true);
-  const settings=initialState.records.settings['leave-rule'],maya=initialState.records.employee.maya;
+  const settings=initialState.records['settings']['leave-rule'],maya=initialState.records['employee']['maya'];
   const changed={...initialState,records:{...initialState.records,
-    settings:{...initialState.records.settings,'leave-rule':{...settings,values:{...settings.values,threshold:2}}},
-    employee:{...initialState.records.employee,maya:{...maya,values:{...maya.values,manager:'leo'}}}}};
+    settings:{...initialState.records['settings'],'leave-rule':{...settings,values:{...settings.values,threshold:2}}},
+    employee:{...initialState.records['employee'],maya:{...maya,values:{...maya.values,manager:'leo'}}}}};
   const two=requestInvocation({id:'changed-inputs',actor:'maya',start:'2026-11-26',end:'2026-11-27',clock:1});
   const pending=runtime.prepare(changed,two),explanation=explainEvaluation(changed,two,pending);
   assert.deepEqual(explanation.checks.map(c=>c.value),[false,false,true,true]);

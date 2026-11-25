@@ -17,17 +17,17 @@ export function inspectInventory(state: State, accepted: readonly Invocation[]) 
     } else if (['reservation.cancel','reservation.expire'].includes(command.action)) ledger.delete(slotId);
     else failures.push(`Unsupported oracle action: ${command.action}`);
   }
-  for (const [key,{values:s}] of Object.entries(state.records.stock)) {
-    const active = Object.values(state.records.reservation).filter(r=>r.values.stockId===key && r.values.status==='active').reduce((n,r)=>n+count(r.values.quantity),0n);
+  for (const [key,{values:s}] of Object.entries(state.records['stock'])) {
+    const active = Object.values(state.records['reservation']).filter(r=>r.values['stockId']===key && r.values['status']==='active').reduce((n,r)=>n+count(r.values['quantity']),0n);
     const promised = [...ledger.values()].filter(r=>r.stockId===key).reduce((n,r)=>n+count(r.quantity),0n);
-    const available=count(s.available), capacity=count(s.capacity);
+    const available=count(s['available']), capacity=count(s['capacity']);
     if (available+active!==capacity) failures.push(`${key}: state conservation failed`);
-    if (promised>capacity) failures.push(`${key}: oversold — accepted ${promised} of ${s.capacity}`);
+    if (promised>capacity) failures.push(`${key}: oversold — accepted ${promised} of ${s['capacity']}`);
     if (available+promised!==capacity) failures.push(`${key}: accepted-ledger conservation failed`);
   }
-  for (const [key,{values:r}] of Object.entries(state.records.reservation)) {
+  for (const [key,{values:r}] of Object.entries(state.records['reservation'])) {
     const expected=ledger.get(key);
-    if ((r.status==='active') !== !!expected || (expected && (expected.quantity!==r.quantity || expected.stockId!==r.stockId))) failures.push(`${key}: lost reservation / ledger mismatch`);
+    if ((r['status']==='active') !== !!expected || (expected && (expected.quantity!==r['quantity'] || expected.stockId!==r['stockId']))) failures.push(`${key}: lost reservation / ledger mismatch`);
   }
   return {ok:failures.length===0,failures};
 }

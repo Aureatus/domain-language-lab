@@ -7,7 +7,7 @@ if(command==='check')console.log(`Valid ${declaration.domain.id}: ${Object.keys(
 else {
   if(!declaration.application)throw Error('Missing application block.');
   const {createApplicationServer}=await import('../application/server.ts');
-  const server=await createApplicationServer(declaration,{directory:resolve(process.env.APPLICATION_DIR??'artifacts/syntax-data'),port:Number(process.env.PORT??4174)});
+  const server=await createApplicationServer(declaration,{directory:resolve(process.env['APPLICATION_DIR']??'artifacts/syntax-data'),port:Number(process.env['PORT']??4174)});
   console.log(`${declaration.application.title}: ${server.url}`);
   for(const signal of ['SIGINT','SIGTERM'])process.once(signal,()=>server.close().catch(console.error));
 }

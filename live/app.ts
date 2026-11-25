@@ -109,12 +109,12 @@ const availabilityDetails = e => `<p>${esc(e.reason)}</p><details><summary>Avail
 const unavailableButton = action => previewStep === null ? `<button class="link" data-unavailable="${action}">Why unavailable<span class="sr-only"> · ${esc(label(action))}</span></button>` : '';
 function formArgs(form: HTMLFormElement) {
   const args: Record<string, FormDataEntryValue | null | undefined>=Object.fromEntries(new FormData(form));
-  if(form.dataset.action!=='create') args.issueId=selected;
-  if(form.dataset.action==='assign' && args.assignee==='') args.assignee=null;
+  if(form.dataset['action']!=='create') args['issueId']=selected;
+  if(form.dataset['action']==='assign' && args['assignee']==='') args['assignee']=null;
   return args;
 }
 function updateFormAvailability(form: HTMLFormElement) {
-  const e=availability(form.dataset.action,formArgs(form));
+  const e=availability(form.dataset['action'],formArgs(form));
   requiredElement('.primary', HTMLButtonElement, form).disabled=!e.available;
   requiredElement('.availability', HTMLElement, form).innerHTML=e.available ? '' : `<p>${esc(e.reason)}</p><details><summary>Why unavailable</summary><pre>${esc(JSON.stringify(e,null,2))}</pre></details>`;
 }
@@ -181,12 +181,12 @@ function render() {
   const selection = (active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement) && active.selectionStart !== null && active.selectionEnd !== null
     ? {start: active.selectionStart, end: active.selectionEnd}
     : null;
-  const focusIssue = active?.dataset?.issue;
+  const focusIssue = active?.dataset?.['issue'];
   const focusId=active?.id;
-  const focusRule=active?.closest<HTMLFormElement>('[data-rule]')?.dataset.rule;
-  const focusAction=active?.closest<HTMLFormElement>('form[data-action]')?.dataset.action;
-  const focusRun=active?.dataset?.run;
-  const focusEditor=active?.dataset?.editor;
+  const focusRule=active?.closest<HTMLFormElement>('[data-rule]')?.dataset['rule'];
+  const focusAction=active?.closest<HTMLFormElement>('form[data-action]')?.dataset['action'];
+  const focusRun=active?.dataset?.['run'];
+  const focusEditor=active?.dataset?.['editor'];
   const notices=view.state.notifications.filter(n=>n.recipient===actorId).slice().reverse();
   root.innerHTML=`<header><strong>Relay<span style="color:#83a9e7"> /</span></strong><span class="divider"></span><small>Product engineering</small><label>Working as<select id="actor" aria-label="Working as">${view.state.users.map(u=>option(u.id,`${u.name} · ${u.role}`,actorId)).join('')}</select></label></header>
     <main><div class="toolbar"><h1>Issues</h1><small>${view.state.issues.filter(i=>i.status==='open').length} open</small><span class="spacer"></span><button id="new-issue" class="primary" ${allowed('create')?'':'disabled'}>${esc(label('create'))}</button><button id="reset" ${previewStep !== null ? 'disabled' : ''}>Reset</button></div>
@@ -207,7 +207,7 @@ function render() {
   root.querySelectorAll<HTMLFormElement>('form[data-action]').forEach(updateFormAvailability);
   if (previewStep === null) updateToolAvailability();
   if (!allowed('create') && previewStep === null) requiredElement('#new-issue', HTMLButtonElement, root).insertAdjacentHTML('afterend',unavailableButton('create'));
-  root.querySelectorAll<HTMLButtonElement>('[data-unavailable]').forEach(b=>b.onclick=()=>showUnavailable(b.dataset.unavailable));
+  root.querySelectorAll<HTMLButtonElement>('[data-unavailable]').forEach(b=>b.onclick=()=>showUnavailable(b.dataset['unavailable']));
   const target=(focusId && root.querySelector<HTMLElement>(`#${focusId}`)) || (focusRule && root.querySelector<HTMLElement>(`[data-rule="${focusRule}"] button`)) || (focusAction && root.querySelector<HTMLElement>(`form[data-action="${focusAction}"] textarea`)) || (focusRun && root.querySelector<HTMLElement>(`[data-run="${focusRun}"]`)) || (focusEditor && root.querySelector<HTMLElement>(`[data-editor="${focusEditor}"]`));
   const restored = target || (focusIssue && root.querySelector<HTMLElement>(`[data-issue="${focusIssue}"]`));
   if (restored) restored.focus({preventScroll:true});
@@ -313,24 +313,24 @@ function bind() {
     const next=e.key==='Home'?0:e.key==='End'?rows.length-1:Math.max(0,Math.min(rows.length-1,index+(e.key==='ArrowDown'?1:-1)));
     rows[next]?.focus();
   };
-  root.querySelectorAll<HTMLButtonElement>('[data-issue]').forEach(b=>b.onclick=()=>{selected=b.dataset.issue;render()});
-  root.querySelectorAll<HTMLButtonElement>('[data-editor]').forEach(b=>b.onclick=()=>showEditor(b.dataset.editor));
-  root.querySelectorAll<HTMLButtonElement>('[data-run]').forEach(b=>b.onclick=()=>{commit(b.dataset.run,{issueId:selected});render()});
-  root.querySelectorAll<HTMLButtonElement>('[data-why]').forEach(b=>b.onclick=()=>showWhy(b.dataset.why));
+  root.querySelectorAll<HTMLButtonElement>('[data-issue]').forEach(b=>b.onclick=()=>{selected=b.dataset['issue'];render()});
+  root.querySelectorAll<HTMLButtonElement>('[data-editor]').forEach(b=>b.onclick=()=>showEditor(b.dataset['editor']));
+  root.querySelectorAll<HTMLButtonElement>('[data-run]').forEach(b=>b.onclick=()=>{commit(b.dataset['run'],{issueId:selected});render()});
+  root.querySelectorAll<HTMLButtonElement>('[data-why]').forEach(b=>b.onclick=()=>showWhy(b.dataset['why']));
   root.querySelectorAll<HTMLFormElement>('form[data-action]').forEach(f=>{
     f.addEventListener('input',()=>updateFormAvailability(f));
     f.addEventListener('change',()=>updateFormAvailability(f));
     const body = f.querySelector<HTMLTextAreaElement>('textarea[name=body]');
     body?.addEventListener('input',()=>commentDrafts.set(draftKey(),body.value));
-    f.onsubmit=e=>{e.preventDefault();const result=commit(f.dataset.action,{...Object.fromEntries(new FormData(f)),issueId:selected});if(result.ok && f.dataset.action==='comment')commentDrafts.delete(draftKey());render()};
+    f.onsubmit=e=>{e.preventDefault();const result=commit(f.dataset['action'],{...Object.fromEntries(new FormData(f)),issueId:selected});if(result.ok && f.dataset['action']==='comment')commentDrafts.delete(draftKey());render()};
   });
   if (previewStep !== null) return;
   const lab = requiredElement('.lab', HTMLDetailsElement, root);
   lab.ontoggle=()=>{labOpen=lab.open};
   root.querySelectorAll<HTMLFormElement>('[data-rule]').forEach(f=>{
     const patch=()=>{const data=new FormData(f);return {allowedRoles:data.getAll('allowedRoles'),notify:data.getAll('notify')}};
-    f.onchange=()=>{ruleDrafts.set(f.dataset.rule,patch());requiredElement('.rule-impact', HTMLElement, f).innerHTML=ruleImpact(f.dataset.rule,patch())};
-    f.onsubmit=e=>{e.preventDefault();if(previewStep!==null)return;const result=core.setRule(f.dataset.rule,patch());if(result.ok){invalidateChecks();ruleDrafts.delete(f.dataset.rule);persist()}failed=!result.ok;feedback=result.ok?`${f.dataset.rule} rule updated to r${core.model.revision}. Future actions use this declaration; past records are unchanged.`:result.reason;labOpen=true;render()};
+    f.onchange=()=>{ruleDrafts.set(f.dataset['rule'],patch());requiredElement('.rule-impact', HTMLElement, f).innerHTML=ruleImpact(f.dataset['rule'],patch())};
+    f.onsubmit=e=>{e.preventDefault();if(previewStep!==null)return;const result=core.setRule(f.dataset['rule'],patch());if(result.ok){invalidateChecks();ruleDrafts.delete(f.dataset['rule']);persist()}failed=!result.ok;feedback=result.ok?`${f.dataset['rule']} rule updated to r${core.model.revision}. Future actions use this declaration; past records are unchanged.`:result.reason;labOpen=true;render()};
   });
    const toolArgs = requiredElement('#tool-args', HTMLTextAreaElement, root);
    const toolSelect = requiredElement('#tool-name', HTMLSelectElement, root);

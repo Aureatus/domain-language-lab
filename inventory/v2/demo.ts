@@ -75,10 +75,10 @@ export async function runDurableDemo() {
     assert.equal(resumed.before.pending.grants[0].approver, 'warehouse');
     if (scenario === 'lifecycle') {
       assert.equal(resumed.results[0].status, 'committed');
-      assert.equal(resumed.after.state.records.stock.camera.values.available, 8 - 3);
-      assert.deepEqual(Object.keys(resumed.after.state.records.reservation), ['durable-reservation']);
-      assert.deepEqual(resumed.after.outbox.map(x => x.event.kind), ['action', 'change', 'create']);
-      assert.ok(resumed.after.outbox.every(x => x.event.clock === 101));
+      assert.equal(resumed.after.state.records['stock']['camera'].values['available'], 8 - 3);
+      assert.deepEqual(Object.keys(resumed.after.state.records['reservation']), ['durable-reservation']);
+      assert.deepEqual(resumed.after.outbox.map(x => x.event['kind']), ['action', 'change', 'create']);
+      assert.ok(resumed.after.outbox.every(x => x.event['clock'] === 101));
       assert.ok(resumed.after.pending);
       assert.equal(resumed.after.pending.status, 'consumed');
       const retry = steps.find(x => x.phase === 'retry');
@@ -89,15 +89,15 @@ export async function runDurableDemo() {
       const finish = steps.at(-1);
       assert.ok(finish);
       assert.deepEqual(finish.results.map(x => x.status), ['committed', 'committed']);
-      assert.equal(finish.after.state.records.stock.camera.values.available, 8);
-      assert.deepEqual(finish.after.state.records.reservation, {});
+      assert.equal(finish.after.state.records['stock']['camera'].values['available'], 8);
+      assert.deepEqual(finish.after.state.records['reservation'], {});
     } else {
       assert.equal(resumed.results[0].status, 'rejected');
       assert.equal(resumed.results[0].code, scenario === 'stale' ? 'stale' : 'precondition');
       assert.deepEqual(resumed.after, resumed.before);
       if (scenario === 'stale') {
         assert.equal(steps[2].results[0].status, 'committed');
-        assert.equal(resumed.after.state.records.stock.camera.values.available, 8 - 1);
+        assert.equal(resumed.after.state.records['stock']['camera'].values['available'], 8 - 1);
       }
     }
     scenarios.push({scenario, databasePath, steps, checks: 'passed'});

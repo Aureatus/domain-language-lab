@@ -10,7 +10,7 @@ test('Effect UI keeps Submit locked until the original receipt is recovered',{ti
   const model=structuredClone(declaration);
   const presentation=model.application.actions['leave.request'];
   presentation.label='Request leave';
-  presentation.fields.start.label='From';
+  presentation.fields['start'].label='From';
   const app=await start({model});
   t.after(()=>app.close());
   const browser=await chromium.launch();

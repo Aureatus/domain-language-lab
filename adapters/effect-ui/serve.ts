@@ -23,7 +23,7 @@ export async function start({port=0,model=declaration}={}){
 }
 
 if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
-  const app=await start({port:Number(process.env.PORT??4187)});
+  const app=await start({port:Number(process.env['PORT']??4187)});
   console.log(`Effect UI spike: ${app.url}`);
   for(const signal of ['SIGINT','SIGTERM'])process.once(signal,()=>{void app.close();});
 }

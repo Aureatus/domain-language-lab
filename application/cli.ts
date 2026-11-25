@@ -35,7 +35,7 @@ export async function runCLI(argv: string[],{stdout=console.log}={}){
   if(['preview','execute','reconcile','grant','resume'].includes(command)&&(!options.actor||!id))throw Error(`${command} requires an ID and explicit --actor.\n${usage}`);
   if(options['submission-id']&&command!=='execute')throw Error('--submission-id applies only to execute.');
   if(command==='grant'&&!options.policy)throw Error('grant requires --policy POLICY.');
-  const client=createApplicationClient(options.url??process.env.APPLICATION_URL??'http://127.0.0.1:4174');
+  const client=createApplicationClient(options.url??process.env['APPLICATION_URL']??'http://127.0.0.1:4174');
   const {contract,contractId}=await client.contract();let result,presentation;
   if(options.view){
     const loaded=loadSource(options.view);

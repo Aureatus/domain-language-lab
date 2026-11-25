@@ -11,9 +11,9 @@ const artifact = resolve(root, 'artifacts');
 mkdirSync(artifact, { recursive: true });
 const expected = ['commit_requires_current_binding', 'successful_path_exists', 'stale_approval_cannot_commit'];
 const pin = readFileSync(resolve(dir, 'lean-toolchain'), 'utf8').trim().split(':v').at(-1);
-const local = resolve(process.env.ELAN_HOME || resolve(homedir(), '.elan'), 'bin/lean');
+const local = resolve(process.env['ELAN_HOME'] || resolve(homedir(), '.elan'), 'bin/lean');
 // LEAN is an explicit executable override, never a shell command.
-const lean = process.env.LEAN || (existsSync(local) ? local : 'lean');
+const lean = process.env['LEAN'] || (existsSync(local) ? local : 'lean');
 const theoremAxioms:Record<string,string[]>={};
 const axiomsReported:string[]=[], trustedAssumptions:string[]=[];
 const report = {

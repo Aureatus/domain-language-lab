@@ -21,7 +21,7 @@ export function renamedFixture(){
 export function extendedFixture(){
   const x=structuredClone(fixture);
   x.application.actors.push({id:'rory',label:'Rory'});
-  x.domain.actions['supply.take'].inputs.memo={type:'string'};
+  x.domain.actions['supply.take'].inputs['memo']={type:'string'};
   const review=x.domain.actions['supply.take'].policies[1];
   if(review.effect!=='approval-required')throw Error('Expected review policy');
   review.approvers={op:'literal',value:'rory'};

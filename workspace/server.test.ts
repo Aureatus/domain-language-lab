@@ -104,7 +104,7 @@ test('multi-client SSE preserves actor views, grant changes and reconnect/restar
   assert((await reconnected.next()).invalidations.some(x => x.view === 'pending'));
   reconnected.close();
   const db = new DatabaseSync(join(f.directory, 'v2.sqlite'));
-  assert.equal(db.prepare('SELECT count(*) n FROM durable_outbox WHERE acknowledged=1').get()?.n, 0);
+  assert.equal(db.prepare('SELECT count(*) n FROM durable_outbox WHERE acknowledged=1').get()?.['n'], 0);
   // Even externally acknowledged rows remain historical UI facts.
   db.prepare('UPDATE durable_outbox SET acknowledged=1').run(); db.close();
   const saved = await get(f); await f.restart();

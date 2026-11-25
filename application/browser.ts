@@ -49,7 +49,7 @@ function showEvidence(){const e=showSaved?lastEvidence:currentEvidence;$('eviden
 $('current-evidence').onclick=()=>{showSaved=false;showEvidence();};$('saved-evidence').onclick=()=>{showSaved=true;showEvidence();};
 function notice(message,error=false){$('notice').hidden=false;$('notice').textContent=message;$('notice').classList.toggle('error',error);}
 const api=(path,body)=>client[path.slice(path.lastIndexOf('/')+1)](body);
-const actionFor=(form:HTMLFormElement)=>{const action=form.dataset.action;if(!action)throw Error('Missing action for form');return action;};
+const actionFor=(form:HTMLFormElement)=>{const action=form.dataset['action'];if(!action)throw Error('Missing action for form');return action;};
 function getDraft(action){if(!drafts.has(key(action)))drafts.set(key(action),{...snapshot.defaults[actor][action]});return drafts.get(key(action));}
 function inputHTML(f: ApplicationField,args,action){
   if(f.hidden)return '';
@@ -108,8 +108,8 @@ function updateLocks(){
   actorControl.disabled=busy;
   for(const el of document.querySelectorAll<HTMLButtonElement>('[data-grant], [data-resume]'))el.disabled=busy;
   for(const form of $('forms').querySelectorAll('form')){
-    const locked=busy||submissions.has(key(form.dataset.action));
-    for(const el of form.elements)if(el instanceof HTMLInputElement||el instanceof HTMLSelectElement||el instanceof HTMLButtonElement)el.disabled=locked||(el.type==='submit'&&form.dataset.invalid==='true');
+    const locked=busy||submissions.has(key(form.dataset['action']));
+    for(const el of form.elements)if(el instanceof HTMLInputElement||el instanceof HTMLSelectElement||el instanceof HTMLButtonElement)el.disabled=locked||(el.type==='submit'&&form.dataset['invalid']==='true');
   }
   recovery.replaceChildren();
   for(const [k,s] of submissions)if(s.body.actor===actor){
@@ -123,11 +123,11 @@ function updateLocks(){
 }
 async function preview(action){
   const token=++sequence,k=key(action);previews.set(k,token);
-  const form=[...$('forms').querySelectorAll('form')].find(f=>f.dataset.action===action);if(!form)return;
+  const form=[...$('forms').querySelectorAll('form')].find(f=>f.dataset['action']===action);if(!form)return;
   try{const r=await api('actions/preview',{actor,action,args:getDraft(action)});if(previews.get(k)!==token||key(action)!==k)return;
     const names=r.requirements?.flatMap(r=>r.approvers).map(person);
     required(form,'[data-preview]',HTMLElement).textContent=r.status==='pending'?`Needs ${[...new Set(names)].join(', ')}’s approval. No changes yet.`:r.message;
-    form.dataset.invalid=String(r.status==='rejected');required(form,'button[type=submit]',HTMLButtonElement).disabled=busy||submissions.has(k)||r.status==='rejected';currentEvidence=r.evidence;if(!showSaved)showEvidence();
+    form.dataset['invalid']=String(r.status==='rejected');required(form,'button[type=submit]',HTMLButtonElement).disabled=busy||submissions.has(k)||r.status==='rejected';currentEvidence=r.evidence;if(!showSaved)showEvidence();
   }catch(e){if(previews.get(k)===token&&key(action)===k){required(form,'[data-preview]',HTMLElement).textContent=e.message;required(form,'button[type=submit]',HTMLButtonElement).disabled=true;}}
 }
 async function command(path,body){
@@ -137,7 +137,7 @@ async function command(path,body){
   }
   if(busy)return;busy=true;updateLocks();
   try{const r=await api(path,body);if(r.evidence){lastEvidence=r.evidence;showSaved=true;showEvidence();}if(r.snapshot)accept(r.snapshot);notice(path==='approvals/resume'&&r.status==='rejected'?`Approval is saved, but completion failed. ${r.message}`:r.message,r.status==='rejected');}
-  catch(e){notice(e.message,true);}finally{busy=false;updateLocks();for(const f of $('forms').querySelectorAll('form'))preview(f.dataset.action);}
+  catch(e){notice(e.message,true);}finally{busy=false;updateLocks();for(const f of $('forms').querySelectorAll('form'))preview(f.dataset['action']);}
 }
 async function sendSubmission(k,previous,event:SubmissionEvent){
   if(busy)return;
@@ -151,11 +151,11 @@ async function sendSubmission(k,previous,event:SubmissionEvent){
   }catch(e){
     if(submissions.has(k))track(k,submissionStep(s,e.notSubmitted?{type:'invalid',message:e.message}:{type:'lost'}));
     notice(e.message,true);
-  }finally{busy=false;updateLocks();for(const f of $('forms').querySelectorAll('form'))preview(f.dataset.action);}
+  }finally{busy=false;updateLocks();for(const f of $('forms').querySelectorAll('form'))preview(f.dataset['action']);}
 }
-$('inbox').addEventListener('click',e=>{if(!(e.target instanceof Element))return;const grant=e.target.closest<HTMLButtonElement>('[data-grant]'),resume=e.target.closest<HTMLButtonElement>('[data-resume]');if(grant)command('approvals/grant',{actor,requestId:grant.dataset.grant,policyId:grant.dataset.policy});if(resume)command('approvals/resume',{actor,requestId:resume.dataset.resume});});
-function accept(next){if(next.contractId!==contractId){notice('The declaration changed. Reload before continuing.',true);return;}if(!acceptsSnapshot(snapshot,next,contractId))return;snapshot=next;renderViews();const visible=Object.values(contract.actions).filter(a=>snapshot.availability[actor][a.id]).map(a=>a.id);if(JSON.stringify([...$('forms').querySelectorAll('form')].map(f=>f.dataset.action))!==JSON.stringify(visible))renderForms();updateLocks();for(const f of $('forms').querySelectorAll('form'))preview(f.dataset.action);}
-actorControl.addEventListener('change',()=>{actor=actorControl.value;$('notice').hidden=true;renderForms();renderViews();updateLocks();for(const f of $('forms').querySelectorAll('form'))preview(f.dataset.action);});
+$('inbox').addEventListener('click',e=>{if(!(e.target instanceof Element))return;const grant=e.target.closest<HTMLButtonElement>('[data-grant]'),resume=e.target.closest<HTMLButtonElement>('[data-resume]');if(grant)command('approvals/grant',{actor,requestId:grant.dataset['grant'],policyId:grant.dataset['policy']});if(resume)command('approvals/resume',{actor,requestId:resume.dataset['resume']});});
+function accept(next){if(next.contractId!==contractId){notice('The declaration changed. Reload before continuing.',true);return;}if(!acceptsSnapshot(snapshot,next,contractId))return;snapshot=next;renderViews();const visible=Object.values(contract.actions).filter(a=>snapshot.availability[actor][a.id]).map(a=>a.id);if(JSON.stringify([...$('forms').querySelectorAll('form')].map(f=>f.dataset['action']))!==JSON.stringify(visible))renderForms();updateLocks();for(const f of $('forms').querySelectorAll('form'))preview(f.dataset['action']);}
+actorControl.addEventListener('change',()=>{actor=actorControl.value;$('notice').hidden=true;renderForms();renderViews();updateLocks();for(const f of $('forms').querySelectorAll('form'))preview(f.dataset['action']);});
 actorControl.disabled=true;showInitialViews();
 try{accept(await client.snapshot());}catch(e){initialLoadError=true;$('summaries').replaceChildren();$('lists').replaceChildren();notice(`Could not load records. ${e.message}`,true);}
 const stream=new EventSource('/api/events');stream.addEventListener('open',()=>{$('connection').textContent='Live';});stream.addEventListener('error',()=>{$('connection').textContent='Reconnecting…';});stream.addEventListener('update',e=>{accept(JSON.parse(e.data));if(initialLoadError&&snapshot){initialLoadError=false;$('notice').hidden=true;}});addEventListener('pagehide',()=>stream.close());

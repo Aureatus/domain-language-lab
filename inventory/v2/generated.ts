@@ -42,23 +42,23 @@ type History = {seed: number; observations?: unknown[]} & ({commands: Operation[
 type GeneratedOptions = {reportPath?: string; seed?: number; runs?: number; steps?: number; histories?: History[]};
 const isObject = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value);
 function isOperation(value: unknown): value is Operation {
-  if (!isObject(value) || !isObject(value.command) || typeof value.command.id !== 'string') return false;
-  const c = value.command;
-  switch (value.api) {
-    case 'execute': return typeof c.clock === 'number' && typeof c.action === 'string' && typeof c.actor === 'string' &&
-      isObject(c.args) && typeof c.args.reservationId === 'string' && Object.values(c.args).every(v => typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean');
-    case 'approve': return typeof c.invocationId === 'string' && typeof c.policyId === 'string' &&
-      isObject(value.host) && typeof value.host.authenticatedApprover === 'string';
-    case 'resume': return typeof c.invocationId === 'string' && typeof c.clock === 'number';
+  if (!isObject(value) || !isObject(value['command']) || typeof value['command']['id'] !== 'string') return false;
+  const c = value['command'];
+  switch (value['api']) {
+    case 'execute': return typeof c['clock'] === 'number' && typeof c['action'] === 'string' && typeof c['actor'] === 'string' &&
+      isObject(c['args']) && typeof c['args']['reservationId'] === 'string' && Object.values(c['args']).every(v => typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean');
+    case 'approve': return typeof c['invocationId'] === 'string' && typeof c['policyId'] === 'string' &&
+      isObject(value['host']) && typeof value['host']['authenticatedApprover'] === 'string';
+    case 'resume': return typeof c['invocationId'] === 'string' && typeof c['clock'] === 'number';
     default: return false;
   }
 }
 function replayHistory(value: unknown): History {
-  if (!isObject(value) || typeof value.seed !== 'number') throw new TypeError('Expected a seeded replay history');
-  const commands = value.commands ?? value.failingPrefix;
+  if (!isObject(value) || typeof value['seed'] !== 'number') throw new TypeError('Expected a seeded replay history');
+  const commands = value['commands'] ?? value['failingPrefix'];
   if (!Array.isArray(commands) || !commands.every(isOperation)) throw new TypeError('Expected replay operations');
-  if (value.observations !== undefined && !Array.isArray(value.observations)) throw new TypeError('Expected replay observations');
-  return {seed:value.seed, commands, observations:value.observations};
+  if (value['observations'] !== undefined && !Array.isArray(value['observations'])) throw new TypeError('Expected replay observations');
+  return {seed:value['seed'], commands, observations:value['observations']};
 }
 const count = (value: Value | undefined) => {
   assert.ok(typeof value === 'number');
@@ -117,14 +117,14 @@ export function generatedHistory(seed: number, steps = 30) {
 // An inventory-specific state machine. No execute/prepare/approve/resume calls,
 // declaration traversal, or observed-success-driven oracle updates are used here.
 function oracle(): Oracle {
-  const {version, values: {available, capacity, watchers, operator}} = initialState.records.stock.camera;
+  const {version, values: {available, capacity, watchers, operator}} = initialState.records['stock']['camera'];
   assert.ok(Array.isArray(watchers) && typeof operator === 'string');
   return {state:{revision:initialState.revision, records:{stock:{camera:{version, values:{available:count(available), capacity:count(capacity), watchers:copy(watchers), operator}}}, reservation:{}}}, pending:{}, ledger:new Map()};
 }
 const reject = (code: string) => ({status:'rejected' as const, code});
 function reserveValidity(state: OracleState, inv: Execute['command']) {
   const a = inv.args;
-  if (count(a.quantity) > state.records.stock.camera.values.available || inv.clock >= count(a.expiresAt)) return 'precondition';
+  if (count(a['quantity']) > state.records.stock.camera.values.available || inv.clock >= count(a['expiresAt'])) return 'precondition';
   return null;
 }
 function predict(o: Oracle, op: Operation): Prediction {
@@ -138,7 +138,7 @@ function predict(o: Oracle, op: Operation): Prediction {
     if (kind === 'reserve') {
       const invalid = reserveValidity(o.state, c);
       if (invalid) expected = reject(invalid);
-      else if (count(c.args.quantity) >= 3) {
+      else if (count(c.args['quantity']) >= 3) {
         expected = {status:'pending'};
         o.pending[c.id] = {invocation:copy(c), prestate:copy(o.state), grants:[], status:'pending', resumeId:null};
       } else if (r) expected = reject('existing-record');
@@ -170,7 +170,7 @@ function predict(o: Oracle, op: Operation): Prediction {
   if (expected.status === 'committed') {
     assert.ok(inv);
     const kind = inv.action.split('.').at(-1), a = inv.args, stock = o.state.records.stock.camera, records = o.state.records.reservation;
-    if (kind === 'reserve') { stock.values.available -= count(a.quantity); stock.version++; records[a.reservationId] = {version:0, values:{stockId:'camera', owner:inv.actor, quantity:count(a.quantity), expiresAt:count(a.expiresAt), status:'active'}}; }
+    if (kind === 'reserve') { stock.values.available -= count(a['quantity']); stock.version++; records[a.reservationId] = {version:0, values:{stockId:'camera', owner:inv.actor, quantity:count(a['quantity']), expiresAt:count(a['expiresAt']), status:'active'}}; }
     else if (kind === 'delete-terminal') delete records[a.reservationId];
     else { stock.values.available += records[a.reservationId].values.quantity; stock.version++; records[a.reservationId].version++; records[a.reservationId].values.status = kind === 'cancel' ? 'cancelled' : 'expired'; }
     o.state.revision++;
@@ -220,11 +220,11 @@ function checkEvents(events: NonNullable<ObservedResult['events']>, before: Orac
     }
   }
   assert.equal(events.length, changes.length + 1, 'one action and exactly the predicted record changes');
-  assert.equal(events[0].kind, 'action');
+  assert.equal(events[0]['kind'], 'action');
   const projection = e => Object.fromEntries(['kind', 'resource', 'key', 'field', 'before', 'after'].filter(k => Object.hasOwn(e, k)).map(k => [k, e[k]]));
   assert.deepEqual(events.slice(1).map(projection).sort((a,b) => canonical(a).localeCompare(canonical(b))), changes.sort((a,b) => canonical(a).localeCompare(canonical(b))));
   for (const event of events) {
-    assert.equal(event.invocationId, inv.id); assert.equal(event.actionId, inv.action); assert.equal(event.actor, inv.actor); assert.equal(event.clock, inv.clock); assert.equal(event.revision, after.revision);
+    assert.equal(event['invocationId'], inv.id); assert.equal(event['actionId'], inv.action); assert.equal(event['actor'], inv.actor); assert.equal(event['clock'], inv.clock); assert.equal(event['revision'], after.revision);
   }
   assert.equal(new Set(events.map(e => e.id)).size, events.length);
 }
@@ -295,15 +295,15 @@ async function observe(path: string, commands: Operation[]): Promise<{observatio
 
 export function mutationChecks(commands: Operation[], observations: Observation[]) {
   const staleIndex = observations.findIndex(x => x.result.code === 'stale');
-  const commitIndex = observations.findIndex(x => x.result.status === 'committed' && x.result.events?.some(e => e.kind === 'create'));
+  const commitIndex = observations.findIndex(x => x.result.status === 'committed' && x.result.events?.some(e => e['kind'] === 'create'));
   assert.ok(staleIndex >= 0 && commitIndex >= 0, 'mutation fixture requires stale rejection and committed reserve');
   const mutations = {
     bogusStaleCommitDetected: [staleIndex, row => { row.result = {...row.result, status:'committed', events:[]}; }],
     duplicateDecrementDetected: [commitIndex, row => {
-      const {state} = row.snapshot, camera = state.records.stock.camera;
+      const {state} = row.snapshot, camera = state.records['stock']['camera'];
       assert.ok(row.result.state);
-      row.snapshot.state = {...state, records:{...state.records, stock:{...state.records.stock,
-        camera:{...camera, values:{...camera.values, available:count(camera.values.available) - 1}}}}};
+      row.snapshot.state = {...state, records:{...state.records, stock:{...state.records['stock'],
+        camera:{...camera, values:{...camera.values, available:count(camera.values['available']) - 1}}}}};
       row.result.state.records.stock.camera.values.available--;
     }],
     missingExpectedCommitDetected: [commitIndex, row => { row.result = {status:'rejected', code:'precondition'}; }],
@@ -393,7 +393,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   options.reportPath ??= resolve('artifacts/durable-generated-report.json');
   if (replay) {
     const input = decodeJsonObject(await readFile(replay, 'utf8'));
-    const cases = input.cases ?? [input];
+    const cases = input['cases'] ?? [input];
     if (!Array.isArray(cases)) throw new TypeError('Expected replay cases');
     options.histories = cases.map(replayHistory);
   }

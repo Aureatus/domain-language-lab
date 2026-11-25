@@ -40,7 +40,7 @@ export function projectInventory(source: Model = inventoryModel) {
     updates: original.updates.map(x => x===retainedUpdate ? {...x,value:null} : x),
   }}};
   if (hash(skeleton) !== STRUCTURE) fail('Inventory structural drift: versioned projection review required');
-  const fields = Object.fromEntries(Object.entries(source.resources.stock.fields).filter(([, s]) => s.type === 'integer'));
+  const fields = Object.fromEntries(Object.entries(source.resources['stock'].fields).filter(([, s]) => s.type === 'integer'));
   function dependency(e: Expr): void {
     switch (e.op) {
       case 'literal': if (typeof e.value === 'number' || typeof e.value === 'boolean') return; break;
@@ -56,7 +56,7 @@ export function projectInventory(source: Model = inventoryModel) {
   if (!binding) fail('Missing stock binding');
   const model: Model = {
     format: source.format, id: 'inventory.stock-capacity.v1', resources: {stock: {fields: structuredClone(fields)}}, relationships: [],
-    actions: {[ACTION]: {inputs: {quantity: structuredClone(original.inputs.quantity)},
+    actions: {[ACTION]: {inputs: {quantity: structuredClone(original.inputs['quantity'])},
       bindings: [{...structuredClone(binding), key: lit('camera')}],
       preconditions: [structuredClone(retainedGuard)], updates: [structuredClone(retainedUpdate)], policies: [], observe: []}},
   };

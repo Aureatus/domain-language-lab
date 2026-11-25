@@ -60,8 +60,8 @@ test('failure to record submission identity rolls back the invocation, outbox an
     db.exec(`CREATE TRIGGER fail_binding BEFORE INSERT ON application_submissions BEGIN SELECT RAISE(ABORT,'injected failure'); END`);
     await post(url,'execute',body,500);
     assert.equal((await post(url,'reconcile',{actor,submissionId:body.submissionId})).status,'not-found');
-    assert.equal(db.prepare('SELECT count(*) n FROM durable_invocations').get()?.n,0);
-    assert.equal(db.prepare('SELECT count(*) n FROM durable_outbox').get()?.n,0);
+    assert.equal(db.prepare('SELECT count(*) n FROM durable_invocations').get()?.['n'],0);
+    assert.equal(db.prepare('SELECT count(*) n FROM durable_outbox').get()?.['n'],0);
     db.exec('DROP TRIGGER fail_binding');
     const result=await post(url,'execute',body);
     assert.equal(result.snapshot.state.records.cabinet.tools.values.stock,7);
@@ -89,8 +89,8 @@ test('independent SQLite connections race a stable submission; only one invocati
   assert.deepEqual(await post(peer,'reconcile',{actor,submissionId:'race'}),a);
   const db=new DatabaseSync(join(directory,'application.sqlite'),{readOnly:true});
   try{
-    assert.equal(db.prepare('SELECT count(*) n FROM durable_invocations').get()?.n,1);
-    assert.equal(db.prepare('SELECT count(*) n FROM durable_outbox').get()?.n,a.evidence.outcome.events.length);
+    assert.equal(db.prepare('SELECT count(*) n FROM durable_invocations').get()?.['n'],1);
+    assert.equal(db.prepare('SELECT count(*) n FROM durable_outbox').get()?.['n'],a.evidence.outcome.events.length);
   }finally{db.close();}
   const legacy=await post(server.url,'execute',{actor,action,args});
   assert.notEqual(legacy.evidence.invocation.id,a.evidence.invocation.id);

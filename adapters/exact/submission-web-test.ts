@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {createRequire} from 'node:module';
 const url=process.argv[2];
 if(!/^http:\/\/127\.0\.0\.1:\d+$/.test(url)||url.endsWith(':4186'))throw Error('Supply an isolated adapter URL.');
-const require=createRequire(`${process.env.EXACT_ROOT??'/tmp/opencode/exact-source'}/package.json`);
+const require=createRequire(`${process.env['EXACT_ROOT']??'/tmp/opencode/exact-source'}/package.json`);
 const browser=await require('playwright-core').chromium.launch({headless:true});
 try{
   const page=await browser.newPage(),writes:{submissionId:string}[]=[],errors:string[]=[];

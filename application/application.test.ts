@@ -14,7 +14,7 @@ test('automatic input types, inferred references, added actions/inputs and polic
   const inferred={...structuredClone(fixture),application:inferredMeta};
   assert.deepEqual(deriveApplication(inferred).contract.actions['supply.take'].fields[0].reference,{resource:'cabinet'});
   const changed=structuredClone(fixture);
-  changed.domain.actions['supply.take'].inputs.memo={type:'string'};
+  changed.domain.actions['supply.take'].inputs['memo']={type:'string'};
   const review=changed.domain.actions['supply.take'].policies[1];
   assert.equal(review.effect,'approval-required');review.approvers={op:'literal',value:'nora'};
   changed.domain.actions['supply.audit']={inputs:{comment:{type:'string'}},bindings:[],policies:[{id:'audit.allow',effect:'allow',when:{op:'literal',value:true}}],preconditions:[],updates:[],inserts:[],deletes:[],observe:[]};

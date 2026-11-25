@@ -33,13 +33,13 @@ test('trusted forks isolate siblings, prepared snapshots, restores, rule edits a
   accepted(parent.setRule('comment',{notify:[]}));
   const afterRestore=forkApp(parent,{clock:()=>500});
   assert.equal(afterRestore.state.events.length,0);
-  assert.deepEqual(afterRestore.model.actions.comment.notify,[]);
+  assert.deepEqual(afterRestore.model.actions['comment'].notify,[]);
   assert.deepEqual(child.state.events[0],state.events[0]);
   accepted(child.restoreWorkspace(document));
   assert.equal(accepted(child.dispatch('comment',{issueId:'i1',body:'After child restore'},'u1')).event.createdAt,202);
   assert.equal(forkCalls,2);assert.equal(calls,2);
   assert.equal(afterRestore.state.events.length,0);
-  assert.throws(()=>{afterRestore.model.actions.comment.notify.push('opener')},TypeError);
+  assert.throws(()=>{afterRestore.model.actions['comment'].notify.push('opener')},TypeError);
   for(const fake of [{},parent.exportWorkspace(),Object.freeze({state,model}),Object.create(parent)]) {
     assert.throws(()=>forkApp(fake),/trusted runtime/);
   }
@@ -219,7 +219,7 @@ test('historical why retains rule, actor, relationship and change snapshots', ()
   const patch: {notify: string[]; allowedRoles: string[]} = {notify: [], allowedRoles: ['lead']};
   accepted(runtime.setRule('comment', patch));
   patch.notify.push('watchers');
-  assert.deepEqual(runtime.model.actions.comment.notify, []);
+  assert.deepEqual(runtime.model.actions['comment'].notify, []);
   assert.equal(JSON.stringify(runtime.explain(result.event.id)), encoded);
   assert.equal(historical.revision, 1);
   assert.equal(historical.relationshipSnapshot.assignee, 'u3');
@@ -228,7 +228,7 @@ test('historical why retains rule, actor, relationship and change snapshots', ()
   assert.throws(() => { historical.actor.role = 'lead'; }, TypeError);
   assert.throws(() => { historical.changes[0].after[0].body = 'tampered'; }, TypeError);
   assert.throws(() => { runtime.state.users[0].role = 'member'; }, TypeError);
-  assert.throws(() => { Object.assign(runtime.model.actions.comment.inputs, {type: 'unknown'}); }, TypeError);
+  assert.throws(() => { Object.assign(runtime.model.actions['comment'].inputs, {type: 'unknown'}); }, TypeError);
   const future = accepted(runtime.dispatch('comment', {issueId: 'i1', body: 'Future rule'}, 'u1'));
   assert.deepEqual(future.event.recipients, []);
   audit(runtime);

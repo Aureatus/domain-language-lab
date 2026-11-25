@@ -11,10 +11,10 @@ const text=readFileSync(new URL('./fixtures/schema-groups.domain',import.meta.ur
 const parse=s=>parseSource(s,{filename:'groups.domain'});
 test('expanded bounds and multi-enum, schema reuse and safe derived IDs execute',()=>{
   const {declaration,sourceMap}=parse(text),model=declaration.domain;
-  assert.deepEqual(model.resources.supply.fields.balance,{type:'integer',min:0,max:30});
-  assert.deepEqual(model.resources.supply.fields.status,{type:'string',enum:['ready','held','spent']});
-  assert.deepEqual(model.actions['supply.adjust'].inputs.balance,model.resources.supply.fields.balance);
-  assert.notEqual(model.actions['supply.adjust'].inputs.balance,model.resources.supply.fields.balance);
+  assert.deepEqual(model.resources['supply'].fields['balance'],{type:'integer',min:0,max:30});
+  assert.deepEqual(model.resources['supply'].fields['status'],{type:'string',enum:['ready','held','spent']});
+  assert.deepEqual(model.actions['supply.adjust'].inputs['balance'],model.resources['supply'].fields['balance']);
+  assert.notEqual(model.actions['supply.adjust'].inputs['balance'],model.resources['supply'].fields['balance']);
   assert.equal(model.actions['supply.adjust'].bindings[0].id,'supply.adjust.item');
   assert.ok(sourceMap['supply.adjust.item']);
   assert.deepEqual(model.relationships,[{id:'supply.supervisor',resource:'supply',field:'manager'}]);

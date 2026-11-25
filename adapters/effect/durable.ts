@@ -63,11 +63,11 @@ function initialize(db) {
 
 function validateStored(db, modelKey, model) {
   const meta = Object.fromEntries(db.prepare('SELECT key,value FROM durable_meta').all().map(x => [x.key, x.value]));
-  if (!meta.format) return null;
-  if (meta.format !== FORMAT) throw new Error(`Unsupported durable store format: ${meta.format}`);
-  if (meta.model_key !== modelKey) throw new Error('Durable store is bound to different model content.');
-  const state = profile(model).validate(model, jsonSnapshot(decodeJsonValue(meta.state_json)));
-  if (canonical(state) !== meta.state_json) throw new Error('Stored state is not canonical JSON.');
+  if (!meta['format']) return null;
+  if (meta['format'] !== FORMAT) throw new Error(`Unsupported durable store format: ${meta['format']}`);
+  if (meta['model_key'] !== modelKey) throw new Error('Durable store is bound to different model content.');
+  const state = profile(model).validate(model, jsonSnapshot(decodeJsonValue(meta['state_json'])));
+  if (canonical(state) !== meta['state_json']) throw new Error('Stored state is not canonical JSON.');
   return state;
 }
 
@@ -167,7 +167,7 @@ const decodeOperation = (text, runtime) => {
   const value = decodeWith(DurableOperationOutcomeSchema, text);
   if (value.status === 'committed') return decodeOutcome(text, runtime.model);
   if (value.status === 'rejected') {
-    if (Object.hasOwn(value, 'state')) profile(runtime.model).validate(runtime.model, value.state);
+    if (Object.hasOwn(value, 'state')) profile(runtime.model).validate(runtime.model, value['state']);
     return value;
   }
   const {request, policyId, approver} = value.receipt;
@@ -269,7 +269,7 @@ export const pullOutbox = (db: DatabaseSync, { limit = 100 } = {}) => Effect.try
   try: () => {
     if (!Number.isSafeInteger(limit) || limit < 1 || limit > 1000) throw new TypeError('limit must be an integer from 1 to 1000');
     return db.prepare('SELECT sequence,event_id,event_json FROM durable_outbox WHERE acknowledged=0 ORDER BY sequence LIMIT ?')
-      .all(limit).map(row => ({ sequence: row.sequence, eventId: row.event_id, event: decodeWith(DurableEventSchema, row.event_json) }));
+      .all(limit).map(row => ({ sequence: row['sequence'], eventId: row['event_id'], event: decodeWith(DurableEventSchema, row['event_json']) }));
   }, catch: error => error,
 });
 export const acknowledgeOutbox = (db, sequence) => Effect.try({

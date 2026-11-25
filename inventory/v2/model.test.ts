@@ -40,7 +40,7 @@ test('actual inserts, stock decrement, approval, cancellation, expiry and termin
   const large = invocation('reserve-large', 'reserve', {reservationId: 'res-large', actor: 'bob', quantity: 3, expiresAt: 40});
   const pending = rt.execute(state, large);
   assert.equal(pending.status, 'pending'); assert.deepEqual(pending.policyIds, ['reserve.warehouse-approval']);
-  assert.equal(stock(pending.state), 6); assert.equal(pending.state.records.reservation['res-large'], undefined);
+  assert.equal(stock(pending.state), 6); assert.equal(pending.state.records['reservation']['res-large'], undefined);
   const grant = rt.approve(pending.request, {policyId: 'reserve.warehouse-approval', approver: 'warehouse'});
   assert.equal(grant.status, 'approved');
   result = rt.resume(state, large, pending.request, [grant.receipt], {clock: 11});
@@ -58,7 +58,7 @@ test('actual inserts, stock decrement, approval, cancellation, expiry and termin
   result = run(rt, state, 'delete-large', 'delete-terminal', {reservationId: 'res-large', actor: 'bob'});
   assert.equal(result.status, 'committed'); state = result.state;
   assert.equal(stock(state), expected.available);
-  assert.deepEqual(state.records.reservation, expected.reservations);
+  assert.deepEqual(state.records['reservation'], expected.reservations);
 });
 
 test('denial, failed preconditions, duplicate ID, ownership and stale approvals are distinct', () => {
@@ -99,5 +99,5 @@ test('multiple named reservations independently obey a capacity oracle', () => {
     {kind: 'reserve', id: 'bob-camera-b', owner: 'bob', quantity: 2, expiresAt: 50},
     {kind: 'reserve', id: 'alice-camera-c', owner: 'alice', quantity: 1, expiresAt: 50},
   ]);
-  assert.equal(stock(state), expected.available); assert.deepEqual(state.records.reservation, expected.reservations);
+  assert.equal(stock(state), expected.available); assert.deepEqual(state.records['reservation'], expected.reservations);
 });

@@ -20,7 +20,7 @@ test('a lost response locks resubmission; absence permits replay only of the cap
   assert.deepEqual(step(checking,{type:'lost'}),unknown);
   const retry={type:'retry',id:'two',body} as const;
   const retried=step(step(checking,{type:'missing'}),retry);
-  assert.deepEqual(retried,sent);assert.equal(retried.body?.args.units,2);
+  assert.deepEqual(retried,sent);assert.equal(retried.body?.args['units'],2);
   for(const status of ['pending','committed','rejected']){
     const receipt={status};assert.deepEqual(step(checking,{type:'found',result:receipt}),step(retried,{type:'found',result:receipt}));
   }

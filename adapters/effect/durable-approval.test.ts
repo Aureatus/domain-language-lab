@@ -107,7 +107,7 @@ test('changed durable state and changed model fail closed without consuming pend
 for (const scenario of ['deny', 'precondition', 'requirements']) test(`fresh clock rechecks ${scenario}; no approval bypass`, async t => {
   const guard: Expr = {op: 'lt', left: {op: 'clock'}, right: lit(20)};
   const f = await setup(t, model => {
-    const a = model.actions.create;
+    const a = model.actions['create'];
     if (scenario === 'deny') a.policies.push({id: 'lateDeny', effect: 'deny', when: {op: 'not', value: guard}});
     if (scenario === 'precondition') a.preconditions.push({id: 'deadline', when: guard});
     if (scenario === 'requirements') { a.policies[0].when = guard; a.policies.push({id: 'allowLater', when: lit(true), effect: 'allow'}); }
@@ -132,7 +132,7 @@ test('beforeCommit failures roll back every request/grant/operation/state/outbox
 });
 
 test('every policy needs an internal grant; early/older-clock attempts do not consume', async t => {
-  const f = await setup(t, model => model.actions.create.policies.push({id: 'secondReview', when: lit(true), effect: 'approval-required', approvers: lit('other')}));
+  const f = await setup(t, model => model.actions['create'].policies.push({id: 'secondReview', when: lit(true), effect: 'approval-required', approvers: lit('other')}));
   await run(durableExecute(f.rt, f.db, f.inv)); await approve(f);
   assert.equal((await resume(f, 'partial')).code, 'approval');
   assert.equal((await run(durableApprove(f.rt, f.db, {id: 'second-grant', invocationId: f.inv.id, policyId: 'secondReview'}, {authenticatedApprover: 'other'}))).status, 'approved');

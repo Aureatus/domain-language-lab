@@ -38,7 +38,7 @@ test('strings, escapes, comments, keyword-looking field end and tight operators 
   assert.equal(parse(altered).declaration.application.title,'A # title "quoted" \n tab\t slash\\');
   assert.deepEqual(parse(source.replace('employee.balance - days','employee.balance-days')).declaration,prior);
   const adapter=parse(source).declaration.application.actions['leave.request'].adapters?.[0];
-  assert.ok(adapter);assert.equal(adapter.mapping.end,'end');
+  assert.ok(adapter);assert.equal(adapter.mapping['end'],'end');
   assert.equal(tokenize('days>=3 # x\n')[1].value,'>=');
   assert.throws(()=>parse(source.replace('field balance label "Days remaining"','field name label "Days remaining"')),/Duplicate view field/);
   assert.throws(()=>parse(source.replace('settings from settings key "leave-rule" id "request.settings"','employee from settings key "leave-rule" id "request.settings"')),/Duplicate binding alias/);
@@ -83,9 +83,9 @@ for(const [label,mutate,pattern] of [
 
 test('parsed execution keeps grouped prestate inserts, denial, preconditions and implicit facts',()=>{
   const d=deriveApplication(current),inv=invocation(d),result=d.runtime.execute(d.initialState,inv);
-  assert.equal(result.status,'committed');assert.equal(result.state.records.employee.maya.values.balance,4);
+  assert.equal(result.status,'committed');assert.equal(result.state.records['employee']['maya'].values['balance'],4);
   assert.deepEqual(result.events.map(e=>e.kind),['action','change','create']);assert.deepEqual(result.events[0].recipients.map(r=>r.recipient),['sam']);
-  assert.equal(result.state.records.leave[inv.id].values.days,1);
+  assert.equal(result.state.records['leave'][inv.id].values['days'],1);
   const denied=d.runtime.execute(d.initialState,{...inv,actor:'leo'});
   assert.equal(denied.status,'rejected');assert.equal(denied.code,'denied');
   const precondition=d.runtime.execute(d.initialState,{...inv,args:{...inv.args,days:6}});
@@ -93,10 +93,10 @@ test('parsed execution keeps grouped prestate inserts, denial, preconditions and
   // Insert must read old balance 5, not updated balance 4, even though set precedes it.
   const modified=parse(source.replace('days = input.days','days = employee.balance')).declaration;
   const g=deriveApplication(modified),r=g.runtime.execute(g.initialState,invocation(g));
-  assert.equal(r.state.records.leave[inv.id].values.days,5);assert.equal(r.state.records.employee.maya.values.balance,4);
+  assert.equal(r.state.records['leave'][inv.id].values['days'],5);assert.equal(r.state.records['employee']['maya'].values['balance'],4);
   // Invalid create rolls back the update, publishing no facts.
-  const existing={...d.initialState,records:{...d.initialState.records,leave:{...d.initialState.records.leave,[inv.id]:result.state.records.leave[inv.id]}}};
-  const failed=d.runtime.execute(existing,inv);assert.equal(failed.status,'rejected');assert.equal(failed.code,'existing-record');assert.equal(failed.state.records.employee.maya.values.balance,5);assert.equal('events' in failed?failed.events:undefined,undefined);
+  const existing={...d.initialState,records:{...d.initialState.records,leave:{...d.initialState.records['leave'],[inv.id]:result.state.records['leave'][inv.id]}}};
+  const failed=d.runtime.execute(existing,inv);assert.equal(failed.status,'rejected');assert.equal(failed.code,'existing-record');assert.equal(failed.state.records['employee']['maya'].values['balance'],5);assert.equal('events' in failed?failed.events:undefined,undefined);
 });
 
 test('source-only threshold and input edits change actual derived forms and policy execution',()=>{
@@ -108,7 +108,7 @@ test('source-only threshold and input edits change actual derived forms and poli
   const invalid=d.runtime.execute(d.initialState,inv);
   assert.equal(invalid.status,'rejected');assert.equal(invalid.code,'invalid');
   const pending=d.runtime.execute(d.initialState,{...inv,args:{...inv.args,reason:'rest'}});
-  assert.equal(pending.status,'pending');assert.equal(pending.state.records.employee.maya.values.balance,5);assert.deepEqual(pending.request.requirements[0].approvers,['sam']);
+  assert.equal(pending.status,'pending');assert.equal(pending.state.records['employee']['maya'].values['balance'],5);assert.deepEqual(pending.request.requirements[0].approvers,['sam']);
 });
 
 test('existing prior-model SQLite pending binding survives text loader with no model migration',async()=>{

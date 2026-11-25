@@ -34,9 +34,9 @@ function differential(name, m, cases) {
     if (c.expected) assert.equal(result.status === 'committed' ? 'committed' : result.code, c.expected);
     let expected;
     if (result.status === 'committed') {
-      const r = result.state.records.capacity.main;
+      const r = result.state.records['capacity']['main'];
       expected = `.committed ${record({...r.values, revision: result.state.revision, version: r.version})}`;
-      if (c.previous !== undefined) assert.equal(r.values.previous, c.previous);
+      if (c.previous !== undefined) assert.equal(r.values['previous'], c.previous);
     } else {
       assert.equal(result.status, 'rejected');
       assert.ok(['overflow', 'precondition', 'schema'].includes(result.code), result.code);
@@ -55,7 +55,7 @@ test('pinned Lean checks generated nonvacuous law and complete axiom reports', (
   const report = check(model, obligation, resolve(out, 'positive'));
   assert.equal(report.status, 'proof_checked', report.detail);
   assert.deepEqual(Object.keys(report.theorem_axioms), ['preserves', 'positive_witness']);
-  assert.deepEqual(report.theorem_axioms.positive_witness, []);
+  assert.deepEqual(report.theorem_axioms['positive_witness'], []);
 });
 
 test('unsupported selected strings, dynamic binding, boolean schema and operators fail closed', () => {

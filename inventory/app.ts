@@ -15,12 +15,12 @@ const isMutant = (operation: Step['operation'])=>operation.type==='commit'&&oper
 function render() {
   $('replay-result').textContent='';
   const state=selected<0?host.state:stateAt(selected);
-  const {available, capacity}=state.records.stock.camera.values;
+  const {available, capacity}=state.records['stock']['camera'].values;
   if(typeof available!=='number'||typeof capacity!=='number') throw Error('Inventory stock counts must be numbers');
   $('available').textContent=String(available);
   $('revision').textContent=`Snapshot r${state.revision} · ${selected<0?'latest':'history / read only'}`;
   $('allocation').innerHTML=Array.from({length:capacity},(_,i)=>`<span class="unit ${i<available?'free':'held'}">${i<available?'AVAILABLE':'HELD'}</span>`).join('');
-  $('reservations').innerHTML=Object.entries(state.records.reservation).map(([key,{version,values:r}])=>`<tr><th>${key}</th><td>${escape(r.owner)}</td><td><span class="status ${r.status}">${r.status}</span></td><td>${r.quantity}</td><td>${r.expiresAt||'—'}</td><td>v${version}</td></tr>`).join('');
+  $('reservations').innerHTML=Object.entries(state.records['reservation']).map(([key,{version,values:r}])=>`<tr><th>${key}</th><td>${escape(r['owner'])}</td><td><span class="status ${r['status']}">${r['status']}</span></td><td>${r['quantity']}</td><td>${r['expiresAt']||'—'}</td><td>v${version}</td></tr>`).join('');
   const oracle=selected<0?host.oracle:host.steps[selected].observation.oracle;
   $('health').className=oracle.ok?'health':'health failed';
   $('health').textContent=oracle.ok?'Conservation holds · accepted ledger agrees':`INVARIANT FAILURE · ${oracle.failures.join(' · ')}`;
@@ -56,7 +56,7 @@ $('correct').onclick=()=>{host=competition(false);selected=-1;render();};
 $('broken').onclick=()=>{host=competition(true);selected=-1;render();};
 $('reset').onclick=()=>{host=createHost();selected=-1;render();};
 $('live').onclick=()=>{selected=-1;render();};
-$('steps').onclick=event=>{const button=event.target instanceof Element && event.target.closest<HTMLButtonElement>('[data-step]');if(button){selected=Number(button.dataset.step);render();}};
+$('steps').onclick=event=>{const button=event.target instanceof Element && event.target.closest<HTMLButtonElement>('[data-step]');if(button){selected=Number(button.dataset['step']);render();}};
 $('replay').onclick=()=>{try {host=replay(JSON.parse(JSON.stringify(host.export())));selected=-1;render();$('replay-result').textContent='Exact replay matched every observation, event and final record.';}catch(error){$('replay-result').textContent=error.message;}};
 $('export').onclick=()=>{const url=URL.createObjectURL(new Blob([JSON.stringify(host.export(),null,2)],{type:'application/json'}));const a=document.createElement('a');a.href=url;a.download='inventory-replay.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);};
 const importInput=$('import', HTMLInputElement);

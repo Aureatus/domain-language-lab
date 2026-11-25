@@ -42,7 +42,7 @@ export function forkApp(runtime, options: Record<string, unknown> = {}) {
   if (!object(options) || Object.keys(options).some(key => key !== 'clock')) throw Error('Unknown fork option');
   // Default to the parent's clock contract, without sampling it during the fork.
   const trusted = capture();
-  return createRuntime({clock: options.clock ?? trusted.clock}, trusted);
+  return createRuntime({clock: options['clock'] ?? trusted.clock}, trusted);
 }
 const own = (object, key) => Object.prototype.hasOwnProperty.call(object, key);
 const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -192,7 +192,7 @@ export function createApp(options: Record<string, unknown> = {}) {
 
 function createRuntime(options: Record<string, unknown> = {}, trusted?) {
   if (!object(options) || Object.keys(options).some(key => !['clock', 'workspace'].includes(key))) throw Error('Unknown application option');
-  const clockOption = options.clock ?? Date.now;
+  const clockOption = options['clock'] ?? Date.now;
   if (typeof clockOption !== 'function') throw Error('clock must be a function');
   const clock = clockOption;
   let state = trusted?.state ?? snapshot(initialState());
@@ -351,7 +351,7 @@ function createRuntime(options: Record<string, unknown> = {}, trusted?) {
   }
 
   if (own(options, 'workspace')) {
-    const result = restoreWorkspace(options.workspace);
+    const result = restoreWorkspace(options['workspace']);
     if (!result.ok) throw Error(result.reason);
   }
 

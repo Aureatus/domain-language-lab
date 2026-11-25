@@ -12,16 +12,16 @@ test('weekday input adapter validates real ISO dates and captured charged days',
 });
 test('Maya five → four → pending → approved one through shared policy',()=>{
   const friday=runtime.execute(initialState,request('friday','2026-11-20','2026-11-20'));
-  assert.equal(friday.status,'committed');assert.equal(friday.state.records.employee.maya.values.balance,4);
+  assert.equal(friday.status,'committed');assert.equal(friday.state.records['employee']['maya'].values['balance'],4);
   const trip=request('trip','2026-11-23','2026-11-25'),pending=runtime.execute(friday.state,trip);
-  assert.equal(pending.status,'pending');assert.equal(pending.state.records.employee.maya.values.balance,4);
+  assert.equal(pending.status,'pending');assert.equal(pending.state.records['employee']['maya'].values['balance'],4);
   assert.deepEqual(pending.request.invocation.args,{employeeId:'maya',leaveId:'trip',start:'2026-11-23',end:'2026-11-25',days:3});
   assert.equal(runtime.approve(pending.request,{policyId:'leave.manager-approval',approver:'leo'}).status,'rejected');
   const grant=runtime.approve(pending.request,{policyId:'leave.manager-approval',approver:'sam'});
   assert.equal(grant.status,'approved');
   const resumed=runtime.resume(friday.state,trip,pending.request,[grant.receipt],{clock:2});
-  assert.equal(resumed.status,'committed');assert.equal(resumed.state.records.employee.maya.values.balance,1);
-  assert.equal(resumed.state.records.leave.trip.values.status,'approved');
+  assert.equal(resumed.status,'committed');assert.equal(resumed.state.records['employee']['maya'].values['balance'],1);
+  assert.equal(resumed.state.records['leave']['trip'].values['status'],'approved');
   assert.ok(resumed.events.every(e=>e.recipients.some(r=>r.recipient==='sam')));
   assert.ok(resumed.events[0].recipients[0].paths.some(p=>p.relationship==='employee.manager'));
   assert.equal(withStatus(runtime.execute(resumed.state,request('too-much','2026-11-26','2026-11-27')), "rejected").code,'precondition');
@@ -32,12 +32,12 @@ test('settings is manager-only state, rule affects Leo; full-state stale resume 
   const edit={id:'edit',actor:'leo',clock:1,action:'settings.change',args:{threshold:2}};
   assert.equal(withStatus(runtime.execute(initialState,edit), "rejected").code,'denied');
   const changed=runtime.execute(initialState,{...edit,actor:'sam'});
-  assert.equal(changed.status,'committed');assert.equal(changed.state.records.employee.leo.values.balance,5);
+  assert.equal(changed.status,'committed');assert.equal(changed.state.records['employee']['leo'].values['balance'],5);
   const pending=runtime.execute(changed.state,two);assert.equal(pending.status,'pending');
   const grant=runtime.approve(pending.request,{policyId:'leave.manager-approval',approver:'sam'});
   const competing=runtime.execute(changed.state,request('maya-friday','2026-11-20','2026-11-20'));
   const stale=runtime.resume(competing.state,two,pending.request,[withStatus(grant, "approved").receipt],{clock:2});
-  assert.equal(withStatus(stale, "rejected").code,'stale');assert.equal(stale.state.records.employee.leo.values.balance,5);
+  assert.equal(withStatus(stale, "rejected").code,'stale');assert.equal(stale.state.records['employee']['leo'].values['balance'],5);
   const spoof={...two,id:'spoof',actor:'maya'};
   assert.equal(withStatus(runtime.execute(changed.state,spoof), "rejected").code,'denied');
 });

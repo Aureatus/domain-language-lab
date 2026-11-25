@@ -57,10 +57,10 @@ test('references lower lazily, fail closed, retain policy authorization and reco
   const inv=buildInvocation(d.contract,{action:'leave.request',actor:'maya',args:{start:'2026-11-20',end:'2026-11-20'},id:'test',clock:1});
   const denied=d.runtime.execute(d.initialState,{...inv,actor:'leo'});
   assert.equal(denied.status,'rejected');assert.equal(denied.code,'denied');
-  const settings={...d.initialState.records.settings,alternate:d.initialState.records.settings['leave-rule']};delete settings['leave-rule'];
+  const settings={...d.initialState.records['settings'],alternate:d.initialState.records['settings']['leave-rule']};delete settings['leave-rule'];
   const missing=d.runtime.execute({...d.initialState,records:{...d.initialState.records,settings}},inv);
   assert.equal(missing.status,'rejected');assert.equal(missing.code,'missing-record');
-  const employee={...d.initialState.records.employee};delete employee.maya;
+  const employee={...d.initialState.records['employee']};delete employee['maya'];
   const noEmployee=d.runtime.execute({...d.initialState,records:{...d.initialState.records,employee}},inv);
   assert.equal(noEmployee.status,'rejected');assert.equal(noEmployee.code,'missing-record');
   const unused=parse(flattened.replace('leaveId string','leaveId string\n    optional reference employee as unused')).declaration;

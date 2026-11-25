@@ -141,7 +141,7 @@ try {
   assert.equal(explanation.kind, 'simulated');
   assert.deepEqual(explanation.trace, data.cases['approval|support|high|0|false'].trace);
   assert.equal(explanation.policyDiff.cases, 6);
-  assert.equal(explanation.reports.property.availability, data.reports.property.availability);
+  assert.equal(explanation.reports.property.availability, data.reports['property'].availability);
   await page.locator('#tab-execution').click();
   await page.locator('#tab-execution').focus();
   await page.keyboard.press('ArrowRight');
@@ -175,8 +175,8 @@ try {
   await page.screenshot({ path: '/tmp/opencode/workbench-checks/mobile.png', fullPage: true });
   // Missing and unfamiliar report formats must never become inferred passing evidence.
   const missingData = structuredClone(data);
-  missingData.reports.property = { availability: 'unavailable', path: 'artifacts/property-report.json', reason: 'Not present at build time.' };
-  missingData.reports.lean = { availability: 'available', path: 'artifacts/lean-report.json', data: { novel_schema: 'opaque' } };
+  missingData.reports['property'] = { availability: 'unavailable', path: 'artifacts/property-report.json', reason: 'Not present at build time.' };
+  missingData.reports['lean'] = { availability: 'available', path: 'artifacts/lean-report.json', data: { novel_schema: 'opaque' } };
   await page.close();
   page = await context.newPage();
   page.on('pageerror', error => errors.push(error.message));

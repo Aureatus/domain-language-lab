@@ -46,8 +46,8 @@ test('DurableOutcomeSchema and DurableOperationOutcomeSchema validate discrimina
     encodeJson({ status: 'committed', state: { revision: 1, records: {} }, events: [{ id: 'e1', kind: 'created' }], extra: 42 }),
   );
   assert.equal(committed.status, 'committed');
-  assert.equal(committed.events[0].kind, 'created');
-  assert.equal(committed.extra, 42);
+  assert.equal(committed.events[0]['kind'], 'created');
+  assert.equal(committed['extra'], 42);
 
   assert.throws(() => decodeJson(DurableOutcomeSchema, '{"status":"committed","state":{},"events":[{"id":123}]}'));
   assert.throws(() => decodeJson(DurableOutcomeSchema, '{"status":"pending","state":{}}'));
@@ -61,7 +61,7 @@ test('DurableOutcomeSchema and DurableOperationOutcomeSchema validate discrimina
     }),
   );
   assert.equal(approved.status, 'approved');
-  assert.equal(approved.receipt.sig, 'ok');
+  assert.equal(approved.receipt['sig'], 'ok');
   assert.throws(() => decodeJson(DurableReceiptSchema, '{"format":"wrong","request":{},"policyId":"p1","approver":"bob"}'));
 });
 

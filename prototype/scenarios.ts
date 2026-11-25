@@ -27,9 +27,9 @@ export function explore(mutant = false) {
     // Trace completeness and fidelity still belong to the interpreter's trusted boundary.
     let approvedSubject: unknown;
     const invalid = runtime.events.find(event => {
-      if (event.kind === 'approved') approvedSubject = event.details.subject;
-      return event.kind === 'committed' && event.details.decision === 'approval'
-        && !isDeepStrictEqual(approvedSubject, event.details.subject);
+      if (event.kind === 'approved') approvedSubject = event.details['subject'];
+      return event.kind === 'committed' && event.details['decision'] === 'approval'
+        && !isDeepStrictEqual(approvedSubject, event.details['subject']);
     });
     return invalid ? [{ schedule, event: invalid.id, trace: runtime.export() }] : [];
   });
@@ -46,6 +46,6 @@ export function storyboard(runtime: Runtime) {
   return { format: 'prototype-storyboard/0', kind: 'simulated-explanation',
     trace, timing: 'editorial-not-measured',
     scenes: trace.events.map(event => ({ id: `scene-${event.id}`, eventIds: [event.id],
-      caption: event.kind === 'rejected' ? `Rejected: ${event.details.reason}` : event.kind,
+      caption: event.kind === 'rejected' ? `Rejected: ${event.details['reason']}` : event.kind,
       durationMs: 1500, source: event.source })) };
 }
