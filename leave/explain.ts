@@ -14,13 +14,13 @@ export function declaration(id,value,path){
 // Diagnostic replay, NOT instrumentation of the original execution. Each boolean
 // expression is passed unchanged to the existing interpreter as a precondition.
 // This deliberately avoids a second expression evaluator or copied domain rules.
-export function explainEvaluation(state,invocation,result,{phase='preview',grantStatus}={}){
+export function explainEvaluation(state,invocation,result,{phase='preview',grantStatus}:{phase?:string;grantStatus?:string}={}){
   const a=leaveModel.actions[invocation.action];
   const checks=[...a.policies.map((p,i)=>({p,kind:p.effect,path:`actions.${invocation.action}.policies[${i}]`})),...a.preconditions.map((p,i)=>({p,kind:'precondition',path:`actions.${invocation.action}.preconditions[${i}]`}))].map(({p,kind,path})=>{
     const probe=structuredClone(leaveModel);
     probe.actions={ [invocation.action]:{...structuredClone(a),policies:[{id:'explain.probe-allow',effect:'allow',when:{op:'literal',value:true}}],preconditions:[{id:p.id,when:p.when}],updates:[],inserts:[],deletes:[],observe:[]} };
     const r=createInterpreter(probe).prepare(state,invocation);
-    return {...declaration(p.id,p,path),kind,value:r.status==='prepared'?true:r.code==='precondition'?false:null,diagnostic:r.status==='rejected'?r.code:undefined};
+    return {...declaration(p.id,p,path),kind,value:r.status==='prepared'?true:r.status==='rejected'&&r.code==='precondition'?false:null,diagnostic:r.status==='rejected'?r.code:undefined};
   });
   return {format:'leave-explanation/v1',phase,
     method:'Read-only diagnostic re-evaluation with semantic/v2/core.ts, not a live execution-order or parser trace. Each guard is evaluated independently, even if original execution stopped earlier.',

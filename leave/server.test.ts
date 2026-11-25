@@ -13,7 +13,7 @@ test('serves the derived application browser bundle without exposing TypeScript 
     assert.match(await page.text(), /src="\/app\.js"/);
     const script=await fetch(server.url+'/app.js');
     assert.equal(script.status,200);
-    assert.match(script.headers.get('content-type'), /^text\/javascript/);
+    assert.match(script.headers.get('content-type')??'', /^text\/javascript/);
     assert.ok((await script.text()).length>0);
     assert.equal((await fetch(server.url+'/submission.ts')).status,404);
   } finally {
@@ -24,7 +24,7 @@ test('serves the derived application browser bundle without exposing TypeScript 
 test('derived HTTP: exact Maya/Leo story, separate grants/resume, stale, validation, permissions and reopen',async()=>{
   const directory=await mkdtemp('/tmp/opencode/leave-server-');let server=await createLeaveServer({directory});
   const post=async(path,body)=>{const response=await fetch(`${server.url}/api/${path}`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});return {http:response.status,...await response.json()};};
-  const request=(actor,start,end,days)=>post('actions/execute',{actor,action:'leave.request',args:{start,end,...(days===undefined?{}:{days})}});
+  const request=(actor,start,end,days?:number)=>post('actions/execute',{actor,action:'leave.request',args:{start,end,...(days===undefined?{}:{days})}});
   const rule=(actor,threshold)=>post('actions/execute',{actor,action:'settings.change',args:{threshold}});
   const grant=(actor,p)=>post('approvals/grant',{actor,requestId:p.id,policyId:p.requirements[0].policyId});
   const resume=(actor,p)=>post('approvals/resume',{actor,requestId:p.id});

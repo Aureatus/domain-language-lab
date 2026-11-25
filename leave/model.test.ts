@@ -1,5 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
+import {withStatus} from "../semantic/test-support.ts";
 import {runtime,initialState} from './model.ts';
 import {businessDays,requestInvocation} from './test-support.ts';
 const request=(id,start,end,actor='maya')=>requestInvocation({id,actor,start,end,clock:1});
@@ -23,20 +24,20 @@ test('Maya five → four → pending → approved one through shared policy',()=
   assert.equal(resumed.state.records.leave.trip.values.status,'approved');
   assert.ok(resumed.events.every(e=>e.recipients.some(r=>r.recipient==='sam')));
   assert.ok(resumed.events[0].recipients[0].paths.some(p=>p.relationship==='employee.manager'));
-  assert.equal(runtime.execute(resumed.state,request('too-much','2026-11-26','2026-11-27')).code,'precondition');
+  assert.equal(withStatus(runtime.execute(resumed.state,request('too-much','2026-11-26','2026-11-27')), "rejected").code,'precondition');
 });
 test('settings is manager-only state, rule affects Leo; full-state stale resume cannot deduct',()=>{
   const two=request('leo-two','2026-11-26','2026-11-27','leo');
   assert.equal(runtime.prepare(initialState,two).status,'prepared');
   const edit={id:'edit',actor:'leo',clock:1,action:'settings.change',args:{threshold:2}};
-  assert.equal(runtime.execute(initialState,edit).code,'denied');
+  assert.equal(withStatus(runtime.execute(initialState,edit), "rejected").code,'denied');
   const changed=runtime.execute(initialState,{...edit,actor:'sam'});
   assert.equal(changed.status,'committed');assert.equal(changed.state.records.employee.leo.values.balance,5);
   const pending=runtime.execute(changed.state,two);assert.equal(pending.status,'pending');
   const grant=runtime.approve(pending.request,{policyId:'leave.manager-approval',approver:'sam'});
   const competing=runtime.execute(changed.state,request('maya-friday','2026-11-20','2026-11-20'));
-  const stale=runtime.resume(competing.state,two,pending.request,[grant.receipt],{clock:2});
-  assert.equal(stale.code,'stale');assert.equal(stale.state.records.employee.leo.values.balance,5);
+  const stale=runtime.resume(competing.state,two,pending.request,[withStatus(grant, "approved").receipt],{clock:2});
+  assert.equal(withStatus(stale, "rejected").code,'stale');assert.equal(stale.state.records.employee.leo.values.balance,5);
   const spoof={...two,id:'spoof',actor:'maya'};
-  assert.equal(runtime.execute(changed.state,spoof).code,'denied');
+  assert.equal(withStatus(runtime.execute(changed.state,spoof), "rejected").code,'denied');
 });
