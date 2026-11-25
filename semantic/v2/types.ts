@@ -45,6 +45,6 @@ export interface Interpreter {
   commit(state: State, token: Prepared): Committed | Rejected;
   execute(state: State, invocation: InvocationInput): Committed | Pending | Rejected;
   approve(request: ApprovalRequest, grant: Grant): ApprovalResult;
-  prepareResume(state: State, invocation: Invocation, request: ApprovalRequest, receipts: readonly ApprovalReceipt[], options: {readonly clock: number}): PreparedResult | Rejected;
-  resume(state: State, invocation: Invocation, request: ApprovalRequest, receipts: readonly ApprovalReceipt[], options: {readonly clock: number}): Committed | Rejected;
+  prepareResume(state: State, invocation: InvocationInput, request: ApprovalRequest, receipts: readonly ApprovalReceipt[], options: {readonly clock: number}): PreparedResult | Rejected;
+  resume(state: State, invocation: InvocationInput, request: ApprovalRequest, receipts: readonly ApprovalReceipt[], options: {readonly clock: number}): Committed | Rejected;
 }

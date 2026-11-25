@@ -16,7 +16,10 @@ const obj = (x:unknown):x is Record<string,unknown> => x !== null && typeof x ==
 function fail(code:string,message?:string):never { throw Object.assign(new Error(message),{code}); }
 function assert(p:unknown,message:string|undefined,code='invalid'):asserts p { if(!p)fail(code,message); }
 const safeKey = (k:unknown):k is string => typeof k === 'string' && /^[A-Za-z][A-Za-z0-9_.:-]*$/.test(k) && !['constructor', 'prototype', '__proto__'].includes(k);
-function keys(x:unknown,names:readonly string[]):asserts x is Record<string,unknown> {assert(obj(x) && Object.keys(x).length === names.length && names.every(k => own(x, k)), `Expected exactly ${names.join(', ')}`);}
+function keys(x:unknown,names:readonly string[]):Record<string,unknown> {
+  assert(obj(x) && Object.keys(x).length === names.length && names.every(k => own(x, k)), `Expected exactly ${names.join(', ')}`);
+  return x;
+}
 const canonical = (x:unknown):string => Array.isArray(x) ? `[${x.map(canonical).join(',')}]` : obj(x)
   ? `{${Object.keys(x).sort().map(k => `${JSON.stringify(k)}:${canonical(x[k])}`).join(',')}}` : JSON.stringify(x);
 const equal = (a:unknown,b:unknown) => canonical(a) === canonical(b);
@@ -38,8 +41,8 @@ function value(s:FieldSchema,x:unknown):asserts x is Value {
   assert(valid, `Value violates ${s.type} schema`, 'schema');
 }
 function checkArgs(inputs:Readonly<Record<string,FieldSchema>>,args:unknown):asserts args is Invocation['args'] {
-  keys(args,Object.keys(inputs));
-  for(const [name,schema] of Object.entries(inputs))value(schema,args[name]);
+  const record=keys(args,Object.keys(inputs));
+  for(const [name,schema] of Object.entries(inputs))value(schema,record[name]);
 }
 function fields(o:unknown) { assert(obj(o), 'Expected field map'); Object.values(o).forEach(schema); }
 type Kind=FieldSchema['type'];
@@ -292,7 +295,7 @@ export function createInterpreter(source: unknown): Readonly<Interpreter> {
       return Object.freeze({status: 'rejected', code, reason: errorMessage(error)});
     }
   }
-  function prepareResume(state:State,invocation:Invocation,source:ApprovalRequest,receipts:readonly ApprovalReceipt[],options:{readonly clock:number}):PreparedResult|Rejected {
+  function prepareResume(state:State,invocation:InvocationInput,source:ApprovalRequest,receipts:readonly ApprovalReceipt[],options:{readonly clock:number}):PreparedResult|Rejected {
     try {
       const {request} = checkedRequest(source), inv = jsonSnapshot(invocation), opts = jsonSnapshot(options);
       keys(opts, ['clock']); assert(Number.isSafeInteger(opts.clock) && opts.clock >= request.invocation.clock, 'Resume clock must not precede request clock');
