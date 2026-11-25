@@ -8,6 +8,7 @@
     "noEmit": true,
     "strict": true,
     "noImplicitAny": false,
+    "noUncheckedIndexedAccess": true,
     "noImplicitOverride": true,
     "noPropertyAccessFromIndexSignature": true,
     "noFallthroughCasesInSwitch": true,
