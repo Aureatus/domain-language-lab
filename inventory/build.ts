@@ -2,7 +2,7 @@ import {readFile,mkdir,writeFile} from 'node:fs/promises';
 import {createHash} from 'node:crypto';
 import {bundleBrowser} from '../browser-build.ts';
 const root=new URL('../',import.meta.url);
-const paths=['semantic/core.ts','inventory/model.ts','inventory/oracle.ts','inventory/host.ts','inventory/app.ts'];
+const paths=['semantic/core.ts','semantic/primitives.ts','inventory/model.ts','inventory/declarations.ts','inventory/oracle.ts','inventory/host.ts','inventory/app.ts'];
 const sources=await Promise.all(paths.map(async p=>[p,createHash('sha256').update(await readFile(new URL(p,root),'utf8')).digest('hex')]));
 const bundle=await bundleBrowser(new URL('./app.ts',import.meta.url));
 const template=await readFile(new URL('inventory/template.html',root),'utf8');
