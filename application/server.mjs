@@ -4,8 +4,29 @@ import {resolve} from 'node:path';
 import {createRequire} from 'node:module';
 import {randomUUID,createHash} from 'node:crypto';
 import {isDeepStrictEqual} from 'node:util';
-import {deriveApplication,buildInvocation,inputDefaults,exact} from './derive.mjs';
+import {deriveApplication,buildInvocation,inputDefaults} from './derive.mjs';
 import {makeDurableRuntime,makeDurableStore,initializeDurableState,durableState,durableExecute,durableApprove,durableResume,durablePending,closeDurableStore} from '../adapters/effect/durable.mjs';
+import {
+  decodeJson,
+  decodeStrictJson,
+  decodeJsonValue,
+  encodeJson,
+  DurableInvocationSchema,
+  DurableOutcomeSchema,
+  ApplicationPreviewRequestSchema,
+  ApplicationExecuteRequestSchema,
+  ApplicationReconcileRequestSchema,
+  ApplicationGrantRequestSchema,
+  ApplicationResumeRequestSchema,
+} from '../adapters/effect/json.mjs';
+
+const requestSchemas={
+  preview:ApplicationPreviewRequestSchema,
+  execute:ApplicationExecuteRequestSchema,
+  reconcile:ApplicationReconcileRequestSchema,
+  grant:ApplicationGrantRequestSchema,
+  resume:ApplicationResumeRequestSchema,
+};
 
 const require=createRequire(new URL('../adapters/effect/package.json',import.meta.url));
 const Effect=await import(require.resolve('effect/Effect')),run=Effect.runSync;
@@ -24,7 +45,7 @@ export function resultMessage(r){
 }
 export async function createApplicationServer(declaration,{directory,port=0,database='application.sqlite',staticFiles=browserFiles}={}) {
   const derived=deriveApplication(declaration),{model,contract}=derived;
-  const contractId=createHash('sha256').update(JSON.stringify({model,contract})).digest('hex');
+  const contractId=createHash('sha256').update(encodeJson({model,contract})).digest('hex');
   await mkdir(directory,{recursive:true});
   const runtime=makeDurableRuntime(model),db=run(makeDurableStore(resolve(directory,database),{busyTimeout:250}));
   let server,closed=false;const streams=new Set();
@@ -36,18 +57,18 @@ export async function createApplicationServer(declaration,{directory,port=0,data
       invocation_id TEXT PRIMARY KEY REFERENCES durable_invocations(id),
       contract_id TEXT NOT NULL, args_json TEXT NOT NULL
     )`);
-    const submissionKey=id=>`submission-${createHash('sha256').update(JSON.stringify(id)).digest('hex')}`;
+    const submissionKey=id=>`submission-${createHash('sha256').update(encodeJson(id)).digest('hex')}`;
     const storedSubmission=db.prepare(`SELECT i.command_json,i.outcome_json,s.contract_id,s.args_json
       FROM application_submissions s JOIN durable_invocations i ON i.id=s.invocation_id
       WHERE s.invocation_id=?`);
     function lookup(key,body,execute){
       const row=storedSubmission.get(key);
       if(!row)return null;
-      const invocation=JSON.parse(row.command_json);
+      const invocation=decodeJson(DurableInvocationSchema,row.command_json);
       if(invocation.actor!==body.actor)throw fail('This submission belongs to another person.',403);
-      if(row.contract_id!==contractId||execute&&(invocation.action!==body.action||!isDeepStrictEqual(JSON.parse(row.args_json),JSON.parse(JSON.stringify(body.args)))))
+      if(row.contract_id!==contractId||execute&&(invocation.action!==body.action||!isDeepStrictEqual(decodeJsonValue(row.args_json),decodeJsonValue(encodeJson(body.args)))))
         throw fail('Submission ID already bound to another command or contract.',409);
-      return {invocation,result:JSON.parse(row.outcome_json)};
+      return {invocation,result:decodeJson(DurableOutcomeSchema,row.outcome_json)};
     }
     const state=()=>run(durableState(runtime,db));
     function preview(actor,action,args,current){
@@ -82,9 +103,9 @@ export async function createApplicationServer(declaration,{directory,port=0,data
       return {contractId,snapshotVersion,state:current,pending,defaults,availability};
     }
     const evidence=(invocation,result,phase)=>({format:'application-evidence/v1',phase,invocation,policies:model.actions[invocation.action].policies,preconditions:model.actions[invocation.action].preconditions,group:{updates:model.actions[invocation.action].updates,inserts:model.actions[invocation.action].inserts,deletes:model.actions[invocation.action].deletes},outcome:{status:result.status,code:result.code??null,requirements:result.request?.requirements??[],events:result.events??[]},method:'Actual interpreter/durable result and declared AST; not a parser trace or ordered guard evaluation.'});
-    const publish=()=>{const event=`event: update\ndata: ${JSON.stringify(snapshot())}\n\n`;for(const res of streams)if(!res.write(event))res.destroy();};
+    const publish=()=>{const event=`event: update\ndata: ${encodeJson(snapshot())}\n\n`;for(const res of streams)if(!res.write(event))res.destroy();};
     server=createServer(async(req,res)=>{
-      const json=(status,value)=>{res.writeHead(status,{'content-type':'application/json','cache-control':'no-store'});res.end(JSON.stringify(value));};
+      const json=(status,value)=>{res.writeHead(status,{'content-type':'application/json','cache-control':'no-store'});res.end(encodeJson(value));};
       try{
         if(![`127.0.0.1:${server.address().port}`,`localhost:${server.address().port}`].includes(req.headers.host))throw fail('Unexpected host.',403);
         if(req.headers.origin&&req.headers.origin!==`http://${req.headers.host}`)throw fail('Cross-origin requests are not supported.',403);
@@ -93,23 +114,16 @@ export async function createApplicationServer(declaration,{directory,port=0,data
         if(req.method==='GET'&&url.pathname==='/api/contract')return json(200,{contractId,contract});
         if(req.method==='GET'&&url.pathname==='/api/snapshot')return json(200,snapshot());
         if(req.method==='GET'&&url.pathname==='/api/events'){
-          res.writeHead(200,{'content-type':'text/event-stream','cache-control':'no-store',connection:'keep-alive'});streams.add(res);res.write(`event: update\ndata: ${JSON.stringify(snapshot())}\n\n`);res.on('close',()=>streams.delete(res));return;
+          res.writeHead(200,{'content-type':'text/event-stream','cache-control':'no-store',connection:'keep-alive'});streams.add(res);res.write(`event: update\ndata: ${encodeJson(snapshot())}\n\n`);res.on('close',()=>streams.delete(res));return;
         }
         if(req.method==='POST'&&['/api/actions/preview','/api/actions/execute','/api/actions/reconcile','/api/approvals/grant','/api/approvals/resume'].includes(url.pathname)){
           if(req.headers['content-type']?.split(';')[0]!=='application/json')throw fail('Expected JSON.',415);
           let bytes=0;const chunks=[];for await(const chunk of req){bytes+=chunk.length;if(bytes>16384)throw fail('Request too large.',413);chunks.push(chunk);}
-          let body;try{body=JSON.parse(Buffer.concat(chunks).toString());}catch{throw fail('Invalid JSON.');}
-          const kind=url.pathname.split('/').at(-1);let result,invocation,key,replayed=false;
+          const kind=url.pathname.split('/').at(-1);let body,result,invocation,key,replayed=false;
+          try{body=decodeStrictJson(requestSchemas[kind],Buffer.concat(chunks).toString());}catch(e){throw fail(e.message||'Invalid JSON.');}
           try{
-            const required=kind==='grant'?['actor','requestId','policyId']:kind==='resume'?['actor','requestId']:kind==='reconcile'?['actor','submissionId']:['actor','action','args'];
-             exact(body,kind==='execute'?[...required,'submissionId','expectedContractId']:kind==='reconcile'?[...required,'expectedContractId']:required,required);
             if(!contract.actors.some(a=>a.id===body.actor))throw Error('Choose a known person.');
-            if(Object.hasOwn(body,'submissionId')){
-              if(typeof body.submissionId!=='string'||!body.submissionId.trim()||body.submissionId.length>200)throw Error('Expected a nonempty submission ID of at most 200 characters.');
-              key=submissionKey(body.submissionId);
-            }
-            if((kind==='resume'||kind==='grant')&&(typeof body.requestId!=='string'||!body.requestId.length||body.requestId.length>1000))throw Error('Choose a request.');
-            if(kind==='grant'&&typeof body.policyId!=='string')throw Error('Choose a policy.');
+            if(Object.hasOwn(body,'submissionId'))key=submissionKey(body.submissionId);
           }catch(e){throw fail(e.message);}
            if(Object.hasOwn(body,'expectedContractId')&&body.expectedContractId!==contractId)throw fail('Application contract changed. Reload before continuing.',409);
            if(key){
@@ -126,7 +140,7 @@ export async function createApplicationServer(declaration,{directory,port=0,data
               if(kind==='preview')result=runtime.prepare(state(),invocation);
               else{
                 const outcome=run(durableExecute(runtime,db,invocation,key?{beforeCommit:()=>{
-                  db.prepare('INSERT INTO application_submissions(invocation_id,contract_id,args_json) VALUES(?,?,?)').run(key,contractId,JSON.stringify(body.args));
+                  db.prepare('INSERT INTO application_submissions(invocation_id,contract_id,args_json) VALUES(?,?,?)').run(key,contractId,encodeJson(body.args));
                 }}:undefined));
                 // Another process may have won after our lookup, with a different
                 // host clock. Compare the client command, never retry with a new ID.

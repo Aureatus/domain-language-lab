@@ -9,30 +9,41 @@ import {jsonSnapshot, validateState as validateV1} from '../semantic/core.mjs';
 import {validateState as validateV2} from '../semantic/v2/core.mjs';
 import {makeDurableRuntime, makeDurableStore, initializeDurableState, durableState,
   durableExecute, durableApprove, durableResume, closeDurableStore} from '../adapters/effect/durable.mjs';
+import {
+  decodeJson,
+  decodeStrictJson,
+  decodeJsonValue,
+  encodeJson,
+  encodeCanonicalJson as canonical,
+  DurablePendingRequestSchema,
+  DurableReceiptSchema,
+  DurableEventSchema,
+  SimulationIdentity,
+  WorkspaceExecuteRequestSchema,
+  WorkspaceApproveRequestSchema,
+  WorkspaceResumeRequestSchema,
+  Schema,
+} from '../adapters/effect/json.mjs';
 import {deriveTools, deriveChange} from './derive.mjs';
 
 const adapterRequire = createRequire(new URL('../adapters/effect/package.json', import.meta.url));
 const Effect = await import(adapterRequire.resolve('effect/Effect'));
 const run = Effect.runSync;
 const here = dirname(fileURLToPath(import.meta.url));
-const canonical = value => Array.isArray(value) ? `[${value.map(canonical).join(',')}]`
-  : value && typeof value === 'object' ? `{${Object.keys(value).sort().map(k => `${JSON.stringify(k)}:${canonical(value[k])}`).join(',')}}` : JSON.stringify(value);
-const decode = value => jsonSnapshot(JSON.parse(value));
+const decodeWith = (schema, value) => jsonSnapshot(decodeJson(schema, value));
 const scope = {identity: 'local-simulation', authentication: false, transport: 'loopback-only', clock: 'explicit-simulation-input', mutations: 'through-this-server-only'};
 const failure = (status, message) => Object.assign(new Error(message), {httpStatus: status});
-function exact(value, keys) {
-  if (!value || Array.isArray(value) || typeof value !== 'object' ||
-    Object.keys(value).length !== keys.length || keys.some(k => !Object.hasOwn(value, k)))
-    throw failure(400, `Expected exactly: ${keys.join(', ')}.`);
-}
+const decodeSimulationIdentity = Schema.decodeUnknownSync(SimulationIdentity);
 function identity(value) {
-  if (typeof value !== 'string' || value.length > 1000 || !/^[A-Za-z][A-Za-z0-9_.:-]*$/.test(value) || ['constructor', 'prototype'].includes(value))
-    throw failure(400, 'Expected a bounded simulation identity.');
+  try { decodeSimulationIdentity(value); }
+  catch { throw failure(400, 'Expected a bounded simulation identity.'); }
 }
-function clock(value) {
-  if (!Number.isSafeInteger(value) || value < 0 || Object.is(value, -0)) throw failure(400, 'Expected nonnegative safe clock.');
-}
-async function body(req) {
+const workspaceRequestSchemas = {
+  execute: WorkspaceExecuteRequestSchema,
+  approve: WorkspaceApproveRequestSchema,
+  resume: WorkspaceResumeRequestSchema,
+};
+async function body(req, kind) {
   if (req.headers['content-type']?.split(';')[0].trim() !== 'application/json') throw failure(415, 'Expected application/json.');
   let size = 0; const chunks = [];
   for await (const chunk of req) {
@@ -40,7 +51,7 @@ async function body(req) {
     if (size > 262144) throw failure(413, 'JSON body exceeds 262144 bytes.');
     chunks.push(chunk);
   }
-  try { return jsonSnapshot(JSON.parse(Buffer.concat(chunks).toString('utf8'))); }
+  try { return jsonSnapshot(decodeStrictJson(workspaceRequestSchemas[kind], Buffer.concat(chunks).toString('utf8'))); }
   catch { throw failure(400, 'Malformed or unbounded JSON.'); }
 }
 const sequence = db => db.prepare('SELECT (SELECT count(*) FROM durable_invocations) + (SELECT count(*) FROM durable_operations) AS n').get().n;
@@ -53,14 +64,14 @@ function snapshot(binding, profile) {
   try {
     const meta = Object.fromEntries(db.prepare('SELECT key,value FROM durable_meta').all().map(x => [x.key, x.value]));
     if (meta.format !== 'durable-effect/v1' || meta.model_key !== canonical(runtime.model)) throw new Error('Durable model binding mismatch.');
-    const state = validate(runtime.model, decode(meta.state_json));
+    const state = validate(runtime.model, jsonSnapshot(decodeJsonValue(meta.state_json)));
     if (canonical(state) !== meta.state_json) throw new Error('Stored state is not canonical.');
     const pending = db.prepare('SELECT * FROM durable_pending ORDER BY invocation_id').all().map(row => {
-      const request = decode(row.request_json);
+      const request = decodeWith(DurablePendingRequestSchema, row.request_json);
       const original = runtime.execute(request.prestate, request.invocation);
       if (request.invocation?.id !== row.invocation_id || original.status !== 'pending' || canonical(original.request) !== canonical(request)) throw new Error('Malformed stored pending request.');
       const grants = db.prepare('SELECT receipt_json FROM durable_grants WHERE invocation_id=? ORDER BY policy_id').all(row.invocation_id).map(grant => {
-        const receipt = decode(grant.receipt_json);
+        const receipt = decodeWith(DurableReceiptSchema, grant.receipt_json);
         const approved = runtime.approve(request, {policyId: receipt.policyId, approver: receipt.approver});
         if (approved.status !== 'approved' || canonical(approved.receipt) !== canonical(receipt)) throw new Error('Malformed stored grant.');
         return {policyId: receipt.policyId, approver: receipt.approver};
@@ -68,7 +79,7 @@ function snapshot(binding, profile) {
       return {invocationId: row.invocation_id, status: row.status, request, grants, resumeId: row.resume_id};
     });
     const events = db.prepare('SELECT sequence,event_id,event_json FROM durable_outbox ORDER BY sequence').all()
-      .map(row => ({sequence: row.sequence, eventId: row.event_id, event: decode(row.event_json)}));
+      .map(row => ({sequence: row.sequence, eventId: row.event_id, event: decodeWith(DurableEventSchema, row.event_json)}));
     const result = {profile, model: runtime.model, state, pending, events, tools: deriveTools(runtime.model), sequence: sequence(db), scope};
     db.exec('COMMIT'); return result;
   } catch (error) { try { db.exec('ROLLBACK'); } catch {} throw error; }
@@ -102,10 +113,10 @@ export async function createWorkspaceServer({directory = resolve('artifacts/work
     }
     const send = (client, change) => {
       // Bound a stalled client's memory. Reconnection always requests full resync.
-      if (!client.res.write(`id: ${change.sequence}\nevent: change\ndata: ${JSON.stringify(change)}\n\n`)) client.res.destroy();
+      if (!client.res.write(`id: ${change.sequence}\nevent: change\ndata: ${encodeJson(change)}\n\n`)) client.res.destroy();
     };
     server = createServer(async (req, res) => {
-      const json = (status, value) => { res.writeHead(status, {'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store'}); res.end(JSON.stringify(value)); };
+      const json = (status, value) => { res.writeHead(status, {'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store'}); res.end(encodeJson(value)); };
       try {
         if (closing) throw failure(503, 'Server closing.');
         const allowedHosts = [`127.0.0.1:${server.address().port}`, `localhost:${server.address().port}`];
@@ -130,22 +141,11 @@ export async function createWorkspaceServer({directory = resolve('artifacts/work
         if (['/api/execute', '/api/approve', '/api/resume'].includes(url.pathname)) {
           if (req.method !== 'POST') throw failure(405, 'Method not allowed.');
           if (url.search) throw failure(400, 'Unexpected query members.');
-          const source = await body(req);
           const kind = url.pathname.slice(5);
-          exact(source, kind === 'execute' ? ['profile', 'invocation'] : kind === 'approve' ? ['profile', 'command', 'actor'] : ['profile', 'command']);
+          const source = await body(req, kind);
           const binding = bindings.get(source.profile);
           if (!binding) throw failure(400, 'Unknown profile.');
           const {runtime, db} = binding;
-          if (kind !== 'execute' && source.profile !== 'v2') throw failure(400, 'Approval operations require v2.');
-          if (kind === 'execute') {
-            exact(source.invocation, ['id', 'action', 'args', 'actor', 'clock']);
-            identity(source.invocation.id); identity(source.invocation.actor); identity(source.invocation.action); clock(source.invocation.clock);
-          } else {
-            exact(source.command, kind === 'approve' ? ['id', 'invocationId', 'policyId'] : ['id', 'invocationId', 'clock']);
-            identity(source.command.id); identity(source.command.invocationId);
-            if (kind === 'approve') { identity(source.command.policyId); identity(source.actor); }
-            else clock(source.command.clock);
-          }
           const before = sequence(db);
           const result = run(kind === 'execute' ? durableExecute(runtime, db, source.invocation)
             : kind === 'approve' ? durableApprove(runtime, db, source.command, {authenticatedApprover: source.actor})

@@ -3,6 +3,7 @@ import {resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {parseSource} from './frontend.mjs';
 import {loadSource} from './load.mjs';
+import {encodeJsonPretty} from '../adapters/effect/json.mjs';
 
 // Advisories are deliberately narrower than validation. No safety/proof claims.
 export function lintSource(source,{filename='<source>',parsed:provided}={}){
@@ -54,7 +55,7 @@ export function lintCLI(args){
   }
   catch(error){diagnostics=[{filename:paths[0],line:1,column:1,severity:'error',ruleId:'io/read-source',message:error.message}];}
   const errors=diagnostics.filter(d=>d.severity==='error').length,warnings=diagnostics.length-errors;
-  if(json)console.log(JSON.stringify({diagnostics,errors,warnings},null,2));
+  if(json)console.log(encodeJsonPretty({diagnostics,errors,warnings}));
   else {
     for(const d of diagnostics)console.log(`${d.filename}:${d.line}:${d.column}: ${d.severity} ${d.ruleId}: ${d.message}`);
     console.log(`${errors} errors, ${warnings} advisory warnings. Not a proof of business correctness.`);

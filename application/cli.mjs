@@ -3,6 +3,7 @@ import {pathToFileURL} from 'node:url';
 import {createHash,randomUUID} from 'node:crypto';
 import {loadSource} from '../syntax/load.mjs';
 import {deriveApplication} from './derive.mjs';
+import {decodeJsonObject,encodeJson,encodeJsonPretty} from '../adapters/effect/json.mjs';
 
 const usage=`Usage: npm run application:cli -- COMMAND [ID] --url http://127.0.0.1:4174 [options]
 Commands: list [RESOURCE], inspect [ACTION], preview ACTION, execute ACTION,
@@ -37,7 +38,7 @@ export async function runCLI(argv,{stdout=console.log}={}){
     const loaded=loadSource(options.view);
     if(loaded.modules.at(-1).kind!=='view')throw Error('--view must select a view module entry.');
     const derived=deriveApplication(loaded.declaration);
-    const expected=createHash('sha256').update(JSON.stringify({model:derived.model,contract})).digest('hex');
+    const expected=createHash('sha256').update(encodeJson({model:derived.model,contract})).digest('hex');
     if(expected!==contractId)throw Error('Local view domain differs from the backend. No command was sent.');
     presentation=derived.contract;
   }
@@ -49,8 +50,7 @@ export async function runCLI(argv,{stdout=console.log}={}){
   }else if(command==='inbox')result=inboxFor(await client.snapshot(),options.actor);
   else if(command==='preview'||command==='execute'){
     if(!Object.hasOwn(contract.actions,id))throw Error(`Unknown action '${id}'. Use list or inspect.`);
-    let args;try{args=JSON.parse(options.args??'{}');}catch{throw Error('--args must be a JSON object.');}
-    if(!args||typeof args!=='object'||Array.isArray(args))throw Error('--args must be a JSON object.');
+    let args;try{args=decodeJsonObject(options.args??'{}');}catch{throw Error('--args must be a JSON object.');}
     if(command==='preview')result=await client.preview({actor:options.actor,action:id,args});
     else{
       const submissionId=options['submission-id']??randomUUID();
@@ -60,10 +60,10 @@ export async function runCLI(argv,{stdout=console.log}={}){
   }else if(command==='reconcile'){
     result=await client.reconcile({actor:options.actor,submissionId:id});
   }else result=await client[command]({actor:options.actor,requestId:id,...(command==='grant'?{policyId:options.policy}:{})});
-  if(options.json)stdout(JSON.stringify(result));
+  if(options.json)stdout(encodeJson(result));
   else if(result.message)stdout(`${result.message}\nStatus: ${result.status}${result.code?` (${result.code})`:''}${result.submissionId?`\nSubmission: ${result.submissionId}`:''}${result.snapshot?`\nRevision: ${result.snapshot.state.revision}`:''}`);
   else if(command==='list'&&!id)stdout(result.map(a=>`${a.id} — ${a.label}\n  arguments: ${a.arguments.map(f=>`${f.name}: ${f.schema.type}`).join(', ')||'(none)'}\n  inspect: inspect ${a.id}`).join('\n'));
-  else stdout(JSON.stringify(result,null,2));
+  else stdout(encodeJsonPretty(result));
   return result;
 }
 if(process.argv[1]&&pathToFileURL(process.argv[1]).href===import.meta.url){

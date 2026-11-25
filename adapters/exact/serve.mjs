@@ -3,6 +3,7 @@ import {createServer} from 'node:http';
 import {readFile,mkdir} from 'node:fs/promises';
 import {resolve,extname} from 'node:path';
 import {createApplicationServer} from '../../application/server.mjs';
+import {encodeJson} from '../effect/json.mjs';
 import {loadSource} from '../../syntax/load.mjs';
 const [model='leave/model.mjs',root='artifacts/exact-app/dist',port='4186',directory='/tmp/opencode/exact-http-data']=process.argv.slice(2);
 await mkdir(directory,{recursive:true});
@@ -23,7 +24,7 @@ const server=createServer(async(req,res)=>{
     if(!file.startsWith(resolve(root)+'/'))throw Error('Invalid path');
     const types={'.html':'text/html','.js':'text/javascript','.mjs':'text/javascript','.css':'text/css','.json':'application/json','.wasm':'application/wasm'};
     const data=await readFile(file);res.writeHead(200,{'content-type':types[extname(file)]??'application/octet-stream'});res.end(data);
-  }catch(e){if(!res.headersSent)res.writeHead(500,{'content-type':'application/json'});res.end(JSON.stringify({error:e.message}));}
+  }catch(e){if(!res.headersSent)res.writeHead(500,{'content-type':'application/json'});res.end(encodeJson({error:e.message}));}
 });
 server.listen(Number(port),'127.0.0.1',()=>console.log(`Exact adapter ${origin}; shared backend ${backend.url}; data ${directory}`));
 for(const signal of ['SIGINT','SIGTERM'])process.on(signal,async()=>{server.closeAllConnections();server.close();await backend.close();process.exit();});

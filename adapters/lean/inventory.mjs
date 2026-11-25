@@ -5,6 +5,7 @@ import {inventoryModel} from '../../inventory/model.mjs';
 import {validateModel} from '../../semantic/core.mjs';
 import {generate, hash, Unsupported} from './generate.mjs';
 import {check} from './check.mjs';
+import {encodeJson, encodeJsonPretty} from '../effect/json.mjs';
 
 export const PROJECTION = 'inventory-stock-capacity/1';
 const ACTION = 'reservation.reserve', GUARD = `${ACTION}.capacity`, UPDATE = `${ACTION}.set.available`;
@@ -44,7 +45,7 @@ export function projectInventory(source = inventoryModel) {
       case 'not': return dependency(e.value);
       case 'add': case 'sub': case 'lt': case 'le': case 'eq': case 'and': case 'or': dependency(e.left); return dependency(e.right);
     }
-    fail(`Unexpected retained dependency: ${JSON.stringify(e)}`);
+    fail(`Unexpected retained dependency: ${encodeJson(e)}`);
   }
   const retainedGuard = original.preconditions.find(x => x.id === GUARD);
   const retainedUpdate = original.updates.find(x => x.id === UPDATE);
@@ -86,13 +87,13 @@ export function checkInventory(directory, source = inventoryModel, law = obligat
   const report = check(model, law, directory);
   report.inventory = metadata;
   report.inventory_adapter_sha256 = hash(readFileSync(fileURLToPath(import.meta.url), 'utf8'));
-  writeFileSync(resolve(directory, 'inventory-projection.json'), JSON.stringify(metadata, null, 2) + '\n');
-  writeFileSync(resolve(directory, 'report.json'), JSON.stringify(report, null, 2) + '\n');
+  writeFileSync(resolve(directory, 'inventory-projection.json'), encodeJsonPretty(metadata) + '\n');
+  writeFileSync(resolve(directory, 'report.json'), encodeJsonPretty(report) + '\n');
   return report;
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const report = checkInventory(resolve(process.argv[2] || '/tmp/opencode/inventory-evidence/positive'));
-  console.log(JSON.stringify({status: report.status, source_sha256: report.inventory.source_sha256, detail: report.detail}, null, 2));
+  console.log(encodeJsonPretty({status: report.status, source_sha256: report.inventory.source_sha256, detail: report.detail}));
   process.exitCode = report.status === 'proof_checked' ? 0 : 1;
 }

@@ -5,6 +5,7 @@ import {fileURLToPath} from 'node:url';
 import {createRequire} from 'node:module';
 import {makeDurableRuntime, makeDurableStore, initializeDurableState, durableExecute,
   durableApprove, durableResume, durablePending, durableState, pullOutbox, closeDurableStore} from '../../adapters/effect/durable.mjs';
+import {encodeJsonPretty} from '../../adapters/effect/json.mjs';
 import {inventoryV2Model, initialState, invocation} from './model.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -104,7 +105,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   const report = await runDurableDemo();
   const target = resolve(process.argv[2] ?? resolve(here, '../../artifacts/inventory-v2-report.json'));
   await mkdir(dirname(target), {recursive: true});
-  await writeFile(target, `${JSON.stringify(report, null, 2)}\n`);
-  process.stdout.write(`${JSON.stringify({report: target, execution: report.execution,
-    scenarios: report.scenarios.map(({scenario, checks, databasePath}) => ({scenario, checks, databasePath}))}, null, 2)}\n`);
+  await writeFile(target, `${encodeJsonPretty(report)}\n`);
+  process.stdout.write(`${encodeJsonPretty({report: target, execution: report.execution,
+    scenarios: report.scenarios.map(({scenario, checks, databasePath}) => ({scenario, checks, databasePath}))})}\n`);
 }

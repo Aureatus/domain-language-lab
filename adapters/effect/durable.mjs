@@ -4,6 +4,17 @@ import * as Layer from 'effect/Layer';
 import { DatabaseSync } from 'node:sqlite';
 import { createInterpreter, jsonSnapshot, validateState } from '../../semantic/core.mjs';
 import { createInterpreter as createV2, validateState as validateV2State } from '../../semantic/v2/core.mjs';
+import {
+  decodeJson,
+  decodeJsonValue,
+  encodeCanonicalJson as canonical,
+  DurableEventSchema,
+  DurableInvocationSchema,
+  DurableOutcomeSchema,
+  DurableOperationOutcomeSchema,
+  DurablePendingRequestSchema,
+  DurableReceiptSchema,
+} from './json.mjs';
 
 const profile = model => {
   switch (model?.format) {
@@ -14,21 +25,10 @@ const profile = model => {
 };
 
 const FORMAT = 'durable-effect/v1';
-const canonical = value => {
-  if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`;
-  if (value && typeof value === 'object') return `{${Object.keys(value).sort().map(k => `${JSON.stringify(k)}:${canonical(value[k])}`).join(',')}}`;
-  return JSON.stringify(value);
-};
-const decode = text => jsonSnapshot(JSON.parse(text));
+const decodeWith = (schema, text) => jsonSnapshot(decodeJson(schema, text));
 const decodeOutcome = (text, model) => {
-  const value = decode(text);
-  if (!value || !['committed', 'pending', 'rejected'].includes(value.status) || !value.state)
-    throw new Error('Malformed stored invocation outcome.');
+  const value = decodeWith(DurableOutcomeSchema, text);
   profile(model).validate(model, value.state);
-  if (value.status === 'committed' && (!Array.isArray(value.events) || value.events.some(e => !e || typeof e.id !== 'string')))
-    throw new Error('Malformed stored committed outcome.');
-  if (value.status === 'pending' && !Array.isArray(value.policyIds)) throw new Error('Malformed stored pending outcome.');
-  if (value.status === 'rejected' && typeof value.code !== 'string') throw new Error('Malformed stored rejected outcome.');
   return value;
 };
 const conflict = result => ({ status: 'rejected', code: 'invocation-conflict', reason: 'Invocation ID already has a different command or model.' , state: result?.state });
@@ -65,7 +65,7 @@ function validateStored(db, modelKey, model) {
   if (!meta.format) return null;
   if (meta.format !== FORMAT) throw new Error(`Unsupported durable store format: ${meta.format}`);
   if (meta.model_key !== modelKey) throw new Error('Durable store is bound to different model content.');
-  const state = profile(model).validate(model, JSON.parse(meta.state_json));
+  const state = profile(model).validate(model, jsonSnapshot(decodeJsonValue(meta.state_json)));
   if (canonical(state) !== meta.state_json) throw new Error('Stored state is not canonical JSON.');
   return state;
 }
@@ -163,17 +163,15 @@ const requireV2 = runtime => {
 };
 const rejected = (code, reason) => ({status: 'rejected', code, reason});
 const decodeOperation = (text, runtime) => {
-  const value = decode(text);
-  if (value?.status === 'committed') return decodeOutcome(text, runtime.model);
-  if (value?.status === 'rejected' && typeof value.code === 'string' && typeof value.reason === 'string') {
+  const value = decodeWith(DurableOperationOutcomeSchema, text);
+  if (value.status === 'committed') return decodeOutcome(text, runtime.model);
+  if (value.status === 'rejected') {
     if (Object.hasOwn(value, 'state')) profile(runtime.model).validate(runtime.model, value.state);
     return value;
   }
-  if (value?.status === 'approved' && value.receipt?.format === 'semantic-approval-receipt/v2') {
-    const {request, policyId, approver} = value.receipt;
-    const checked = runtime.approve(request, {policyId, approver});
-    if (checked.status === 'approved' && canonical(checked) === canonical(value)) return value;
-  }
+  const {request, policyId, approver} = value.receipt;
+  const checked = runtime.approve(request, {policyId, approver});
+  if (checked.status === 'approved' && canonical(checked) === canonical(value)) return value;
   throw new Error('Malformed stored operation outcome.');
 };
 
@@ -227,7 +225,7 @@ export const durableApprove = (runtime, db, source, host) => Effect.try({
     return operation(runtime, db, {...command, kind: 'approve', authenticatedApprover: host.authenticatedApprover}, host.beforeCommit, (_state, pending) => {
       if (db.prepare('SELECT policy_id FROM durable_grants WHERE invocation_id=? AND policy_id=?').get(command.invocationId, command.policyId))
         return rejected('already-granted', 'Policy already has a persisted grant.');
-      return runtime.approve(decode(pending.request_json), {policyId: command.policyId, approver: host.authenticatedApprover});
+      return runtime.approve(decodeWith(DurablePendingRequestSchema, pending.request_json), {policyId: command.policyId, approver: host.authenticatedApprover});
     });
   }, catch: error => error,
 });
@@ -243,8 +241,8 @@ export const durableResume = (runtime, db, source, options = {}) => Effect.try({
     return operation(runtime, db, {...command, kind: 'resume'}, options.beforeCommit, (state, pending) => {
       const original = db.prepare('SELECT command_json FROM durable_invocations WHERE id=?').get(command.invocationId);
       const receipts = db.prepare('SELECT receipt_json FROM durable_grants WHERE invocation_id=? ORDER BY policy_id').all(command.invocationId)
-        .map(row => decode(row.receipt_json));
-      return runtime.resume(state, decode(original.command_json), decode(pending.request_json), receipts, {clock: command.clock});
+        .map(row => decodeWith(DurableReceiptSchema, row.receipt_json));
+      return runtime.resume(state, decodeWith(DurableInvocationSchema, original.command_json), decodeWith(DurablePendingRequestSchema, pending.request_json), receipts, {clock: command.clock});
     });
   }, catch: error => error,
 });
@@ -258,8 +256,8 @@ export const durablePending = (runtime, db, invocationId) => Effect.try({
       if (validateStored(db, canonical(runtime.model), runtime.model) === null) throw new Error('Durable store is not initialized.');
       const pending = db.prepare('SELECT * FROM durable_pending WHERE invocation_id=?').get(invocationId);
       const grants = db.prepare('SELECT receipt_json FROM durable_grants WHERE invocation_id=? ORDER BY policy_id').all(invocationId)
-        .map(row => { const receipt = decode(row.receipt_json); return {policyId: receipt.policyId, approver: receipt.approver}; });
-      const result = pending ? jsonSnapshot({invocationId, status: pending.status, request: decode(pending.request_json), grants, resumeId: pending.resume_id}) : null;
+        .map(row => { const receipt = decodeWith(DurableReceiptSchema, row.receipt_json); return {policyId: receipt.policyId, approver: receipt.approver}; });
+      const result = pending ? jsonSnapshot({invocationId, status: pending.status, request: decodeWith(DurablePendingRequestSchema, pending.request_json), grants, resumeId: pending.resume_id}) : null;
       db.exec('COMMIT'); return result;
     } catch (error) { try { db.exec('ROLLBACK'); } catch {} throw error; }
   }, catch: error => error,
@@ -270,7 +268,7 @@ export const pullOutbox = (db, { limit = 100 } = {}) => Effect.try({
   try: () => {
     if (!Number.isSafeInteger(limit) || limit < 1 || limit > 1000) throw new TypeError('limit must be an integer from 1 to 1000');
     return db.prepare('SELECT sequence,event_id,event_json FROM durable_outbox WHERE acknowledged=0 ORDER BY sequence LIMIT ?')
-      .all(limit).map(row => ({ sequence: row.sequence, eventId: row.event_id, event: decode(row.event_json) }));
+      .all(limit).map(row => ({ sequence: row.sequence, eventId: row.event_id, event: decodeWith(DurableEventSchema, row.event_json) }));
   }, catch: error => error,
 });
 export const acknowledgeOutbox = (db, sequence) => Effect.try({

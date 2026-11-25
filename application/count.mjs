@@ -2,6 +2,7 @@
 // Usage: node application/count.mjs APP_DIR ENTRY [LAUNCHER] [--report OUTPUT]
 import {readFile,readdir,writeFile} from 'node:fs/promises';
 import {resolve,relative,dirname,sep} from 'node:path';
+import {encodeJsonPretty} from '../adapters/effect/json.mjs';
 const argv=process.argv.slice(2),reportIndex=argv.indexOf('--report');
 const reportPath=reportIndex<0?null:argv.splice(reportIndex,2)[1];
 const [directory,...entries]=argv;
@@ -34,5 +35,5 @@ for(const entry of entries)await visit(resolve(root,entry));
 const files=[...authored.values()].sort((a,b)=>a.path.localeCompare(b.path));
 const excluded=(await readdir(root,{withFileTypes:true})).filter(e=>!authored.has(resolve(root,e.name))).map(e=>({path:relative(process.cwd(),resolve(root,e.name)),reason:e.isDirectory()?'demo assets/tooling (not entry import closure)':'test/demo/evidence tooling (not entry import closure)'}));
 const report={scope:'Per-application static ESM import closure plus explicit loadSource(new URL(...)) and recursively resolved relative .domain imports; all selected view entries counted. Framework, tests, demo tooling and media excluded. No baseline/savings claim.',directory:root,entries,files,total:{files:files.length,lines:files.reduce((n,f)=>n+f.lines,0),nonblankLines:files.reduce((n,f)=>n+f.nonblankLines,0),bytes:files.reduce((n,f)=>n+f.bytes,0)},externalImports:[...external].sort(),excluded};
-if(reportPath)await writeFile(reportPath,JSON.stringify(report,null,2)+'\n');
-console.log(JSON.stringify(report,null,2));
+if(reportPath)await writeFile(reportPath,encodeJsonPretty(report)+'\n');
+console.log(encodeJsonPretty(report));
