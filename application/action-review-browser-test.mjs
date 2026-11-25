@@ -5,14 +5,16 @@ import assert from 'node:assert/strict';
 import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
 import {mkdtemp, rm, copyFile, readdir, readFile} from 'node:fs/promises';
-import {join} from 'node:path';
-import {chromium} from '/tmp/opencode/workbench-tooling/node_modules/playwright/index.mjs';
+import {createRequire} from 'node:module';
+import {tmpdir} from 'node:os';
+import {join, resolve} from 'node:path';
 import {createApplicationServer} from './server.mjs';
 import {writeAdapter} from '../adapters/exact/generate.mjs';
 import declaration from '../leave/model.mjs';
 import defaultCommand from '../leave/review-request.json' with {type:'json'};
 
 const exec=promisify(execFile);
+const exactRevision='d8863f736172954b605c3bff22f51337c6983170';
 async function readSchedule(path){
   const {format,actor,action,args,contractId,events}=JSON.parse(await readFile(path,'utf8'));
   assert.equal(format,'action-events/v1','Unsupported trace format');
@@ -62,11 +64,7 @@ function normalizedUpdate(snapshot){
 }
 
 async function mountExact(page,url,dir){
-  const env={...process.env,EXACT:process.env.EXACT_ROOT??'/tmp/opencode/exact-source',
-    BUN:process.env.BUN??'/tmp/opencode/exact-bun/bun-linux-x64/bun',EXACT_FEEDBACK:'0'};
-  assert.equal((await exec('git',['-C',env.EXACT,'rev-parse','HEAD'])).stdout.trim(),'d8863f736172954b605c3bff22f51337c6983170','Unsupported Exact revision');
   await writeAdapter(await (await fetch(url+'/api/contract')).json(),dir,{api:url});
-  const template=process.env.EXACT_TEMPLATE??'/tmp/opencode/exact-generated';
   for(const file of ['exact.mjs','package.json'])await copyFile(join(template,file),join(dir,file));
   for(const args of [['contract','build','app.contract','--json','--errors-only'],['web-build','--out','dist']])
     await exec(env.BUN,['exact.mjs',...args],{cwd:dir,env,timeout:120000});
@@ -199,10 +197,17 @@ async function trace(browser,exact,dir,schedule){
 
 if(process.argv.length>3)throw Error('Usage: node application/action-review-browser-test.mjs [counterexample.json]');
 const schedule=process.argv[2]?await readSchedule(process.argv[2]):null;
+if(!process.env.EXACT_ROOT||!process.env.EXACT_TEMPLATE)
+  throw Error('Set EXACT_ROOT and EXACT_TEMPLATE as described in docs/exact-adapter.md.');
+const template=resolve(process.env.EXACT_TEMPLATE);
+const env={...process.env,EXACT:resolve(process.env.EXACT_ROOT),BUN:process.env.BUN??'bun',EXACT_FEEDBACK:'0'};
+assert.equal((await exec('git',['-C',env.EXACT,'rev-parse','HEAD'])).stdout.trim(),exactRevision,'Unsupported Exact revision');
+const require=createRequire(join(env.EXACT,'package.json'));
+const {chromium}=require('playwright-core');
 const browser=await chromium.launch({headless:true});
 try{
   for(const exact of [false,true]){
-    const dir=await mkdtemp('/tmp/opencode/action-review-');
+    const dir=await mkdtemp(join(tmpdir(),'action-review-'));
     try{await trace(browser,exact,dir,schedule);}finally{await rm(dir,{recursive:true,force:true});}
   }
 }finally{await browser.close();}
