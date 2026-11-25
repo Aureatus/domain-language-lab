@@ -11,7 +11,7 @@ import {inventoryV2Model, initialState, invocation} from './model.ts';
 const here = dirname(fileURLToPath(import.meta.url));
 // Effect is intentionally installed in the adapter package, not at repository root.
 const adapterRequire = createRequire(new URL('../../adapters/effect/package.json', import.meta.url));
-const Effect = await import(adapterRequire.resolve('effect/Effect'));
+const Effect: typeof import('../../adapters/effect/node_modules/effect/dist/Effect.js') = await import(adapterRequire.resolve('effect/Effect'));
 const run = Effect.runPromise;
 export const durableApprovalFixture = Object.freeze({
   modelId: 'inventory.v2', initialRevision: 0,
@@ -20,7 +20,7 @@ export const durableApprovalFixture = Object.freeze({
 });
 
 /** One open/close lifetime; also usable from a fresh child process. No direct state/ledger writes. */
-export async function runDurablePhase(databasePath, scenario, phase) {
+export async function runDurablePhase(databasePath: string, scenario: string, phase: string) {
   if (!['lifecycle', 'stale', 'expired'].includes(scenario)) throw new Error('Unknown scenario');
   const runtime = makeDurableRuntime(inventoryV2Model);
   const db = await run(makeDurableStore(databasePath));
@@ -31,21 +31,24 @@ export async function runDurablePhase(databasePath, scenario, phase) {
   try {
     if (phase === 'start') await run(initializeDurableState(runtime, db, initialState));
     const before = await snapshot();
-    const results = [];
-    if (phase === 'start') results.push(await run(durableExecute(runtime, db, command)));
-    else if (phase === 'grant') results.push(await run(durableApprove(runtime, db,
+    const results: Array<Awaited<ReturnType<typeof execute>> | Awaited<ReturnType<typeof approve>> | Awaited<ReturnType<typeof resumeRequest>>> = [];
+    const execute = (invocation: Parameters<typeof durableExecute>[2]) => run(durableExecute(runtime, db, invocation));
+    const approve = () => run(durableApprove(runtime, db,
       {id: 'grant-1', invocationId: command.id, policyId: durableApprovalFixture.policyId},
-      {authenticatedApprover: durableApprovalFixture.approver})));
-    else if (phase === 'intervene') results.push(await run(durableExecute(runtime, db,
-      invocation('small-reserve', 'reserve', {reservationId: 'small-reservation', actor: 'bob', quantity: 1, clock: 100, expiresAt: 200}))));
-    else if (phase === 'resume') results.push(await run(durableResume(runtime, db, resume)));
+      {authenticatedApprover: durableApprovalFixture.approver}));
+    const resumeRequest = (request: typeof resume) => run(durableResume(runtime, db, request));
+    if (phase === 'start') results.push(await execute(command));
+    else if (phase === 'grant') results.push(await approve());
+    else if (phase === 'intervene') results.push(await execute(
+      invocation('small-reserve', 'reserve', {reservationId: 'small-reservation', actor: 'bob', quantity: 1, clock: 100, expiresAt: 200})));
+    else if (phase === 'resume') results.push(await resumeRequest(resume));
     else if (phase === 'retry') {
-      results.push(await run(durableResume(runtime, db, resume)));
-      results.push(await run(durableExecute(runtime, db, command)));
-      results.push(await run(durableResume(runtime, db, {...resume, id: 'resume-again'})));
+      results.push(await resumeRequest(resume));
+      results.push(await execute(command));
+      results.push(await resumeRequest({...resume, id: 'resume-again'}));
     } else if (phase === 'finish') {
-      results.push(await run(durableExecute(runtime, db, invocation('cancel-1', 'cancel', {reservationId: 'durable-reservation', clock: 102}))));
-      results.push(await run(durableExecute(runtime, db, invocation('delete-1', 'delete-terminal', {reservationId: 'durable-reservation', clock: 103}))));
+      results.push(await execute(invocation('cancel-1', 'cancel', {reservationId: 'durable-reservation', clock: 102})));
+      results.push(await execute(invocation('delete-1', 'delete-terminal', {reservationId: 'durable-reservation', clock: 103})));
     } else throw new Error('Unknown phase');
     return {scenario, phase, databasePath, before, results, after: await snapshot()};
   } finally { await run(closeDurableStore(db)); }
@@ -55,18 +58,20 @@ export async function runDurableDemo() {
   await mkdir('/tmp/opencode', {recursive: true});
   // Exclusive fresh directory on every run: never remove or overwrite a user's database.
   const directory = await mkdtemp('/tmp/opencode/inventory-v2-demo-');
-  const scenarios = [];
+  const scenarios: {scenario: string; databasePath: string; steps: Awaited<ReturnType<typeof runDurablePhase>>[]; checks: 'passed'}[] = [];
   for (const scenario of ['lifecycle', 'stale', 'expired']) {
     const databasePath = resolve(directory, `${scenario}.sqlite`);
     const phases = ['start', 'grant', ...(scenario === 'stale' ? ['intervene'] : []), 'resume',
       ...(scenario === 'lifecycle' ? ['retry', 'finish'] : [])];
-    const steps = [];
+    const steps: Awaited<ReturnType<typeof runDurablePhase>>[] = [];
     for (const phase of phases) steps.push(await runDurablePhase(databasePath, scenario, phase));
     const start = steps[0], grant = steps[1], resumed = steps.find(x => x.phase === 'resume');
+    assert.ok(resumed);
     assert.equal(start.results[0].status, 'pending');
     assert.deepEqual(start.after.state, initialState);
     assert.deepEqual(start.after.outbox, []);
     assert.equal(grant.results[0].status, 'approved');
+    assert.ok(resumed.before.pending);
     assert.equal(resumed.before.pending.grants[0].approver, 'warehouse');
     if (scenario === 'lifecycle') {
       assert.equal(resumed.results[0].status, 'committed');
@@ -74,12 +79,15 @@ export async function runDurableDemo() {
       assert.deepEqual(Object.keys(resumed.after.state.records.reservation), ['durable-reservation']);
       assert.deepEqual(resumed.after.outbox.map(x => x.event.kind), ['action', 'change', 'create']);
       assert.ok(resumed.after.outbox.every(x => x.event.clock === 101));
+      assert.ok(resumed.after.pending);
       assert.equal(resumed.after.pending.status, 'consumed');
       const retry = steps.find(x => x.phase === 'retry');
+      assert.ok(retry);
       assert.deepEqual(retry.results.map(x => x.status), ['duplicate', 'duplicate', 'rejected']);
       assert.equal(retry.results[2].code, 'consumed');
       assert.deepEqual(retry.after, retry.before);
       const finish = steps.at(-1);
+      assert.ok(finish);
       assert.deepEqual(finish.results.map(x => x.status), ['committed', 'committed']);
       assert.equal(finish.after.state.records.stock.camera.values.available, 8);
       assert.deepEqual(finish.after.state.records.reservation, {});

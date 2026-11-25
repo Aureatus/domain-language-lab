@@ -1,19 +1,27 @@
 import * as Effect from 'effect/Effect';
 import * as SynchronizedRef from 'effect/SynchronizedRef';
 import { createInterpreter, jsonSnapshot } from '../../semantic/core.ts';
+import type { Committed, Event, Interpreter, Invocation, State } from '../../semantic/types.ts';
 import { encodeCanonicalJson as canonical } from './json.ts';
 
 /** Effect 4 adapter. The clock is data on each invocation, never read implicitly. */
-export const makeStore = initialState => Effect.suspend(() => SynchronizedRef.make({ state: jsonSnapshot(initialState), events: [], invocations: new Map() }));
+type Store = {state: State; events: Event[]; invocations: Map<string, {invocation: Invocation; result: Committed; modelKey: string}>};
+type Outcome = ReturnType<Interpreter['execute']>
+  | {status: 'duplicate'; code: undefined; result: Committed}
+  | {status: 'rejected'; code: 'invocation-conflict'; result: Committed};
+type PublishOptions = {beforePublish?: (result: Committed) => void};
+export const makeStore = (initialState: State) => Effect.suspend(() => SynchronizedRef.make<Store>({ state: jsonSnapshot(initialState), events: [], invocations: new Map() }));
 
-export const execute = (runtime, store, invocation, { beforePublish } = {}) =>
-  SynchronizedRef.modifyEffect(store, current => Effect.gen(function* () {
+export const execute = (runtime: Interpreter, store: SynchronizedRef.SynchronizedRef<Store>, invocation: Invocation, { beforePublish }: PublishOptions = {}) =>
+  SynchronizedRef.modifyEffect(store, current => Effect.gen(function* (): Effect.fn.Return<readonly [Outcome, Store], unknown> {
     const command = yield* Effect.try({ try: () => jsonSnapshot(invocation), catch: error => error });
     const modelKey = canonical(runtime.model);
     const prior = current.invocations.get(command.id);
     if (prior) {
       const same = prior.modelKey === modelKey && canonical(prior.invocation) === canonical(command);
-      return [{ status: same ? 'duplicate' : 'rejected', code: same ? undefined : 'invocation-conflict', result: prior.result }, current];
+      return [same
+        ? { status: 'duplicate', code: undefined, result: prior.result }
+        : { status: 'rejected', code: 'invocation-conflict', result: prior.result }, current];
     }
     const result = runtime.execute(current.state, command);
     if (result.status !== 'committed') return [result, current];

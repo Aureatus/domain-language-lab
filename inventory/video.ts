@@ -21,7 +21,7 @@ await page.addInitScript(()=>{
 await page.goto(new URL('artifacts/inventory.html',root).href);await page.waitForLoadState('networkidle');
 const pause=ms=>page.waitForTimeout(ms);
 async function caption(text){await page.locator('#demo-caption').evaluate((el,text)=>el.textContent=text,text);}
-async function click(selector){const box=await page.locator(selector).boundingBox();await page.mouse.move(box.x+box.width/2,box.y+box.height/2,{steps:24});await pause(350);await page.mouse.click(box.x+box.width/2,box.y+box.height/2);await pause(600);}
+async function click(selector){const box=await page.locator(selector).boundingBox();if(!box)throw Error(`Invisible ${selector}`);await page.mouse.move(box.x+box.width/2,box.y+box.height/2,{steps:24});await pause(350);await page.mouse.click(box.x+box.width/2,box.y+box.height/2);await pause(600);}
 await caption('Five cameras. Two clients each request three. All commands use the shared interpreter.');await pause(3500);
 await caption('Deliberate mutant: the host commits against old snapshots and overwrites the latest state.');await click('#broken');await pause(4500);
 await caption('Actual failure: six units accepted from five; slotA was overwritten. The independent ledger catches it.');await pause(4500);
@@ -34,7 +34,7 @@ await click('[data-step="4"]');await caption('Retry three against the latest sna
 await click('[data-step="5"]');await caption('Retry two: accepted. Five units reserved, zero available. The independent ledger agrees.');await pause(4500);
 await click('#live');await click('#replay');await caption('The correct schedule replays exactly too. Export JSON to retain declarations, inputs, clock and schedule.');await pause(4000);
 await page.screenshot({path:new URL('artifacts/inventory-video-final.png',root).pathname});
-const video=page.video();await context.close();const source=await video.path();await browser.close();
+const video=page.video();await context.close();await browser.close();if(!video)throw Error('Browser video was not recorded');const source=await video.path();
 const output=new URL('artifacts/inventory-demo.mp4',root).pathname;
 const result=spawnSync('ffmpeg',['-y','-i',source,'-c:v','libx264','-preset','fast','-crf','22','-pix_fmt','yuv420p','-movflags','+faststart',output],{encoding:'utf8'});
 if(result.status!==0)throw new Error(result.stderr);

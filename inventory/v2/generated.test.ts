@@ -8,15 +8,18 @@ import {runGenerated, generatedHistory, checkHistory, mutationChecks} from './ge
 test('six seeded 30-step SQLite histories predict outcomes and replay exact observations', async () => {
   const report = await runGenerated();
   assert.equal(report.execution, 'executed');
-  assert.equal(report.status, 'passed', JSON.stringify(report.cases.filter(x => x.counterexample).map(x => x.counterexample.cause)));
+  assert.equal(report.status, 'passed', JSON.stringify(report.cases.flatMap(x => x.counterexample ? [x.counterexample.cause] : [])));
   assert.equal(report.seeds.length, 6);
   assert.equal(report.seeds[0], 0x51a7);
   assert.equal(report.replay.status, 'passed');
   for (const item of report.cases) {
     assert.equal(item.commands.length, 30);
-    assert.equal(item.replay.status, 'passed');
+    assert.equal(item.replay?.status, 'passed');
     for (const code of ['unauthorized-approval', 'stale', 'precondition', 'invocation-conflict', 'consumed']) assert.ok(item.observations.some(x => x.result.code === code), `seed ${item.seed}: missing ${code}`);
-    for (const action of ['cancel', 'expire', 'delete-terminal']) assert.ok(item.observations.some((x,i) => x.result.status === 'committed' && item.commands[i].command.action === `reservation.${action}`), `seed ${item.seed}: missing successful ${action}`);
+    for (const action of ['cancel', 'expire', 'delete-terminal']) assert.ok(item.observations.some((x,i) => {
+      const command = item.commands[i];
+      return x.result.status === 'committed' && command.api === 'execute' && command.command.action === `reservation.${action}`;
+    }), `seed ${item.seed}: missing successful ${action}`);
     assert.ok(item.observations.some(x => x.result.status === 'duplicate'));
     assert.equal(checkHistory(item.commands, item.observations).status, 'passed');
   }
@@ -32,10 +35,10 @@ test('six seeded 30-step SQLite histories predict outcomes and replay exact obse
 
 test('seed zero, configurable runs/steps and meaningful deterministic history variation', async () => {
   assert.deepEqual(generatedHistory(0, 40), generatedHistory(0, 40));
-  const signature = seed => generatedHistory(seed).map(x => [x.api, x.command.action, x.command.clock, x.command.actor]);
+  const signature = (seed: number) => generatedHistory(seed).map(x => [x.api, x.api === 'execute' ? x.command.action : undefined, x.api === 'approve' ? undefined : x.command.clock, x.api === 'execute' ? x.command.actor : undefined]);
   assert.notDeepEqual(signature(1), signature(2));
   const report = await runGenerated({seed:0, runs:2, steps:40});
-  assert.equal(report.status, 'passed', JSON.stringify(report.cases.filter(x => x.counterexample).map(x => x.counterexample.cause)));
+  assert.equal(report.status, 'passed', JSON.stringify(report.cases.flatMap(x => x.counterexample ? [x.counterexample.cause] : [])));
   assert.equal(report.cases.length, 2); assert.equal(report.cases[0].commands.length, 40);
   assert.throws(() => generatedHistory(0, 29), /at least 30/);
   await assert.rejects(runGenerated({runs:0}), /positive/);

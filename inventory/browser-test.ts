@@ -5,8 +5,8 @@ const root=new URL('../',import.meta.url), artifacts=new URL('artifacts/',root);
 await mkdir(artifacts,{recursive:true});
 const browser=await chromium.launch({headless:true});
 const page=await browser.newPage({viewport:{width:1440,height:1100}});
-const errors=[];page.on('pageerror',e=>errors.push(e.message));
-const requests=[];page.on('request',r=>{if(!r.url().startsWith('file:'))requests.push(r.url());});
+const errors: string[]=[];page.on('pageerror',e=>errors.push(e.message));
+const requests: string[]=[];page.on('request',r=>{if(!r.url().startsWith('file:'))requests.push(r.url());});
 try {
   await page.goto(new URL('artifacts/inventory.html',root).href);await page.waitForLoadState('networkidle');
   await page.locator('#available').filter({hasText:'5'}).waitFor();
@@ -21,7 +21,7 @@ try {
   const downloadPromise=page.waitForEvent('download');await page.click('#export');const download=await downloadPromise;
   const exportPath=new URL('inventory-mutant-replay.json',artifacts).pathname;await download.saveAs(exportPath);
   await page.click('#reset');await page.setInputFiles('#import',exportPath);
-  await page.waitForFunction(()=>document.querySelector('#replay-result').textContent==='Imported replay verified.');
+  await page.waitForFunction(()=>document.querySelector('#replay-result')?.textContent==='Imported replay verified.');
   assert.match(await page.locator('#health').innerText(),/INVARIANT FAILURE/);
   await page.locator('[data-step="1"]').click();assert.equal(await page.locator('#available').innerText(),'5');assert.ok(await page.locator('button[type=submit]').isDisabled());
   await page.click('#live');assert.equal(await page.locator('#available').innerText(),'2');
