@@ -12,13 +12,17 @@ const Effect=await import(require.resolve('effect/Effect')),run=Effect.runSync;
 const operationId=()=>`application-${randomUUID()}`;
 const fail=(message,status=400)=>Object.assign(Error(message),{httpStatus:status});
 const unwrap=r=>r.status==='duplicate'?unwrap(r.result):r;
+const browserFiles=Object.fromEntries(Object.entries({
+  '/':'index.html','/index.html':'index.html','/app.mjs':'browser.mjs','/client.mjs':'client.mjs','/snapshot.mjs':'snapshot.mjs',
+  '/view-records.mjs':'view-records.mjs','/loading.mjs':'loading.mjs','/submission.mjs':'submission.mjs','/style.css':'style.css'
+}).map(([path,file])=>[path,new URL(file,import.meta.url)]));
 export function resultMessage(r){
   if(r.status==='committed')return 'Saved. Your records are up to date.';
   if(r.status==='prepared')return 'Automatically approved';
   if(r.status==='pending')return 'Approval needed. No changes have been made.';
   return ({stale:'Things changed after this request was sent. No changes were made. Please send a new request.',precondition:'This request does not meet the requirements. Check the available balance and inputs.',denied:'You do not have permission for this action.','missing-record':'This person does not have the required record.','unauthorized-approval':'Only a named approver can approve this request.',consumed:'This request has already been completed.'})[r.code]??`Could not complete this request (${r.code??r.status}). No changes were made.`;
 }
-export async function createApplicationServer(declaration,{directory,port=0,database='application.sqlite'}={}) {
+export async function createApplicationServer(declaration,{directory,port=0,database='application.sqlite',staticFiles=browserFiles}={}) {
   const derived=deriveApplication(declaration),{model,contract}=derived;
   const contractId=createHash('sha256').update(JSON.stringify({model,contract})).digest('hex');
   await mkdir(directory,{recursive:true});
@@ -149,9 +153,9 @@ export async function createApplicationServer(declaration,{directory,port=0,data
           if(kind!=='preview'&&!replayed)publish();
           return json(200,{submissionId:body.submissionId,status:result.status,code:result.code,message:kind==='grant'&&result.status==='approved'?'Approval saved. Complete the request separately.':resultMessage(result),args:invocation?.args,requirements:result.request?.requirements,evidence:invocation?evidence(invocation,result,kind==='reconcile'?'execute':kind):undefined,snapshot:kind==='preview'?undefined:snapshot(),contractId});
         }
-         const files={'/':'index.html','/index.html':'index.html','/app.mjs':'browser.mjs','/client.mjs':'client.mjs','/snapshot.mjs':'snapshot.mjs','/view-records.mjs':'view-records.mjs','/loading.mjs':'loading.mjs','/submission.mjs':'submission.mjs','/style.css':'style.css'};
-        if(req.method!=='GET'||!files[url.pathname])throw fail('Not found.',404);
-        const file=files[url.pathname];res.writeHead(200,{'content-type':file.endsWith('.html')?'text/html; charset=utf-8':file.endsWith('.css')?'text/css':'text/javascript','x-content-type-options':'nosniff','cache-control':'no-store'});res.end(await readFile(new URL(file,import.meta.url)));
+        if(req.method!=='GET'||!Object.hasOwn(staticFiles,url.pathname))throw fail('Not found.',404);
+        const file=staticFiles[url.pathname],data=await readFile(file);
+        res.writeHead(200,{'content-type':file.pathname.endsWith('.html')?'text/html; charset=utf-8':file.pathname.endsWith('.css')?'text/css':'text/javascript','x-content-type-options':'nosniff','cache-control':'no-store'});res.end(data);
       }catch(e){if(res.headersSent)res.destroy();else json(e.httpStatus??500,{error:e.httpStatus?e.message:'Storage failed. The operation may have been recorded; reconnect before retrying.'});}
     });
     await new Promise((yes,no)=>{server.once('error',no);server.listen(port,'127.0.0.1',yes);});

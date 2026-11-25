@@ -1,0 +1,29 @@
+name: Effect UI spike
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/effect-ui.yml'
+      - 'adapters/effect-ui/**'
+      - 'adapters/effect/**'
+      - 'application/**'
+      - 'leave/**'
+      - 'semantic/**'
+      - 'syntax/**'
+      - 'package.json'
+
+permissions:
+  contents: read
+
+jobs:
+  chromium:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm run adapters:install
+      - run: npm ci --prefix adapters/effect-ui
+      - run: npm exec --prefix adapters/effect-ui -- playwright install --with-deps chromium
+      - run: npm test --prefix adapters/effect-ui
