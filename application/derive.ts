@@ -40,7 +40,7 @@ function fieldRef(model:Model,ref:unknown):FieldReference {
   exact(ref,['resource','key','field'],['resource','key','field']);
   const resource=text(ref['resource']),field=text(ref['field']);
   if(!model.resources[resource]?.fields[field])throw Error('Unknown resource/field reference.');
-  return {resource,field,key:text(ref['key'])};
+  return {...ref,resource,field,key:text(ref['key'])};
 }
 export function deriveApplication(declaration:unknown) {
   exact(declaration,['domain','initialState','application'],['domain','initialState','application']);
@@ -56,7 +56,7 @@ export function deriveApplication(declaration:unknown) {
     exact(a,['id','label','name'],['id','label']);
     const id=text(a['id']),label=text(a['label']),name=optionalText(a['name']);
     if(actorIds.has(id))throw Error('Duplicate actor.');
-    actorIds.add(id);return {id,label,...(name===undefined?{}:{name})};
+    actorIds.add(id);return {...a,id,label,...(name===undefined?{}:{name})};
   });
   if(!actors.length)throw Error('Declare local simulation actors.');
   for(const [name,config] of Object.entries(configs)){if(!Object.hasOwn(model.actions,name))throw Error(`Unknown action ${name}`);objectMap(config);}
@@ -72,11 +72,11 @@ export function deriveApplication(declaration:unknown) {
       const name=item['name'],raw=item['mapping'];
       if(name!=='utc-weekday-range/v1')throw Error(`Unsupported adapter ${name}`);
       exact(raw,['start','end','output'],['start','end','output']);
-      const mapping={start:text(raw['start']),end:text(raw['end']),output:text(raw['output'])};
+      const mapping={...raw,start:text(raw['start']),end:text(raw['end']),output:text(raw['output'])};
       adapters[name].validate(mapping,a.inputs);
       if(computed.has(mapping.output))throw Error('Conflicting adapter output.');
       computed.add(mapping.output);dateInputs.add(mapping.start);dateInputs.add(mapping.end);
-      return {name,mapping};
+      return {...item,name,mapping};
     });
     const fields=Object.entries(a.inputs).map(([name,schema]):ApplicationField=>{
       const f=fieldConfigs[name]??{};
@@ -89,11 +89,11 @@ export function deriveApplication(declaration:unknown) {
         if(source==='constant'){
           if(!Object.hasOwn(raw,'value'))throw Error('Missing constant.');
           if(!isValue(raw['value']))throw Error('Binding/schema mismatch.');
-          binding={source,value:raw['value']};
+          binding={...raw,source,value:raw['value']};
         }else{
           if(source!=='actor'&&source!=='operation-id'&&source!=='clock')throw Error('Unsupported input binding.');
           if(Object.hasOwn(raw,'value'))throw Error('Unexpected binding value.');
-          binding={source};
+          binding={...raw,source};
         }
       }
       if(Object.hasOwn(f,'default')){
@@ -113,7 +113,7 @@ export function deriveApplication(declaration:unknown) {
       if(binding){const values=binding.source==='actor'?[...actorIds]:binding.source==='constant'?[binding.value]:binding.source==='clock'?[0]:['operation-example'];if(values.some(v=>!conforms(schema,v)))throw Error('Binding/schema mismatch.');}
       if(Object.hasOwn(f,'reference')){
         const raw=f['reference'];exact(raw,['resource','labelField'],['resource']);
-        reference={resource:text(raw['resource']),...(Object.hasOwn(raw,'labelField')?{labelField:text(raw['labelField'])}:{})};
+        reference={...raw,resource:text(raw['resource']),...(Object.hasOwn(raw,'labelField')?{labelField:text(raw['labelField'])}:{})};
       }
       if(!reference){const b=a.bindings.find(b=>b.key.op==='input'&&b.key.name===name);if(b)reference={resource:b.resource};}
       if(reference){const resource=Object.hasOwn(model.resources,reference.resource)?model.resources[reference.resource]:undefined;if(schema.type!=='string'||!resource||(reference.labelField&&!Object.hasOwn(resource.fields,reference.labelField)))throw Error('Unknown or incompatible input reference.');}
@@ -149,7 +149,7 @@ export function deriveApplication(declaration:unknown) {
       const format=c['format'];
       if(format!==undefined&&format!=='date'&&format!=='text')throw Error('Unsupported column format.');
       if(format==='date'&&spec.type!=='string')throw Error('Date column requires string schema.');
-      return {field,label:optionalText(c['label'])??title(field),...(format===undefined?{}:{format})};
+      return {...c,field,label:optionalText(c['label'])??title(field),...(format===undefined?{}:{format})};
     });
     return {...v,kind,resource:resourceId,label,columns,...(key===undefined?{}:{key}),...(ownerField===undefined?{}:{ownerField}),...(viewLoading===undefined?{}:{loading:viewLoading})};
   });

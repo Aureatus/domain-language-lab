@@ -1,11 +1,19 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdtemp} from 'node:fs/promises';
+import {createHash} from 'node:crypto';
+import {encodeJson} from '../adapters/effect/json.ts';
 import {deriveApplication,buildInvocation} from './derive.ts';
 import {createApplicationServer} from './server.ts';
 import {fixture,renamedFixture,extendedFixture} from './fixture.ts';
 import leave from '../leave/model.ts';
 import {present} from '../semantic/test-support.ts';
+
+test('leave contract retains the published submission identity',()=>{
+  const {model,contract}=deriveApplication(leave);
+  assert.equal(createHash('sha256').update(encodeJson({model,contract})).digest('hex'),
+    '136de0f000fc5aed5febb25583ca25c9ecdacb562bd42b50b54124f2c92d4144');
+});
 
 test('automatic input types, inferred references, added actions/inputs and policy changes alter contract',()=>{
   const {contract}=deriveApplication(fixture),a=present(contract.actions['supply.take']);
