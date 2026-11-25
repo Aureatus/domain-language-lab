@@ -5,6 +5,7 @@ import {readFile,mkdir} from 'node:fs/promises';
 import {resolve,extname} from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {createApplicationServer} from '../../application/server.mjs';
+import {encodeJson} from '../effect/json.mjs';
 import {loadSource} from '../../syntax/load.mjs';
 
 export async function startGateway(declaration,{root,directory,port=0}){
@@ -26,7 +27,7 @@ export async function startGateway(declaration,{root,directory,port=0}){
       if(!file.startsWith(resolve(root)+'/'))throw Error('Invalid path');
       const types={'.html':'text/html','.js':'text/javascript','.mjs':'text/javascript','.css':'text/css','.json':'application/json','.wasm':'application/wasm'};
       const data=await readFile(file);res.writeHead(200,{'content-type':types[extname(file)]??'application/octet-stream'});res.end(data);
-    }catch(e){if(!res.headersSent)res.writeHead(500,{'content-type':'application/json'});res.end(JSON.stringify({error:e.message}));}
+    }catch(e){if(!res.headersSent)res.writeHead(500,{'content-type':'application/json'});res.end(encodeJson({error:e.message}));}
   });
   try{
     await once(server.listen(port,'127.0.0.1'),'listening');

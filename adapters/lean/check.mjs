@@ -4,6 +4,7 @@ import {resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {generate, hash, Unsupported} from './generate.mjs';
 import {model, obligation} from './fixture.mjs';
+import {decodeJsonObject, encodeJsonPretty} from '../effect/json.mjs';
 
 export const PINNED_LEAN = '/tmp/opencode/elan/toolchains/leanprover--lean4---v4.19.0/bin/lean';
 export function check(source, law, directory, lean = process.env.LEAN || PINNED_LEAN) {
@@ -18,7 +19,7 @@ export function check(source, law, directory, lean = process.env.LEAN || PINNED_
     report.runner_sha256 = hash(readFileSync(new URL('./check.mjs', import.meta.url), 'utf8'));
     report.semantic_core_sha256 = hash(readFileSync(new URL('../../semantic/core.mjs', import.meta.url), 'utf8'));
     writeFileSync(resolve(directory, 'Generated.lean'), code);
-    writeFileSync(resolve(directory, 'metadata.json'), JSON.stringify(metadata, null, 2) + '\n');
+    writeFileSync(resolve(directory, 'metadata.json'), encodeJsonPretty(metadata) + '\n');
     const version = spawnSync(lean, ['--version'], {encoding: 'utf8', timeout: 30000});
     report.tool.version = version.stdout?.trim();
     if (version.error || version.status !== 0 || !/^Lean \(version 4\.19\.0(?:,|\))/.test(report.tool.version)) throw Error('Pinned Lean 4.19.0 unavailable or mismatched');
@@ -45,15 +46,15 @@ export function check(source, law, directory, lean = process.env.LEAN || PINNED_
     report.detail = e.message;
   }
   writeFileSync(resolve(directory, 'check.log'), log || report.detail + '\n');
-  writeFileSync(resolve(directory, 'report.json'), JSON.stringify(report, null, 2) + '\n');
+  writeFileSync(resolve(directory, 'report.json'), encodeJsonPretty(report) + '\n');
   return report;
 }
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   // JSON declarations can be exported by any domain, including a later inventory fragment.
-  const source = process.argv[2] ? JSON.parse(readFileSync(process.argv[2], 'utf8')) : model;
-  const law = process.argv[3] ? JSON.parse(readFileSync(process.argv[3], 'utf8')) : obligation;
+  const source = process.argv[2] ? decodeJsonObject(readFileSync(process.argv[2], 'utf8')) : model;
+  const law = process.argv[3] ? decodeJsonObject(readFileSync(process.argv[3], 'utf8')) : obligation;
   const out = resolve(process.argv[4] || fileURLToPath(new URL('./generated', import.meta.url)));
   const report = check(source, law, out);
-  console.log(JSON.stringify(report, null, 2));
+  console.log(encodeJsonPretty(report));
   process.exitCode = report.status === 'proof_checked' ? 0 : 1;
 }

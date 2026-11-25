@@ -4,14 +4,14 @@ import {join, resolve, dirname} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {createRequire} from 'node:module';
 import {makeDurableRuntime, makeDurableStore, initializeDurableState, durableExecute, durableApprove, durableResume, durablePending, durableState, pullOutbox, acknowledgeOutbox, closeDurableStore} from '../../adapters/effect/durable.mjs';
+import {decodeJsonObject, decodeJsonValue, encodeJson, encodeJsonPretty, encodeCanonicalJson as canonical} from '../../adapters/effect/json.mjs';
 import {inventoryV2Model, initialState, invocation} from './model.mjs';
 
 const require = createRequire(new URL('../../adapters/effect/package.json', import.meta.url));
 const Effect = await import(require.resolve('effect/Effect'));
 const run = Effect.runPromise;
-const copy = x => JSON.parse(JSON.stringify(x));
+const copy = x => decodeJsonValue(encodeJson(x));
 const policyId = 'reserve.warehouse-approval';
-const canonical = x => JSON.stringify(x, (_k, v) => v && !Array.isArray(v) && typeof v === 'object' ? Object.fromEntries(Object.entries(v).sort(([a], [b]) => a.localeCompare(b))) : v);
 const rng = seed => { let x = seed >>> 0; return () => { x = (x + 0x6d2b79f5) | 0; let t = Math.imul(x ^ x >>> 15, 1 | x); t ^= t + Math.imul(t ^ t >>> 7, 61 | t); return ((t ^ t >>> 14) >>> 0) / 0x100000000; }; };
 const positiveInteger = (n, name) => { if (!Number.isSafeInteger(n) || n < 1) throw new TypeError(`${name} must be a positive safe integer`); return n; };
 const validSeed = n => { if (!Number.isInteger(n) || n < 0 || n > 0xffffffff) throw new TypeError('seed must be a uint32'); return n; };
@@ -296,10 +296,10 @@ export async function runGenerated({reportPath, seed = 0x51a7, runs = 6, steps =
   const report = {format:'inventory-v2-generated-report/2', execution:'executed', status, seeds, config:{seed, runs:seeds.length, steps}, coverage, cases,
     oracle:{independent:'Inventory/approval state machine predicts status, rejection cause, historical retries, exact domain state, pending/grants/consumption and event differences before checking observations.', mutationChecks:mutations ?? {status:'not-run-for-replay-or-failed-history'}},
     replay:{status:status === 'passed' ? 'passed' : 'not-all-passed'},
-    reproduction:{command:`node inventory/v2/generated.mjs --replay ${JSON.stringify(reportPath ?? 'REPORT.json')} --report /tmp/opencode/durable-replayed.json`, input:'cases[].commands (full API arguments, operation/request references, host identities and clocks); substitute counterexample.failingPrefix to replay only that prefix'},
+    reproduction:{command:`node inventory/v2/generated.mjs --replay ${encodeJson(reportPath ?? 'REPORT.json')} --report /tmp/opencode/durable-replayed.json`, input:'cases[].commands (full API arguments, operation/request references, host identities and clocks); substitute counterexample.failingPrefix to replay only that prefix'},
     shrink:{status:'not-implemented', method:'first failing checked prefix, not a minimal counterexample or automatic shrink'},
     scope:'Bounded seeded real-SQLite execution and handle reopen; not exhaustive, a proof, process-crash/power-loss certification, authentication or external delivery evidence.'};
-  if (reportPath) { await mkdir(dirname(reportPath), {recursive:true}); await writeFile(reportPath, JSON.stringify(report, null, 2) + '\n'); }
+  if (reportPath) { await mkdir(dirname(reportPath), {recursive:true}); await writeFile(reportPath, encodeJsonPretty(report) + '\n'); }
   return report;
 }
 
@@ -314,8 +314,8 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     else throw new TypeError(`Unknown option ${arg}`);
   }
   options.reportPath ??= resolve('artifacts/durable-generated-report.json');
-  if (replay) { const input = JSON.parse(await readFile(replay, 'utf8')); options.histories = input.cases ?? [input]; }
+  if (replay) { const input = decodeJsonObject(await readFile(replay, 'utf8')); options.histories = input.cases ?? [input]; }
   const report = await runGenerated(options);
-  process.stdout.write(`${JSON.stringify({report:options.reportPath, status:report.status, seeds:report.seeds, coverage:report.coverage, cases:report.cases.length, counterexamples:report.cases.filter(x => x.counterexample).map(x => ({seed:x.seed, ...x.counterexample}))}, null, 2)}\n`);
+  process.stdout.write(`${encodeJsonPretty({report:options.reportPath, status:report.status, seeds:report.seeds, coverage:report.coverage, cases:report.cases.length, counterexamples:report.cases.filter(x => x.counterexample).map(x => ({seed:x.seed, ...x.counterexample}))})}\n`);
   if (report.status !== 'passed') process.exitCode = 1;
 }

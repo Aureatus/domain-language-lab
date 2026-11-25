@@ -1,11 +1,7 @@
 import * as Effect from 'effect/Effect';
 import * as SynchronizedRef from 'effect/SynchronizedRef';
 import { createInterpreter, jsonSnapshot } from '../../semantic/core.mjs';
-
-const canonical = value => JSON.stringify(value && typeof value === 'object'
-  ? Array.isArray(value) ? value.map(x => JSON.parse(canonical(x)))
-    : Object.fromEntries(Object.keys(value).sort().map(k => [k, JSON.parse(canonical(value[k]))]))
-  : value);
+import { encodeCanonicalJson as canonical } from './json.mjs';
 
 /** Effect 4 adapter. The clock is data on each invocation, never read implicitly. */
 export const makeStore = initialState => Effect.suspend(() => SynchronizedRef.make({ state: jsonSnapshot(initialState), events: [], invocations: new Map() }));

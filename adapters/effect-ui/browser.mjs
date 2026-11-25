@@ -5,6 +5,15 @@ import {createApplicationClient} from '../../application/client.mjs';
 import {acceptsSnapshot} from '../../application/snapshot.mjs';
 import {submissionControls,submissionStep} from '../../application/submission.mjs';
 
+const StorageKeyCodec=Schema.fromJsonString(Schema.Tuple([Schema.Literal('effect-ui/spike'),Schema.String,Schema.String,Schema.String]));
+const SavedSubmissionCodec=Schema.fromJsonString(Schema.NullOr(Schema.Struct({
+  id:Schema.String,
+  body:Schema.Struct({actor:Schema.String,action:Schema.String,args:Schema.Record(Schema.String,Schema.String)})
+})));
+const encodeStorageKey=Schema.encodeSync(StorageKeyCodec);
+const decodeSavedSubmission=Schema.decodeUnknownSync(SavedSubmissionCodec);
+const encodeSavedSubmission=Schema.encodeSync(SavedSubmissionCodec);
+
 const Message=UiSchema.TaggedEnum({
   DraftChanged:{field:Schema.String,value:Schema.String},
   Submitted:{id:Schema.String}, CheckRequested:{}, RetryRequested:{},
@@ -19,8 +28,8 @@ const phaseText={
 };
 
 function actionForm({actor,action,fields,contractId,snapshot,client,storage}){
-  const key=JSON.stringify(['effect-ui/spike',contractId,actor.id,action.id]);
-  const saved=JSON.parse(storage.getItem(key)??'null');
+  const key=encodeStorageKey(['effect-ui/spike',contractId,actor.id,action.id]);
+  const saved=decodeSavedSubmission(storage.getItem(key)??'null');
   const clearSaved=()=>{try{storage.removeItem(key);}catch{/* A reload can safely check the same receipt again. */}};
   const observe=event=>Message.SubmissionObserved({event});
   const observeReceipt=result=>{
@@ -30,7 +39,7 @@ function actionForm({actor,action,fields,contractId,snapshot,client,storage}){
   };
   const Execute=Command.make('Execute',{args:{submission:Schema.Unknown,persist:Schema.Boolean}},({submission,persist})=>Effect.promise(async()=>{
     const {id,body}=submission;
-    try{if(persist)storage.setItem(key,JSON.stringify({id,body}));}
+    try{if(persist)storage.setItem(key,encodeSavedSubmission({id,body}));}
     catch{return observe({type:'invalid',message:'Could not store the submission identity. The request was not sent.'});}
     try{
       return observeReceipt(await client.execute({...body,submissionId:id}));

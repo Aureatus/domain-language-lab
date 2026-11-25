@@ -2,6 +2,7 @@ import {submissionStep,submissionControls} from './submission.mjs';
 import {loadSource} from '../syntax/load.mjs';
 import {deriveApplication,inputDefaults} from './derive.mjs';
 import {readFileSync} from 'node:fs';
+import {decodeJson,encodeJsonPretty,SubmissionTraceSchema} from '../adapters/effect/json.mjs';
 const [entry='leave/browser.domain',actionId,actorId,tracePath]=process.argv.slice(2);
 const {contract,initialState}=deriveApplication(loadSource(entry).declaration);
 const action=actionId??Object.keys(contract.actions)[0],actor=actorId??contract.actors[0].id;
@@ -15,4 +16,4 @@ function replay(events){
   });
 }
 const lost=[{type:'submit',id:'illustrative-1',body},{type:'lost'},{type:'check'}];
-console.log(JSON.stringify(tracePath?{scope:'User-supplied events; replay does not authenticate receipts.',trace:replay(JSON.parse(readFileSync(tracePath,'utf8')))}:{scope:'Illustrative transport events and receipts; not an execution of the domain.',recorded:replay([...lost,{type:'found',result:{status:'committed'}}]),absent:replay([...lost,{type:'missing'},{type:'retry'}])},null,2));
+console.log(encodeJsonPretty(tracePath?{scope:'User-supplied events; replay does not authenticate receipts.',trace:replay(decodeJson(SubmissionTraceSchema,readFileSync(tracePath,'utf8')))}:{scope:'Illustrative transport events and receipts; not an execution of the domain.',recorded:replay([...lost,{type:'found',result:{status:'committed'}}]),absent:replay([...lost,{type:'missing'},{type:'retry'}])}));
