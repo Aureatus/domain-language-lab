@@ -23,7 +23,7 @@ export const adapters={
       if(Object.keys(mapping).sort().join(',')!=='end,output,start')throw Error('Date adapter requires start, end, output mappings.');
       if(new Set(Object.values(mapping)).size!==3)throw Error('Date adapter mappings must be distinct.');
       for(const name of Object.values(mapping))if(!inputs[name])throw Error(`Unknown adapter input ${name}`);
-      if(inputs[mapping.start].type!=='string'||inputs[mapping.end].type!=='string'||inputs[mapping.output].type!=='integer')throw Error('Date adapter schema mismatch.');
+  if(inputs[mapping.start]?.type!=='string'||inputs[mapping.end]?.type!=='string'||inputs[mapping.output]?.type!=='integer')throw Error('Date adapter schema mismatch.');
     },
     apply(args,mapping){
       const days=businessDays(args[mapping.start],args[mapping.end]);

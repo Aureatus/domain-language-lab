@@ -19,15 +19,17 @@ async function visit(path){
   }
   // Explicit closed frontend loading convention; count the actual text too.
   for(const match of source.matchAll(/loadSource\(new URL\(['"]([^'"]+\.domain)['"],import\.meta\.url\)\)/g)){
-    await visit(resolve(dirname(path),match[1]));
+    const target=match[1];if(!target)throw Error(`Missing source path in ${rel}`);
+    await visit(resolve(dirname(path),target));
   }
   if(source.includes('loadSource(')&&!source.match(/loadSource\(new URL\(['"][^'"]+\.domain['"],import\.meta\.url\)\)/))throw Error(`Unsupported source loading syntax in ${rel}; cannot safely count.`);
   // This report supports the repository's explicit static ESM `from` imports.
   // Dynamic or side-effect imports fail rather than silently undercounting.
   if(/\bimport\s*\(|\bimport\s*['"]/.test(source))throw Error(`Unsupported import syntax in ${rel}; extend accounting before claiming a count.`);
   for(const match of source.matchAll(/\bfrom\s*['"]([^'"]+)['"]/g)){
-    if(!match[1].startsWith('.')){external.add(match[1]);continue;}
-    const target=resolve(dirname(path),match[1]);
+    const specifier=match[1];if(!specifier)throw Error(`Missing import in ${rel}`);
+    if(!specifier.startsWith('.')){external.add(specifier);continue;}
+    const target=resolve(dirname(path),specifier);
     if(target.startsWith(root+sep))await visit(target);else external.add(relative(process.cwd(),target));
   }
 }

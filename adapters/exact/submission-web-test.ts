@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict';
 import {createRequire} from 'node:module';
 const url=process.argv[2];
-if(!/^http:\/\/127\.0\.0\.1:\d+$/.test(url)||url.endsWith(':4186'))throw Error('Supply an isolated adapter URL.');
+if(!url||!/^http:\/\/127\.0\.0\.1:\d+$/.test(url)||url.endsWith(':4186'))throw Error('Supply an isolated adapter URL.');
 const require=createRequire(`${process.env['EXACT_ROOT']??'/tmp/opencode/exact-source'}/package.json`);
 const browser=await require('playwright-core').chromium.launch({headless:true});
 try{
@@ -35,7 +35,7 @@ try{
   await field('check').click();await field('retry').waitFor();
   assert.equal(writes.length,1);assert.equal(await balance(),5);assert.equal(await field('execute').isDisabled(),true);
   await field('retry').click();await field('check').waitFor();
-  assert.ok(writes[0].submissionId);assert.deepEqual(writes[0],writes[1]);assert.equal(await balance(),4);
+  assert.ok(writes[0]?.submissionId);assert.deepEqual(writes[0],writes[1]);assert.equal(await balance(),4);
   await field('check').click();await notice.filter({hasText:'Saved.'}).waitFor();
   assert.equal(await field('check').count(),0);assert.equal(writes.length,2);assert.equal(await balance(),4);
   assert.deepEqual(errors,[]);

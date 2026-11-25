@@ -38,9 +38,10 @@ export function check(source, law, directory, lean = process.env['LEAN'] || PINN
     if (/\bsorry\b|\baxiom\s/.test(code)) throw Error('Forbidden proof escape');
     for (const name of ['preserves', 'positive_witness']) {
       const lines = log.split('\n').filter(l => l.startsWith(`'Generated.${name}' `));
-      if (lines.length !== 1) throw Error(`Missing/duplicate theorem axiom report: ${name}`);
-      const m = lines[0].match(/depends on axioms: \[([^\]]*)\]$/);
-      const axioms = m ? m[1].split(',').map(x => x.trim()).filter(Boolean) : lines[0].endsWith('does not depend on any axioms') ? [] : null;
+      const [line]=lines;
+      if (!line||lines.length!==1) throw Error(`Missing/duplicate theorem axiom report: ${name}`);
+      const reported=line.match(/depends on axioms: \[([^\]]*)\]$/)?.[1];
+      const axioms=reported!==undefined?reported.split(',').map(x=>x.trim()).filter(Boolean):line.endsWith('does not depend on any axioms')?[]:null;
       if (!axioms || axioms.some(a => a !== 'propext')) throw Error('Unrecognized/non-allowlisted theorem axioms');
       report.theorem_axioms[name] = axioms;
     }

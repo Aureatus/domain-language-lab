@@ -20,20 +20,21 @@ Local actor simulation is not authentication. No automatic retry of writes.`;
 type CLIOptions = Partial<Record<'url'|'actor'|'args'|'policy'|'view'|'submission-id',string>> & {json?:boolean; help?:boolean};
 export async function runCLI(argv: string[],{stdout=console.log}={}){
   const options: CLIOptions={},positionals: string[]=[];
-  for(let i=0;i<argv.length;i++){
-    const arg=argv[i];
+  const args=argv.values();
+  for(const arg of args){
     if(arg==='--json'){options.json=true;continue;}
     if(arg==='--help'){options.help=true;continue;}
     if(arg.startsWith('--')){
       const key=arg.slice(2);
-      if((key!=='url'&&key!=='actor'&&key!=='args'&&key!=='policy'&&key!=='view'&&key!=='submission-id')||!argv[i+1]||argv[i+1].startsWith('--'))throw Error(`Unknown or missing option ${arg}.\n${usage}`);
+      const value=args.next().value;
+      if((key!=='url'&&key!=='actor'&&key!=='args'&&key!=='policy'&&key!=='view'&&key!=='submission-id')||!value||value.startsWith('--'))throw Error(`Unknown or missing option ${arg}.\n${usage}`);
       if(Object.hasOwn(options,key))throw Error(`Duplicate option ${arg}.`);
-      options[key]=argv[++i];
+      options[key]=value;
     }else positionals.push(arg);
   }
   if(options.help||!positionals.length){stdout(usage);return;}
   const [command,id,...extra]=positionals;
-  if(extra.length||!['list','inspect','preview','execute','reconcile','inbox','grant','resume'].includes(command))throw Error(usage);
+  if(!command||extra.length||!['list','inspect','preview','execute','reconcile','inbox','grant','resume'].includes(command))throw Error(usage);
   if(['preview','execute','reconcile','grant','resume'].includes(command)&&(!options.actor||!id))throw Error(`${command} requires an ID and explicit --actor.\n${usage}`);
   if(options['submission-id']&&command!=='execute')throw Error('--submission-id applies only to execute.');
   if(command==='grant'&&!options.policy)throw Error('grant requires --policy POLICY.');
@@ -49,12 +50,12 @@ export async function runCLI(argv: string[],{stdout=console.log}={}){
   }
   if(command==='list'){
     if(id){if(!Object.hasOwn(contract.resources,id))throw Error(`Unknown resource '${id}'.`);result=(await client.snapshot()).state.records[id];}
-    else result=Object.entries(contract.actions).map(([id,a])=>({id,label:presentation?.actions[id].label??a.label,arguments:a.fields.filter(f=>!f.hidden).map(f=>({name:f.name,schema:f.schema}))}));
+    else result=Object.entries(contract.actions).map(([id,a])=>({id,label:presentation?.actions[id]?.label??a.label,arguments:a.fields.filter(f=>!f.hidden).map(f=>({name:f.name,schema:f.schema}))}));
   }else if(command==='inspect'){
     if(id&&!Object.hasOwn(contract.actions,id))throw Error(`Unknown action '${id}'.`);result=id?contract.actions[id]:contract;
   }else if(command==='inbox')result=inboxFor(await client.snapshot(),options.actor);
   else if(command==='preview'||command==='execute'){
-    if(!Object.hasOwn(contract.actions,id))throw Error(`Unknown action '${id}'. Use list or inspect.`);
+    if(!id||!Object.hasOwn(contract.actions,id))throw Error(`Unknown action '${id}'. Use list or inspect.`);
     let args;try{args=decodeJsonObject(options.args??'{}');}catch{throw Error('--args must be a JSON object.');}
     if(command==='preview')result=await client.preview({actor:options.actor,action:id,args});
     else{

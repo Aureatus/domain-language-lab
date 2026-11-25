@@ -6,8 +6,8 @@ import {readFileSync} from 'node:fs';
 import {decodeJson,encodeJsonPretty,SubmissionTraceSchema} from '../adapters/effect/json.ts';
 const [entry='leave/browser.domain',actionId,actorId,tracePath]=process.argv.slice(2);
 const {contract,initialState}=deriveApplication(loadSource(entry).declaration);
-const action=actionId??Object.keys(contract.actions)[0],actor=actorId??contract.actors[0].id;
-if(!contract.actions[action]||!contract.actors.some(a=>a.id===actor))throw Error('Unknown action or actor.');
+const action=actionId??Object.keys(contract.actions)[0],actor=actorId??contract.actors[0]?.id;
+if(!action||!actor||!contract.actions[action]||!contract.actors.some(a=>a.id===actor))throw Error('Unknown action or actor.');
 const body={actor,action,args:inputDefaults(contract,action,initialState,actor)};
 function replay(events){
   let state: SubmissionState={phase:'editing'};

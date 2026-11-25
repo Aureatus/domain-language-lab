@@ -22,7 +22,8 @@ try{for(const [declaration,action,actor,reviewer,field,stock,expectedApprover] o
   }finally{await page.close();await server.close();}
 }
   const configured=structuredClone(leave);configured.application.loading='skeleton';
-  configured.application.views[1].loading='icon';configured.application.views[2].loading='wait';
+  const [,icon,wait]=configured.application.views;
+  assert.ok(icon&&wait);icon.loading='icon';wait.loading='wait';
   const server=await createApplicationServer(configured,{directory:await mkdtemp('/tmp/opencode/configured-loading-')});
   const page=await browser.newPage();let release;const gate=new Promise(r=>release=r);
   try{

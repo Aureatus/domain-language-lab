@@ -21,8 +21,9 @@ if(values.replay){
   try{trace=decodeJson(ActionEventsTraceSchema,await readFile(values.replay,'utf8'));}
   catch{throw Error('Event trace does not match the selected contract, action and actor.');}
 }
-const actor=values.actor??trace?.actor??contract.actors[0].id;
-if(!contract.actors.some(a=>a.id===actor)||!Object.hasOwn(contract.actions,action))throw Error('Unknown actor or action.');
+const actor=values.actor??trace?.actor??contract.actors[0]?.id;
+const declarationAction=Object.hasOwn(contract.actions,action)?contract.actions[action]:undefined;
+if(!actor||!contract.actors.some(a=>a.id===actor)||!declarationAction)throw Error('Unknown actor or action.');
 if(trace&&(trace.contractId!==contractId||trace.actor!==actor||trace.action!==action))throw Error('Event trace does not match the selected contract, action and actor.');
 const {args,selection}=trace??(values.args?{args:decodeJsonObject(values.args),selection:'explicit arguments'}:exampleArgs(derived,action,actor));
 if(!args||typeof args!=='object'||Array.isArray(args))throw Error('Expected action arguments object.');
@@ -48,7 +49,7 @@ const replayStatus=!failure?undefined:firstFailure&&typeof failure==='object'&&'
 if(replayStatus==='not-reproduced')process.exitCode=1;
 if(values.json)console.log(encodeJsonPretty({format:'action-review/v1',contractId,replayStatus,firstFailure,mutant:trace?.['mutant'],provenance:trace?'unauthenticated file replay':'isolated backend execution',entry,actor,action,selection,steps}));
 else{
-  console.log(`${contract.actions[action].label} · ${actor}\n${selection}: ${encodeJson(args)}\n${trace?'Offline replay; file provenance is not authenticated.':'Isolated database.'} Input and transport schedule simulated; receipts and snapshots recorded in the original run.\n`);
+  console.log(`${declarationAction.label} · ${actor}\n${selection}: ${encodeJson(args)}\n${trace?'Offline replay; file provenance is not authenticated.':'Isolated database.'} Input and transport schedule simulated; receipts and snapshots recorded in the original run.\n`);
   for(const s of steps){
     if(s.step===1&&trace?.['mutant'])console.log(`Replaying deliberate test fault: ${trace['mutant']} (${failure&&typeof failure==='object'&&'rule' in failure?failure['rule']:'unspecified rule'})`);
     const actions=Object.keys(s.controls).filter(k=>s.controls[k]).join(', ')||'none';

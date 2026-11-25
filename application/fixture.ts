@@ -21,9 +21,11 @@ export function renamedFixture(){
 export function extendedFixture(){
   const x=structuredClone(fixture);
   x.application.actors.push({id:'rory',label:'Rory'});
-  x.domain.actions['supply.take'].inputs['memo']={type:'string'};
-  const review=x.domain.actions['supply.take'].policies[1];
-  if(review.effect!=='approval-required')throw Error('Expected review policy');
+  const take=x.domain.actions['supply.take'];
+  if(!take)throw Error('Expected supply.take fixture action');
+  take.inputs['memo']={type:'string'};
+  const review=take.policies[1];
+  if(review?.effect!=='approval-required')throw Error('Expected review policy');
   review.approvers={op:'literal',value:'rory'};
   x.domain.actions['supply.audit']={inputs:{note:{type:'string'}},bindings:[],preconditions:[],policies:[{id:'supply.audit-allowed',effect:'allow',when:literal(true)}],updates:[],inserts:[],deletes:[],observe:[]};
   return x;

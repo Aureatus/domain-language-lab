@@ -106,7 +106,12 @@ export async function createApplicationServer(declaration,{directory,port=0,data
       }}
       return {contractId,snapshotVersion,state:current,pending,defaults,availability};
     }
-    const evidence=(invocation,result,phase)=>({format:'application-evidence/v1',phase,invocation,policies:model.actions[invocation.action].policies,preconditions:model.actions[invocation.action].preconditions,group:{updates:model.actions[invocation.action].updates,inserts:model.actions[invocation.action].inserts,deletes:model.actions[invocation.action].deletes},outcome:{status:result.status,code:result.code??null,requirements:result.request?.requirements??[],events:result.events??[]},method:'Actual interpreter/durable result and declared AST; not a parser trace or ordered guard evaluation.'});
+    const evidence=(invocation,result,phase)=>{
+      const action=model.actions[invocation.action];
+      if(!action)throw Error('Missing evidence action declaration.');
+      const {policies,preconditions,updates,inserts,deletes}=action;
+      return {format:'application-evidence/v1',phase,invocation,policies,preconditions,group:{updates,inserts,deletes},outcome:{status:result.status,code:result.code??null,requirements:result.request?.requirements??[],events:result.events??[]},method:'Actual interpreter/durable result and declared AST; not a parser trace or ordered guard evaluation.'};
+    };
     const publish=()=>{const event=`event: update\ndata: ${encodeJson(snapshot())}\n\n`;for(const res of streams)if(!res.write(event))res.destroy();};
     server=createServer(async(req,res)=>{
       const json=(status,value)=>{res.writeHead(status,{'content-type':'application/json','cache-control':'no-store'});res.end(encodeJson(value));};
@@ -176,8 +181,9 @@ export async function createApplicationServer(declaration,{directory,port=0,data
           res.writeHead(200,{'content-type':'text/javascript','x-content-type-options':'nosniff','cache-control':'no-store'});
           return res.end(script);
         }
-        if(req.method!=='GET'||!Object.hasOwn(staticFiles,url.pathname))throw fail('Not found.',404);
-        const file=staticFiles[url.pathname],data=await readFile(file);
+        const file=Object.hasOwn(staticFiles,url.pathname)?staticFiles[url.pathname]:undefined;
+        if(req.method!=='GET'||!file)throw fail('Not found.',404);
+        const data=await readFile(file);
         res.writeHead(200,{'content-type':file.pathname.endsWith('.html')?'text/html; charset=utf-8':file.pathname.endsWith('.css')?'text/css':'text/javascript','x-content-type-options':'nosniff','cache-control':'no-store'});res.end(data);
       }catch(e){const status=httpErrorStatus(e);if(res.headersSent)res.destroy();else json(status??500,{error:status?errorMessage(e):'Storage failed. The operation may have been recorded; reconnect before retrying.'});}
     });

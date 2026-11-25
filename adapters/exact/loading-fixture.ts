@@ -2,7 +2,9 @@
 import leave from '../../leave/model.ts';
 const fixture=structuredClone(leave);
 fixture.application.loading='icon';
+const [view]=leave.application.views;
+if(!view)throw Error('Missing leave view fixture');
 fixture.application.views=[undefined,'text','skeleton','wait'].map((loading,i)=>({
-  ...leave.application.views[0],label:`Record group ${i}`, ...(loading?{loading}:{})
+  ...view,label:`Record group ${i}`, ...(loading?{loading}:{})
 }));
 export default fixture;

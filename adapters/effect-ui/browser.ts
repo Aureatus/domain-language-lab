@@ -86,7 +86,7 @@ function actionForm({actor,action,fields,contractId,snapshot,client,storage}:{
   }));
   const nextSnapshot=(current:typeof SnapshotSchema.Type,next?:typeof SnapshotSchema.Type)=>
     next&&acceptsSnapshot(current,next,contractId)?next:current;
-  const available=(model:{snapshot:typeof SnapshotSchema.Type})=>model.snapshot.availability[actor.id][action.id];
+  const available=(model:{snapshot:typeof SnapshotSchema.Type})=>model.snapshot.availability[actor.id]?.[action.id]??false;
 
   return Html.component({
     name:'DerivedActionForm',
@@ -98,7 +98,7 @@ function actionForm({actor,action,fields,contractId,snapshot,client,storage}:{
   }).make({
     init:()=>({
       draft:Object.fromEntries(fields.map(({name})=>{
-        const value=(saved?.body.args??snapshot.defaults[actor.id][action.id])[name];
+        const value=(saved?.body.args??snapshot.defaults[actor.id]?.[action.id])?.[name];
         return [name,typeof value==='string'?value:''];
       })),
       submission:saved?{...saved,phase:'unknown'}:{phase:'editing'},
@@ -140,7 +140,7 @@ function actionForm({actor,action,fields,contractId,snapshot,client,storage}:{
           h.fieldset.disabled(!controls.submit).children(...fields.map(field=>
             h.label.children(field.label,
               h.input.attr('name',field.name).attr('type',field.widget).attr('required','')
-                .value(model.draft[field.name])
+                .value(model.draft[field.name]??'')
                 .onInput(({value})=>Message.DraftChanged({field:field.name,value}))
             )
           )),
@@ -166,9 +166,10 @@ try{
   const query=new URLSearchParams(location.search);
   const actor=contract.actors.find(({id})=>id===(query.get('actor')??'maya'));
   const actionId=query.get('action')??'leave.request';
-  if(contract.format!=='derived-application/v1'||!actor||!Object.hasOwn(contract.actions,actionId))
+  const action=Object.hasOwn(contract.actions,actionId)?contract.actions[actionId]:undefined;
+  if(contract.format!=='derived-application/v1'||!actor||!action)
     throw Error('Unsupported contract, actor or action.');
-  const action=contract.actions[actionId],fields=action.fields.filter(field=>!field.hidden);
+  const fields=action.fields.filter(field=>!field.hidden);
   if(fields.some(({widget,schema})=>!['date','text'].includes(widget)||schema.type!=='string'))
     throw Error('This spike supports only date and text inputs.');
   const snapshot=await client.snapshot();

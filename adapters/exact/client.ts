@@ -59,7 +59,7 @@ export function createClient({contract,contractId},base,fetcher=fetch){
   function project(s,actor){
     const rows: {id:string;title:string;detail:string}[]=[];
     const records: State['records']=s.state.records;
-    contract.views.forEach((v,i)=>{for(const [id,r]of Object.entries(records[v.resource])){
+    contract.views.forEach((v,i)=>{const collection=records[v.resource];if(!collection)throw Error(`Missing view resource: ${v.resource}`);for(const [id,r]of Object.entries(collection)){
       if(v.key&&id!==(v.key==='$actor'?actor:v.key)||v.ownerField&&r.values[v.ownerField]!==actor)continue;
       rows.push({id:`view:${i}:${id}`,title:v.label,detail:v.columns.map(c=>{const value=r.values[c.field];return `${c.label}: ${contract.relationships.some(r=>r.resource===v.resource&&r.field===c.field)?Array.isArray(value)?value.map(person).join(', '):person(value):text(value)}`;}).join(' · ')});
     }});

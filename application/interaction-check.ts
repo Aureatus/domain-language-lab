@@ -10,8 +10,8 @@ type Observation = ReturnType<ReturnType<typeof actionReview>>;
 // fixture data; only their observation order is varied. No generated receipts.
 function* orders<T>(chains: T[][],prefix: T[]=[]): Generator<T[]>{
   if(chains.every(c=>!c.length)){yield prefix;return;}
-  for(const [i,c] of chains.entries())if(c.length)
-    yield* orders(chains.map((other,j)=>i===j?other.slice(1):other),[...prefix,c[0]]);
+  for(const [i,[first,...rest]] of chains.entries())if(first!==undefined)
+    yield* orders(chains.map((other,j)=>i===j?rest:other),[...prefix,first]);
 }
 function* schedules(events: WalkthroughEvent[],peer: string | undefined): Generator<{name:string; events: ReviewEvent[]}>{
   const at=events.findIndex(e=>e.type==='submit'),receiptAt=events.findIndex(e=>e.type==='receipt');
@@ -24,12 +24,12 @@ function* schedules(events: WalkthroughEvent[],peer: string | undefined): Genera
   for(const seq of orders([recovery,[snap]]))yield {name:'snapshot / recovery',events:[...base,...seq,...tail]};
   // Refresh starts after loss; its result cannot precede the refresh request.
   for(const seq of orders<ReviewEvent>([recovery.slice(1),[{type:'refresh-start'},{type:'refresh-end',snapshot:snap.snapshot}]]))
-    yield {name:'refresh / reconciliation',events:[...base,recovery[0],...seq,...tail]};
+    yield {name:'refresh / reconciliation',events:[...base,lost,...seq,...tail]};
   if(peer){
     const draft=base.find(e=>e.type==='draft');if(!draft?.body||!draft.id)throw Error('Missing recorded draft');
     const {body,id}=draft;
     const peerDraft: ReviewEvent[]=snap.snapshot.availability[peer][body.action]?[{type:'draft',body:{actor:peer,action:body.action,args:snap.snapshot.defaults[peer][body.action]},id:`peer-${id}`}]:[];
-    yield {name:'late owner receipt',events:[...base,...recovery.slice(0,2),{type:'switch',actor:peer},...peerDraft,recovery[2],{type:'switch',actor:body.actor},...tail]};
+    yield {name:'late owner receipt',events:[...base,lost,check,{type:'switch',actor:peer},...peerDraft,receipt,{type:'switch',actor:body.actor},...tail]};
   }
 }
 
