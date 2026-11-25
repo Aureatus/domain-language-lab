@@ -122,14 +122,11 @@ node live/record-demo.ts
 ffprobe -v error -show_entries format=duration:stream=codec_name,width,height,r_frame_rate -of json artifacts/live-issues-demo-v3.mp4
 ```
 
-Build uses only Node built-ins and inlines core, derive, generated worker source,
-then UI into the HTML,
-with isolated module-local scopes and explicit core-import alias handling. It rejects
-unsupported module syntax instead of silently omitting it. The worker source is
-generated from shared modules, not a copied interpreter or fetched file. Browser automation
-uses the existing Playwright and axe packages in
-`/tmp/opencode/workbench-tooling/node_modules`; recording additionally needs
-`ffmpeg` with H.264 support. No package changes or dependency installation are needed.
+Vite+ bundles the browser and worker entry points from the shared modules, then
+the build inlines them into the HTML. Neither bundle is fetched at runtime.
+Browser automation uses the workspace Playwright and axe dependencies. Install
+Chromium with `pnpm exec playwright install chromium`; recording additionally
+needs `ffmpeg` with H.264 support.
 
 Tests interact with actual controls and read the shared core for assertions. They
 cover create/assign/comment/resolve/reopen/watch, related inbox and notification
@@ -169,8 +166,8 @@ Existing actor/issue drafts, per-tool JSON drafts, persistence and derived-check
 invalidation remain in place. Browser coverage adds keyboard-opened availability
 dialog/Escape/focus restoration, rule-change updates, partial/schema tool reasons,
 query nonmutation, unchanged/null assignment, and explicit history suppression.
-Executed checks: `npm test` (49 passing), `npm run live:build`, and
-`npm run live:test` (Chromium flows and seven axe scans). This is finite local
+Executed checks: `pnpm test` (49 passing), `pnpm run live:build`, and
+`pnpm run live:test` (Chromium flows and seven axe scans). This is finite local
 integration evidence, not a general policy-system or accessibility proof.
 
 The subsequent fork/worker performance slice also updates core/derive/build and

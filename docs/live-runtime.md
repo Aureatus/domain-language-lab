@@ -264,7 +264,7 @@ availability/reasons against fresh actual dispatches, including policy-before-re
 denial, missing/invalid inputs, transitions and nullable/unchanged assignments.
 Applied-rule revision changes and execution clock failure are also covered.
 Read depth: README, both live guides, full core and selected contract/UI/test source;
-independent execution: `npm test`, `npm run live:build`, `npm run live:test`.
+independent execution: `pnpm test`, `pnpm run live:build`, `pnpm run live:test`.
 No external research, proof audit or upstream-suite copying.
 
 ### Fork/worker performance slice

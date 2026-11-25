@@ -1,6 +1,6 @@
 # Time away: a model-derived leave application
 
-Run `npm run leave`, then open **http://127.0.0.1:4174**. No build is needed.
+Run `pnpm run leave`, then open **http://127.0.0.1:4174**. No build is needed.
 `PORT` and `LEAVE_DIR` select the listener and persistent directory; the default
 remains `artifacts/leave-data/leave.sqlite`. Existing storage is reopened, not reset.
 
@@ -44,13 +44,13 @@ observer layout, not for security. `/?explain=1` enables the optional generic
 node --test application/*.test.ts leave/*.test.ts
 node leave/browser-test.ts
 node leave/explained-video.ts --test
-npm run application:test
-npm test
+pnpm run application:test
+pnpm test
 ```
 
-Browser scripts reuse the existing Playwright installation at
-`/tmp/opencode/workbench-tooling/node_modules/playwright/index.mjs`. No dependencies
-were installed. Browser runs use fresh temporary DBs and do not reset the demo.
+Browser scripts use the workspace Playwright dependency. Install Chromium with
+`pnpm exec playwright install chromium`. Browser runs use fresh temporary DBs
+and do not reset the demo.
 Current reports/screenshots use `artifacts/derived-time-off-*`.
 
 ## Recordings are historical

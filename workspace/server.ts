@@ -2,7 +2,8 @@ import {createServer} from 'node:http';
 import {mkdir, readFile} from 'node:fs/promises';
 import {resolve, dirname} from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {createRequire, stripTypeScriptTypes} from 'node:module';
+import {createRequire} from 'node:module';
+import {browserBundle} from '../browser-build.ts';
 import {inventoryModel, initialState as v1State} from '../inventory/model.ts';
 import {inventoryV2Model, initialState as v2State} from '../inventory/v2/model.ts';
 import {jsonSnapshot, validateState as validateV1} from '../semantic/core.ts';
@@ -30,6 +31,7 @@ const adapterRequire = createRequire(new URL('../adapters/effect/package.json', 
 const Effect = await import(adapterRequire.resolve('effect/Effect'));
 const run = Effect.runSync;
 const here = dirname(fileURLToPath(import.meta.url));
+const workspaceBundle = browserBundle(new URL('./app.ts', import.meta.url));
 const decodeWith = (schema, value) => jsonSnapshot(decodeJson(schema, value));
 const scope = {identity: 'local-simulation', authentication: false, transport: 'loopback-only', clock: 'explicit-simulation-input', mutations: 'through-this-server-only'};
 const failure = (status, message) => Object.assign(new Error(message), {httpStatus: status});
@@ -161,13 +163,18 @@ export async function createWorkspaceServer({directory = resolve('artifacts/work
         }
         if (url.pathname.startsWith('/api/')) throw failure(404, 'Unknown API endpoint.');
         if (req.method !== 'GET' && req.method !== 'HEAD') throw failure(405, 'Method not allowed.');
-        const files = {'/': ['index.html', 'text/html'], '/index.html': ['index.html', 'text/html'], '/app.ts': ['app.ts', 'text/javascript'], '/derive.ts': ['derive.ts', 'text/javascript']};
+        if (url.pathname === '/app.js') {
+          const script = req.method === 'HEAD' ? undefined : await workspaceBundle();
+          res.writeHead(200, {'content-type': 'text/javascript; charset=utf-8', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff'});
+          return res.end(script);
+        }
+        const files = {'/': ['index.html', 'text/html'], '/index.html': ['index.html', 'text/html']};
         const file = files[url.pathname];
         if (!file) throw failure(404, 'Not found.');
         let content;
         try { content = await readFile(resolve(here, file[0])); } catch (e) { if (e.code === 'ENOENT') throw failure(404, 'Frontend file not available.'); throw e; }
         res.writeHead(200, {'content-type': `${file[1]}; charset=utf-8`, 'cache-control': 'no-store', 'x-content-type-options': 'nosniff'});
-        res.end(req.method === 'HEAD' ? undefined : file[0].endsWith('.ts') ? stripTypeScriptTypes(content.toString('utf8')) : content);
+        res.end(req.method === 'HEAD' ? undefined : content);
       } catch (error) {
         if (res.headersSent) res.destroy(error);
         else json(error.httpStatus ?? 500, {error: error.message || 'Storage or transport failure.'});

@@ -1,4 +1,4 @@
-import { chromium } from '/tmp/opencode/workbench-tooling/node_modules/playwright/index.mjs';
+import { chromium } from 'playwright';
 import { createRequire } from 'node:module';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import { runDerivedChecks } from './derive.ts';
 import { createApp } from './core.ts';
 const require=createRequire(import.meta.url);
-const axePath=require.resolve('/tmp/opencode/workbench-tooling/node_modules/axe-core/axe.min.js');
+const axePath=require.resolve('axe-core/axe.min.js');
 const browser=await chromium.launch({headless:true});
 const context=await browser.newContext({viewport:{width:1440,height:940}});
 const page=await context.newPage();

@@ -19,11 +19,10 @@ node inventory/video.ts
 ffprobe -v error -show_entries format=duration,size -show_entries stream=codec_name,width,height -of json artifacts/inventory-demo.mp4
 ```
 
-Open `artifacts/inventory.html` directly as a file. No server, installation,
-network, remote font, framework or backend is needed. Browser tests and recording
-use the existing Chromium tooling imported from
-`/tmp/opencode/workbench-tooling/node_modules/playwright/index.mjs`. Recording also
-requires `ffmpeg` on PATH. These scripts do not install dependencies.
+Open `artifacts/inventory.html` directly as a file after building it. No server,
+network, remote font, or backend is needed. Browser tests and recording use the
+workspace Playwright dependency; install Chromium with `pnpm exec playwright install chromium`.
+Recording also requires `ffmpeg` on PATH.
 
 1. **Run broken host** executes two preparations and two stale-snapshot commits.
    Read the actual oracle failure, inspect each step and its facts.

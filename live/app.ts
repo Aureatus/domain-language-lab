@@ -1,6 +1,8 @@
 import { createApp } from './core.ts';
 import { describeChange } from './derive.ts';
 
+declare const __liveWorkerSource: string;
+
 const core = createApp();
 const storageKey = 'relay.workspace.v1';
 let view = core;

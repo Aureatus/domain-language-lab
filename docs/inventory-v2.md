@@ -8,7 +8,7 @@ interpreter.
 ## Run
 
 The unified browser workspace now exposes this profile alongside v1:
-`npm run workspace`, then `http://127.0.0.1:4173`. See
+`pnpm run workspace`, then `http://127.0.0.1:4173`. See
 [workspace UI](workspace-ui.md) for approval controls, live two-session updates,
 restart/reconnect, derived forms/tools and browser verification.
 

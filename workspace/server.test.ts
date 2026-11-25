@@ -15,6 +15,17 @@ async function fixture(t) {
   return {directory, get url() { return server.url; }, async restart() { await server.close(); server = await createWorkspaceServer({directory, port: 0}); }, close: () => server.close()};
 }
 const get = async (f, profile = 'v2') => { const r = await fetch(`${f.url}/api/snapshot?profile=${profile}&actor=alice`); assert.equal(r.status, 200); return r.json(); };
+
+test('serves the workspace browser bundle without exposing TypeScript sources', async t => {
+  const f = await fixture(t);
+  const page = await fetch(f.url);
+  assert.match(await page.text(), /src="\/app\.js"/);
+  const script = await fetch(f.url + '/app.js');
+  assert.equal(script.status, 200);
+  assert.match(script.headers.get('content-type'), /^text\/javascript/);
+  assert.ok((await script.text()).length > 0);
+  assert.equal((await fetch(f.url + '/app.ts')).status, 404);
+});
 async function post(f, endpoint, value, expected = 200) {
   const response = await fetch(`${f.url}/api/${endpoint}`, {method: 'POST', headers: {'content-type': 'application/json'}, body: JSON.stringify(value)});
   const body = await response.json(); assert.equal(response.status, expected, JSON.stringify(body)); return body;

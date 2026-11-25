@@ -32,7 +32,7 @@ Pinned SDK and read depth: [research memo](research/exact.md).
 ## Chromium/Exact conformance
 
 This is separate from the [bounded checker and offline replay](check-interactions.md).
-Use the same Node/npm and run `npm run adapters:install` in this repository.
+Use the same Node version and run `pnpm install --frozen-lockfile` in this repository.
 Install [Bun 1.4.2](https://github.com/oven-sh/bun/releases/tag/bun-v1.4.2),
 [rustup](https://rustup.rs/) and a Linux C toolchain (e.g. `build-essential` on
 Ubuntu). On Linux x86-64, use glibc 2.36 or newer (e.g. Ubuntu 24.04);
@@ -58,9 +58,9 @@ node "$EXACT_ROOT/node_modules/playwright-core/cli.js" install chromium
 "$BUN" "$EXACT_ROOT/scripts/exact.mjs" new "$EXACT_TEMPLATE" \
   --name Derived --bundle-id research.derived.exact
 
-npm run application:review:test
+pnpm run application:review:test
 # Or replay the lost-then-snapshot prefix using the trace from check-interactions.md:
-# npm run application:review:test -- "$trace"
+# pnpm run application:review:test "$trace"
 ```
 
 If Chromium reports missing Linux libraries, install them using the same

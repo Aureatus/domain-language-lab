@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import {execFile} from 'node:child_process';
 import {mkdtemp,rm} from 'node:fs/promises';
 import {promisify} from 'node:util';
-import {chromium} from '/tmp/opencode/workbench-tooling/node_modules/playwright/index.mjs';
+import {chromium} from 'playwright';
 import {createApplicationServer} from './server.ts';
 import declaration from '../leave/model.ts';
 

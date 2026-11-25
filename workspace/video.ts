@@ -1,4 +1,4 @@
-import {chromium} from '/tmp/opencode/workbench-tooling/node_modules/playwright/index.mjs';
+import {chromium} from 'playwright';
 import {mkdir, mkdtemp, writeFile} from 'node:fs/promises';
 import {spawnSync} from 'node:child_process';
 import {createWorkspaceServer} from './server.ts';

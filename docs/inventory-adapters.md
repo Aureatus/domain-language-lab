@@ -14,7 +14,7 @@ The checks below were independently executed against these implementations.
 ```sh
 node --test inventory/adapters.test.ts adapters/lean/inventory.test.ts
 node adapters/lean/inventory.ts
-npm run proof:inventory # repository artifact destination
+pnpm run proof:inventory # repository artifact destination
 ```
 
 Executed result: **7 tests pass**, CLI reports **`proof_checked`**. Uses the existing
@@ -28,7 +28,7 @@ Lean, metadata, logs and reports. The positive CLI defaults to `positive/`; an
 optional directory argument changes its destination. Tests also write
 `actual-reserve.lean` and `actual-mutant.lean` with their execution logs. These are
 regenerable local evidence, not committed fixtures or independent authorities.
-The integrated command `npm run proof:inventory` writes the positive evidence to
+The integrated command `pnpm run proof:inventory` writes the positive evidence to
 `artifacts/inventory-proof/` for convenient inspection.
 
 ## Effect: full experimental inventory model, bounded tests

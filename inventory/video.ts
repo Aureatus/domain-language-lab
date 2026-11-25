@@ -1,4 +1,4 @@
-import {chromium} from '/tmp/opencode/workbench-tooling/node_modules/playwright/index.mjs';
+import {chromium} from 'playwright';
 import {mkdir,writeFile} from 'node:fs/promises';
 import {spawnSync} from 'node:child_process';
 const root=new URL('../',import.meta.url), directory=new URL('artifacts/inventory-recording/',root);

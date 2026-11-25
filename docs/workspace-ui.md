@@ -15,9 +15,9 @@ node workspace/video.ts
 The server defaults to `artifacts/workspace-data`; `WORKSPACE_DIR` and `PORT` can
 override it. Startup never resets databases. Browser tests and video each create
 an exclusive temporary directory under `/tmp/opencode` and use an ephemeral port.
-They use the already-installed Playwright/axe tooling in
-`/tmp/opencode/workbench-tooling/node_modules`; recording additionally needs
-`ffmpeg` and `ffprobe`. No dependency installation or global configuration occurs.
+They use the workspace Playwright and axe dependencies. Install Chromium with
+`pnpm exec playwright install chromium`; recording additionally needs
+`ffmpeg` and `ffprobe`.
 
 ## Interaction contract
 

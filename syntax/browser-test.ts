@@ -1,5 +1,5 @@
 // Execute text-only edits through the real generic server/browser, no app code.
-import {chromium} from '/tmp/opencode/workbench-tooling/node_modules/playwright/index.mjs';
+import {chromium} from 'playwright';
 import {mkdtemp,readFile} from 'node:fs/promises';
 import assert from 'node:assert/strict';
 import {parseSource} from './frontend.ts';

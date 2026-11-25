@@ -11,7 +11,7 @@ import {decodeJson,decodeJsonObject,encodeJson,encodeJsonPretty,ActionEventsTrac
 
 const {values,positionals}=parseArgs({allowPositionals:true,options:{actor:{type:'string'},args:{type:'string'},json:{type:'boolean'},record:{type:'string'},replay:{type:'string'}}});
 const [entry,action]=positionals;
-if(!entry||!action||positionals.length!==2)throw Error('Usage: npm run inspect:action -- VIEW.domain ACTION [--actor ID] [--args JSON] [--json]');
+if(!entry||!action||positionals.length!==2)throw Error('Usage: pnpm run inspect:action VIEW.domain ACTION [--actor ID] [--args JSON] [--json]');
 if(values.replay&&(values.args||values.record))throw Error('--replay cannot be combined with --args or --record.');
 const {declaration}=loadSource(entry),derived=deriveApplication(declaration),{contract}=derived;
 const contractId=createHash('sha256').update(encodeJson({model:derived.model,contract})).digest('hex');

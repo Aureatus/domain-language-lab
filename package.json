@@ -2,8 +2,11 @@
   "name": "premise",
   "private": true,
   "type": "module",
-  "engines": { "node": ">=22.18.0" },
+  "packageManager": "pnpm@10.34.7",
+  "engines": { "node": "^22.18.0 || ^24.11.0 || >=26.0.0" },
   "scripts": {
+    "lint": "vp lint",
+    "typecheck": "tsc -p tsconfig.json",
     "test": "node --test prototype/*.test.ts live/*.test.ts semantic/*.test.ts semantic/v2/*.test.ts inventory/*.test.ts inventory/v2/*.test.ts adapters/effect/*.test.ts adapters/lean/*.test.ts adapters/exact/test.ts workspace/*.test.ts application/*.test.ts leave/*.test.ts syntax/*.test.ts",
     "syntax:check": "node syntax/cli.ts check",
     "syntax:lint": "node syntax/lint.ts",
@@ -30,7 +33,7 @@
     "durable:generated": "node inventory/v2/generated.ts artifacts/durable-generated-report.json",
     "inventory:durable": "node inventory/v2/demo.ts",
     "test:durable": "node --test adapters/effect/durable*.test.ts inventory/v2/*.test.ts semantic/v2/*.test.ts",
-    "adapters:install": "npm ci --prefix adapters/effect",
+    "adapters:install": "corepack pnpm install --frozen-lockfile",
     "inventory:build": "node inventory/build.ts",
     "inventory:test": "node inventory/browser-test.ts",
     "inventory:video": "node inventory/video.ts",
@@ -41,10 +44,17 @@
     "proof": "sh proof/run.sh",
     "workbench": "node workbench/build.ts",
     "test:browser": "node workbench/test-browser.ts",
-    "showcase": "npm test && npm run demo && npm run properties && npm run proof && npm run workbench",
+    "showcase": "pnpm test && pnpm demo && pnpm properties && pnpm proof && pnpm workbench",
     "live:build": "node live/build.ts",
     "live:test": "node live/browser-test.ts",
     "live:video": "node live/record-demo.ts",
     "live:generated": "node live/generated.ts"
+  },
+  "devDependencies": {
+    "@types/node": "24.19.4",
+    "axe-core": "4.11.1",
+    "playwright": "1.65.0",
+    "typescript": "5.9.3",
+    "vite-plus": "1.8.0"
   }
 }

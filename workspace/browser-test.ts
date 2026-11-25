@@ -1,4 +1,5 @@
-import {chromium} from '/tmp/opencode/workbench-tooling/node_modules/playwright/index.mjs';
+import {chromium} from 'playwright';
+import {createRequire} from 'node:module';
 import assert from 'node:assert/strict';
 import {mkdtemp, mkdir, writeFile} from 'node:fs/promises';
 import {createWorkspaceServer} from './server.ts';
@@ -116,8 +117,7 @@ try {
   assert.equal(await a.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
   await a.locator('#profile').focus(); await a.keyboard.press('Tab'); assert.equal(await a.locator('#actor').evaluate(el=>document.activeElement===el),true);
   await a.screenshot({path:new URL('workspace-mobile.png',artifacts).pathname,fullPage:true});
-  const axe = new URL('file:///tmp/opencode/workbench-tooling/node_modules/axe-core/axe.min.js');
-  await a.addScriptTag({path:axe.pathname});
+  await a.addScriptTag({path:createRequire(import.meta.url).resolve('axe-core/axe.min.js')});
   const audit=await a.evaluate(()=>axe.run(document,{runOnly:{type:'tag',values:['wcag2a','wcag2aa','wcag21aa']}}));
   assert.deepEqual(audit.violations.map(v=>({id:v.id,nodes:v.nodes.map(n=>n.target)})),[]);
   checks.push('390px mobile no page overflow; keyboard actor navigation; axe WCAG A/AA automated scan');

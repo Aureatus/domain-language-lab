@@ -1,10 +1,10 @@
 import {readFile,mkdir,writeFile} from 'node:fs/promises';
 import {createHash} from 'node:crypto';
-import {stripTypeScriptTypes} from 'node:module';
+import {bundleBrowser} from '../browser-build.ts';
 const root=new URL('../',import.meta.url);
 const paths=['semantic/core.ts','inventory/model.ts','inventory/oracle.ts','inventory/host.ts','inventory/app.ts'];
 const sources=await Promise.all(paths.map(p=>readFile(new URL(p,root),'utf8')));
-const bundle=sources.map(s=>stripTypeScriptTypes(s).replace(/^import .*;\n/gm,'').replace(/^export /gm,'')).join('\n');
+const bundle=await bundleBrowser(new URL('./app.ts',import.meta.url));
 const template=await readFile(new URL('inventory/template.html',root),'utf8');
 await mkdir(new URL('artifacts/',root),{recursive:true});
 await writeFile(new URL('artifacts/inventory.html',root),template.replace('/* BUNDLE */',()=>bundle.replace(/<\/script/gi,'<\\/script')));

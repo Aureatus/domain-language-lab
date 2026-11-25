@@ -3,7 +3,7 @@ import {mkdir,readFile} from 'node:fs/promises';
 import {resolve} from 'node:path';
 import {createRequire} from 'node:module';
 import {randomUUID,createHash} from 'node:crypto';
-import {stripTypeScriptTypes} from 'node:module';
+import {browserBundle} from '../browser-build.ts';
 import {isDeepStrictEqual} from 'node:util';
 import {deriveApplication,buildInvocation,inputDefaults} from './derive.ts';
 import {makeDurableRuntime,makeDurableStore,initializeDurableState,durableState,durableExecute,durableApprove,durableResume,durablePending,closeDurableStore} from '../adapters/effect/durable.ts';
@@ -35,9 +35,9 @@ const operationId=()=>`application-${randomUUID()}`;
 const fail=(message,status=400)=>Object.assign(Error(message),{httpStatus:status});
 const unwrap=r=>r.status==='duplicate'?unwrap(r.result):r;
 const browserFiles=Object.fromEntries(Object.entries({
-  '/':'index.html','/index.html':'index.html','/app.ts':'browser.ts','/client.ts':'client.ts','/snapshot.ts':'snapshot.ts',
-  '/view-records.ts':'view-records.ts','/loading.ts':'loading.ts','/submission.ts':'submission.ts','/style.css':'style.css'
+  '/':'index.html','/index.html':'index.html','/style.css':'style.css'
 }).map(([path,file])=>[path,new URL(file,import.meta.url)]));
+const applicationBundle=browserBundle(new URL('./browser.ts',import.meta.url));
 export function resultMessage(r){
   if(r.status==='committed')return 'Saved. Your records are up to date.';
   if(r.status==='prepared')return 'Automatically approved';
@@ -168,9 +168,13 @@ export async function createApplicationServer(declaration,{directory,port=0,data
           if(kind!=='preview'&&!replayed)publish();
           return json(200,{submissionId:body.submissionId,status:result.status,code:result.code,message:kind==='grant'&&result.status==='approved'?'Approval saved. Complete the request separately.':resultMessage(result),args:invocation?.args,requirements:result.request?.requirements,evidence:invocation?evidence(invocation,result,kind==='reconcile'?'execute':kind):undefined,snapshot:kind==='preview'?undefined:snapshot(),contractId});
         }
+        if(req.method==='GET'&&staticFiles===browserFiles&&url.pathname==='/app.js'){
+          const script=await applicationBundle();
+          res.writeHead(200,{'content-type':'text/javascript','x-content-type-options':'nosniff','cache-control':'no-store'});
+          return res.end(script);
+        }
         if(req.method!=='GET'||!Object.hasOwn(staticFiles,url.pathname))throw fail('Not found.',404);
-        const file=staticFiles[url.pathname],source=await readFile(file);
-        const data=file.pathname.endsWith('.ts')?stripTypeScriptTypes(source.toString('utf8')):source;
+        const file=staticFiles[url.pathname],data=await readFile(file);
         res.writeHead(200,{'content-type':file.pathname.endsWith('.html')?'text/html; charset=utf-8':file.pathname.endsWith('.css')?'text/css':'text/javascript','x-content-type-options':'nosniff','cache-control':'no-store'});res.end(data);
       }catch(e){if(res.headersSent)res.destroy();else json(e.httpStatus??500,{error:e.httpStatus?e.message:'Storage failed. The operation may have been recorded; reconnect before retrying.'});}
     });

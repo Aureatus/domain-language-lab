@@ -1,4 +1,4 @@
-import {chromium} from '/tmp/opencode/workbench-tooling/node_modules/playwright/index.mjs';
+import {chromium} from 'playwright';
 import assert from 'node:assert/strict';
 import {mkdir,writeFile} from 'node:fs/promises';
 const root=new URL('../',import.meta.url), artifacts=new URL('artifacts/',root);

@@ -4,7 +4,7 @@ Status: bounded in-memory adapter for `semantic-core/v1`; not durable storage.
 
 ## Use
 
-Install with `npm ci --prefix adapters/effect` and import `makeRuntime`, `makeStore`,
+Install with `pnpm install --frozen-lockfile` from the repository root and import `makeRuntime`, `makeStore`,
 and `execute` from `index.ts`. `execute(runtime, store, invocation)` is an Effect
 value and must be run by the Effect runtime (for example `Effect.runPromise`).
 The invocation's `clock` is mandatory caller-supplied data; the adapter never

@@ -75,7 +75,7 @@ addEventListener('hashchange',reveal);reveal();
 export function moduleSourcePage(path){
   const loaded=loadSource(path);
   const frames=loaded.modules.map(m=>`<h2>${escape(m.filename)}</h2><p>${escape(m.kind??'legacy')} · ${escape(m.id??'single file')}</p><iframe title="${escape(m.filename)}" srcdoc="${escape(sourcePage(m.source,m.filename,{parsedSections:loaded.sections.filter(s=>s.filename===m.filename)}))}"></iframe>`).join('');
-  return `<!doctype html><html lang="en"><meta charset="utf-8"><title>Source modules</title><style>body{background:#101925;color:#e1e9f3;font:14px system-ui;margin:24px}h2{overflow-wrap:anywhere}iframe{width:100%;height:750px;border:1px solid #35475c}</style><h1>Complete source import closure</h1><p>Entry: ${escape(loaded.entry)}. Every file below is complete, with exact-source copy/download. No author code is omitted.</p>${frames}</html>`;
+  return `<!doctype html><html lang="en"><meta charset="utf-8"><title>Source modules</title><style>body{background:#101925;color:#e1e9f3;font:14px system-ui;margin:24px}h2,p{overflow-wrap:anywhere}iframe{width:100%;height:750px;border:1px solid #35475c}</style><h1>Complete source import closure</h1><p>Entry: ${escape(loaded.entry)}. Every file below is complete, with exact-source copy/download. No author code is omitted.</p>${frames}</html>`;
 }
 
 // Compact static projection for inline chat; exact excerpts, not pseudocode.

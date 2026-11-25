@@ -1,6 +1,6 @@
 # Time away: optional declaration companion
 
-Run `npm run leave`, then open **http://127.0.0.1:4174/?explain=1**.
+Run `pnpm run leave`, then open **http://127.0.0.1:4174/?explain=1**.
 
 The companion is now an optional **generic evidence projection**, not required
 time-off application code. The reusable renderer consumes `application-evidence/v1`

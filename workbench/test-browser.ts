@@ -2,14 +2,15 @@ import assert from 'node:assert/strict';
 import { readFile, mkdir } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { pathToFileURL, fileURLToPath } from 'node:url';
+import { createRequire } from 'node:module';
+import { chromium } from 'playwright';
 import { replayHistory } from '../prototype/property.ts';
 
-async function tooling(name) {
-  try { return await import(name); }
-  catch { return import(pathToFileURL(resolve(process.env.WORKBENCH_TOOLING || '/tmp/opencode/workbench-tooling/node_modules', name, name === 'playwright' ? 'index.ts' : 'dist/index.mjs')).href); }
+const axePath = createRequire(import.meta.url).resolve('axe-core/axe.min.js');
+async function scanAccessibility(page) {
+  if (!await page.evaluate(() => !!window.axe)) await page.addScriptTag({path:axePath});
+  return page.evaluate(() => window.axe.run(document, {runOnly:{type:'tag',values:['wcag2a','wcag2aa','wcag21aa']}}));
 }
-const { chromium } = await tooling('playwright');
-const { default: AxeBuilder } = await tooling('@axe-core/playwright');
 const root = fileURLToPath(new URL('../', import.meta.url));
 const artifact = resolve(root, 'artifacts/workbench.html');
 const html = await readFile(artifact, 'utf8');
@@ -128,11 +129,11 @@ try {
   assert.equal(await page.locator('#panel-execution').isVisible(), false);
   assert.equal(await page.locator('#diff').isVisible(), true);
   await page.locator('#tab-execution').click();
-  const desktopAxe = await new AxeBuilder({ page }).withTags(['wcag2a','wcag2aa','wcag21aa']).analyze();
+  const desktopAxe = await scanAccessibility(page);
   assert.deepEqual(desktopAxe.violations.map(v => ({ id: v.id, nodes: v.nodes.map(n => n.target) })), []);
   for (const panel of ['changes','failures','evidence']) {
     await page.locator('#tab-'+panel).click();
-    const scan = await new AxeBuilder({ page }).withTags(['wcag2a','wcag2aa','wcag21aa']).analyze();
+    const scan = await scanAccessibility(page);
     assert.deepEqual(scan.violations.map(v => ({ id: v.id, nodes: v.nodes.map(n => n.target) })), [], `desktop ${panel}`);
   }
   await page.locator('#tab-execution').click();
@@ -142,12 +143,12 @@ try {
     await page.setViewportSize({ width, height: 844 });
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, `overflow at ${width}`);
   }
-  const mobileAxe = await new AxeBuilder({ page }).withTags(['wcag2a','wcag2aa','wcag21aa']).analyze();
+  const mobileAxe = await scanAccessibility(page);
   assert.deepEqual(mobileAxe.violations.map(v => v.id), []);
   for (const panel of ['changes','failures','evidence']) {
     await page.locator('#tab-'+panel).click();
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, `mobile ${panel} overflow`);
-    const scan = await new AxeBuilder({ page }).withTags(['wcag2a','wcag2aa','wcag21aa']).analyze();
+    const scan = await scanAccessibility(page);
     assert.deepEqual(scan.violations.map(v => v.id), [], `mobile ${panel}`);
   }
   await page.locator('#tab-execution').click();
@@ -185,12 +186,12 @@ try {
     assert.equal(layout.overflow, false, `inline overflow at ${width}`);
     assert.deepEqual(layout.backgrounds, Array(3).fill('rgba(0, 0, 0, 0)'));
     assert.equal(layout.outerPadding, '0px');assert.equal(layout.outerBorder, '0px');assert.equal(layout.left, 0);
-    const axe = await new AxeBuilder({ page }).withTags(['wcag2a','wcag2aa','wcag21aa']).analyze();
+    const axe = await scanAccessibility(page);
     assert.deepEqual(axe.violations.map(v => ({ id: v.id, nodes: v.nodes.map(n => n.target) })), []);
     for (const panel of ['changes','failures','evidence']) {
       await page.locator('#tab-'+panel).click();
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, `inline ${width} ${panel} overflow`);
-      const scan = await new AxeBuilder({ page }).withTags(['wcag2a','wcag2aa','wcag21aa']).analyze();
+      const scan = await scanAccessibility(page);
       assert.deepEqual(scan.violations.map(v => v.id), [], `inline ${width} ${panel}`);
     }
     await page.locator('#tab-execution').click();

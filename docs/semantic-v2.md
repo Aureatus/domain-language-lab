@@ -50,10 +50,10 @@ failure shapes and trust boundaries.
 
 ```sh
 node --test semantic/v2/*.test.ts semantic/*.test.ts
-tsc --strict --noImplicitAny false --noEmit --allowImportingTsExtensions --module nodenext --target es2023 semantic/v2/types.test.mts
+pnpm typecheck
 ```
 
-Core-only tests need no additional dependencies. The integrated `npm test`
+Core-only runtime tests need no additional dependencies. The integrated `pnpm test`
 script now includes v2, inventory and durable-adapter tests.
 Tests exercise this interpreter mapping, not upstream suites. Browser safety is by
 dependency inspection only; browser execution and formal verification of v2 remain

@@ -2,8 +2,8 @@
 
 Latest integrated run:
 
-- `npm test`: **159 passed**, zero failures/skips, including four new leave tests.
-- `npm run leave:test`: Maya's balance/approval story, Leo's same-date rule-change
+- `pnpm test`: **159 passed**, zero failures/skips, including four new leave tests.
+- `pnpm run leave:test`: Maya's balance/approval story, Leo's same-date rule-change
   story, two independent live clients, invalid dates, insufficient balance,
   unauthorized operations, stale saved-grant/resume failure without deduction,
   database reopen/resync and mobile overflow checks passed.
@@ -21,14 +21,14 @@ resume are separate durable transactions. Full boundaries: `docs/time-off-demo.m
 
 Latest integrated run (2026-11-12):
 
-- `npm test`: **155 passed**, zero failures/skips. Includes all prior semantic,
+- `pnpm test`: **155 passed**, zero failures/skips. Includes all prior semantic,
   adapter, v1 Lean and issue tests, plus workspace server/derivation and stronger
   generated-history tests.
-- `npm run workspace:test`: passed actual SQLite/Effect/browser flows for both
+- `pnpm run workspace:test`: passed actual SQLite/Effect/browser flows for both
   profiles, two-session updates, same-DB listener/handle restart and reconnect,
   approval/stale/expiry/consumed behavior, JSON duplicate delivery, lifecycle,
   draft/focus, late-response guards, mobile, keyboard and axe checks.
-- `npm run durable:generated`: six 30-command histories pass independent outcome,
+- `pnpm run durable:generated`: six 30-command histories pass independent outcome,
   record/state and approval expectations; exact replay succeeds. Actual coverage:
   72 committed, 18 pending, 18 approved, 12 duplicates, 60 rejected outcomes.
 - Independent workspace review reported no actionable defects in inspected files
@@ -45,11 +45,11 @@ v2 proofs, general bidirectional reactivity, authentication or external delivery
 
 Latest integrated execution (2026-11-12):
 
-- `npm test`: **140 passed**, zero failures/skips. Includes existing v1 Lean
+- `pnpm test`: **140 passed**, zero failures/skips. Includes existing v1 Lean
   checks, v2 lifecycle/approval semantics, SQLite rollback/recovery, competing
   processes, invocation identity, grant/resume persistence, and both inventory
   profiles. Existing browser runtime unit/generated tests remain in the suite.
-- `npm run inventory:durable`: three actual SQLite scenarios passed: full
+- `pnpm run inventory:durable`: three actual SQLite scenarios passed: full
   pending/reopen/grant/reopen/resume/retry/cancel/delete lifecycle, stale approval
   after intervening reservation, and fresh-clock expiry rejection. Report:
   `artifacts/inventory-v2-report.json`. The CLI reopens handles; additional tests
@@ -69,19 +69,19 @@ core, durable adapter, tests and CLI evidence.
 
 Latest integrated execution after adapter review corrections:
 
-- `npm test`: **100 passed, zero failures/skips**, covering original prototype,
+- `pnpm test`: **100 passed, zero failures/skips**, covering original prototype,
   live issues, shared semantics, inventory, actual Effect and generated Lean.
   Includes key-order-independent retry identity, caller mutation isolation and
   model-sensitive invocation conflicts.
-- `npm run inventory:build` and `npm run inventory:test`: offline inventory UI
+- `pnpm run inventory:build` and `pnpm run inventory:test`: offline inventory UI
   flows, replay, failure/correct schedules, import/export and mobile checks passed.
-- `npm run live:test`: existing issue browser workflows passed, seven axe scans
+- `pnpm run live:test`: existing issue browser workflows passed, seven axe scans
   and seven state audits. The issue application retains its original interpreter.
-- `npm run proof:inventory`: **proof_checked** with Lean 4.19.0, commit
+- `pnpm run proof:inventory`: **proof_checked** with Lean 4.19.0, commit
   `6caaee842e94`; `preserves` uses `propext`, positive witness no axioms.
   Evidence is `artifacts/inventory-proof/report.json`. The source is the actual
   inventory reserve AST, projected to stock integer expressions with exclusions.
-- `npm run inventory:video`: regenerated continuous cursor-visible interaction
+- `pnpm run inventory:video`: regenerated continuous cursor-visible interaction
   with click pulses, replayed overselling and corrected behavior, H.264 MP4 at
   `artifacts/inventory-demo.mp4`. Screenshots and decoded sample frames inspected.
 
@@ -100,20 +100,20 @@ formal verification of the full proposed language.
 
 ## Commands executed
 
-- `npm test`: 51 tests passed, zero failures. Covers the original approval
+- `pnpm test`: 51 tests passed, zero failures. Covers the original approval
   experiment and current live core, journal, isolated forks, derivations and
   generated test harness.
-- `npm run live:generated`: sampled pass for seed 335597, 40 histories of 80
+- `pnpm run live:generated`: sampled pass for seed 335597, 40 histories of 80
   commands. 2,516 dispatch attempts and 684 rule edits. Successful actions:
   create 267, assign 91, comment 208, resolve 95, reopen 31, watch 199.
   Includes 1,203 role denials and 1,625 total rejected dispatches.
-- `npm run live:build`: self-contained offline HTML with shared core, derive
+- `pnpm run live:build`: self-contained offline HTML with shared core, derive
   module, UI and worker code generated from those same sources.
-- `npm run live:test`: browser workflows passed, seven automated axe scans and
+- `pnpm run live:test`: browser workflows passed, seven automated axe scans and
   seven current-state audit outcomes. Includes local save recovery, atomic failed
   imports, preview guards, drafts, current-action explanations, cancelable worker
   checks, stale worker results and offline request checks.
-- `npm run live:video`: continuous Playwright recording converted to
+- `pnpm run live:video`: continuous Playwright recording converted to
   `artifacts/live-issues-demo-v4.mp4`. ffprobe: H.264, 1440×940, 30 fps,
   70.4 seconds. Decoded sample frames inspected for cursor and visible workflow.
 - Local Markdown link check and package JSON parse passed.

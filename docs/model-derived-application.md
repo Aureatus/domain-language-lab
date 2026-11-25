@@ -19,7 +19,7 @@ loading bridge retaining the compatibility default export:
 ### Executable authored-source count
 
 ```sh
-npm run application:count -- leave model.ts server.ts \
+pnpm run application:count leave model.ts server.ts \
   --report artifacts/model-derived-application-count.json
 ```
 
@@ -110,10 +110,10 @@ for this migration.
 ## Verification and scope
 
 ```sh
-npm test
+pnpm test
 node leave/browser-test.ts
 node leave/explained-video.ts --test
-npm run application:test
+pnpm run application:test
 ```
 
 Executed mapping tests exercise the real Maya Friday **5→4**, three-day pending **4**, grant-without-deduction then grouped resume **1**; Leo's two-day preview before/after threshold **3→2**, pending **5**, then grant/resume **3**. They check dates, permissions, exact captured inputs, grouped implicit facts, one-shot consumption, stale rejection with saved grants and unchanged balance, SQLite reopen and cross-origin boundaries.

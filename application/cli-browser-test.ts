@@ -1,5 +1,5 @@
 // One server/database, independent browser and spawned CLI processes.
-import {chromium} from '/tmp/opencode/workbench-tooling/node_modules/playwright/index.mjs';
+import {chromium} from 'playwright';
 import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
 import {mkdtemp} from 'node:fs/promises';

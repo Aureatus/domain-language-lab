@@ -1,7 +1,26 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtemp} from 'node:fs/promises';
+import {mkdtemp,rm} from 'node:fs/promises';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
 import {createLeaveServer} from './server.ts';
+
+test('serves the derived application browser bundle without exposing TypeScript sources', async () => {
+  const directory=await mkdtemp(join(tmpdir(),'leave-assets-'));
+  const server=await createLeaveServer({directory});
+  try {
+    const page=await fetch(server.url);
+    assert.match(await page.text(), /src="\/app\.js"/);
+    const script=await fetch(server.url+'/app.js');
+    assert.equal(script.status,200);
+    assert.match(script.headers.get('content-type'), /^text\/javascript/);
+    assert.ok((await script.text()).length>0);
+    assert.equal((await fetch(server.url+'/submission.ts')).status,404);
+  } finally {
+    await server.close();
+    await rm(directory,{recursive:true,force:true});
+  }
+});
 test('derived HTTP: exact Maya/Leo story, separate grants/resume, stale, validation, permissions and reopen',async()=>{
   const directory=await mkdtemp('/tmp/opencode/leave-server-');let server=await createLeaveServer({directory});
   const post=async(path,body)=>{const response=await fetch(`${server.url}/api/${path}`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});return {http:response.status,...await response.json()};};

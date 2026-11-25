@@ -1,4 +1,4 @@
-import { chromium } from '/tmp/opencode/workbench-tooling/node_modules/playwright/index.mjs';
+import { chromium } from 'playwright';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';

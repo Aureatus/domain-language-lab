@@ -3,18 +3,18 @@
 ## Completed acceptance checkpoint (2026-11-12)
 
 The local application-profile acceptance below is implemented and executed.
-`npm run workspace` serves both profiles using separate SQLite databases and the
+`pnpm run workspace` serves both profiles using separate SQLite databases and the
 actual Effect adapter. The server and UI share derived input descriptors; live
 notifications carry declared resource/relationship invalidations and event-time
 recipient provenance. Clients resynchronize complete durable snapshots on reconnect.
 
-- `npm test`: 155 tests pass, zero failures/skips, including workspace server,
+- `pnpm test`: 155 tests pass, zero failures/skips, including workspace server,
   semantic v1/v2, persistence/approval, independent generated histories and v1 Lean.
-- `npm run workspace:test`: both profiles, two-session synchronization, pending/
+- `pnpm run workspace:test`: both profiles, two-session synchronization, pending/
   grant/resume, same-database restart/reconnect, competing changes, stale/expired
   rejection, lifecycle actions, duplicate JSON invocation, preserved focus/drafts,
   delayed old-profile/actor responses, mobile/keyboard and axe checks pass.
-- `npm run durable:generated`: six seeds, 30 commands each, independently predicted
+- `pnpm run durable:generated`: six seeds, 30 commands each, independently predicted
   outcomes and exact fresh-database replay. 72 committed outcomes, 18 pending,
   18 approved, 12 duplicate, and 60 categorized rejections. Three full-observation
   mutation checks detect stale acceptance, double decrement and missing commit.

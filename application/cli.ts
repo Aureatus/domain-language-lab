@@ -5,7 +5,7 @@ import {loadSource} from '../syntax/load.ts';
 import {deriveApplication} from './derive.ts';
 import {decodeJsonObject,encodeJson,encodeJsonPretty} from '../adapters/effect/json.ts';
 
-const usage=`Usage: npm run application:cli -- COMMAND [ID] --url http://127.0.0.1:4174 [options]
+const usage=`Usage: pnpm run application:cli COMMAND [ID] --url http://127.0.0.1:4174 [options]
 Commands: list [RESOURCE], inspect [ACTION], preview ACTION, execute ACTION,
           reconcile SUBMISSION --actor ID, inbox, grant REQUEST --policy POLICY, resume REQUEST
           execute accepts --submission-id ID for repeatable delivery

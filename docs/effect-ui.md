@@ -3,14 +3,13 @@
 This is a second web renderer for one action, not a replacement for the browser,
 CLI or Exact adapters. It uses the preview [Effect UI](https://ui.effect.website/article.md)
 snapshot at commit `0ba6f41c78d3d339bee404ab466daac8540f29ef`, with the same Effect
-version as the backend. No new Effect UI dependencies are needed for the other adapters.
+version as the backend. Only this renderer imports Effect UI.
 
-With Node 22.18 or newer, from the repository root:
+With Node 24.11 or newer, from the repository root:
 
 ```sh
-npm run adapters:install
-npm ci --prefix adapters/effect-ui
-npm start --prefix adapters/effect-ui
+pnpm install --frozen-lockfile
+pnpm --filter premise-effect-ui-spike start
 ```
 
 Open the printed loopback URL. The server uses a fresh SQLite database and
@@ -29,8 +28,8 @@ reload, and a missing receipt permits a retry only with that same identity.
 To reproduce the two fault cases in Chromium against the real backend:
 
 ```sh
-npm exec --prefix adapters/effect-ui -- playwright install chromium
-npm test --prefix adapters/effect-ui
+pnpm exec playwright install chromium
+pnpm --filter premise-effect-ui-spike test
 ```
 
 Playwright either lets the POST reach SQLite and drops the reply, or stops the

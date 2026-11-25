@@ -1,15 +1,15 @@
 # Check interactions
 
-From a clean Linux clone, use Node.js 22.18 or newer (CI uses Node.js
-24.22.3 with npm 11.19.1). No browser, Exact, Lean, or native build is needed
+From a clean Linux clone, use Node.js 24.11 or newer and pnpm.
+No browser, Exact, or Lean installation is needed
 for the bounded checker and offline replay.
 
 ```sh
-npm run adapters:install
-npm run check:interactions -- leave/browser.domain leave.request --actor maya
+pnpm install --frozen-lockfile
+pnpm run check:interactions leave/browser.domain leave.request --actor maya
 ```
 
-The install uses the Effect adapter's lockfile (Effect 4.1.4). Expect
+The workspace lockfile pins Effect 4.1.4. Expect
 `"status": "bounded-pass"` for the Maya example.
 
 No additional application declarations. Like `inspect:action`, the command selects example inputs, or takes `--args JSON`. It executes one isolated backend walkthrough to obtain **real snapshots and receipts**, then checks different orders in which a viewer could observe them. It does not re-execute the domain for each order.
@@ -27,10 +27,10 @@ These are small model schedules, not claims that each renderer exposes an actor 
 ```sh
 scratch=$(mktemp -d)
 trace="$scratch/snapshot-fault.json"
-npm run check:interactions -- leave/browser.domain leave.request --actor maya \
+pnpm run check:interactions leave/browser.domain leave.request --actor maya \
   --mutant snapshot-unlocks --out "$trace"
 # Expected exit 1 with rule submission.no-fresh-submit-before-receipt.
-npm run inspect:action -- leave/browser.domain leave.request \
+pnpm run inspect:action leave/browser.domain leave.request \
   --replay "$trace"
 ```
 
@@ -53,7 +53,7 @@ After [setting up Chromium and Exact](exact-adapter.md#chromiumexact-conformance
 run the same prefix against the two unmodified web renderers:
 
 ```sh
-npm run application:review:test -- "$trace"
+pnpm run application:review:test "$trace"
 ```
 
 The explicit mutant changes the test projection, not either shipped renderer.
