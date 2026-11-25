@@ -142,6 +142,7 @@ Shared-core inventory and adapters:
 ```sh
 pnpm run adapters:install
 pnpm test                  # includes generated Lean checks; requires Lean 4.19.0
+pnpm test:coverage         # same suite, with Node's line/branch/function coverage gates
 pnpm run inventory:durable # actual SQLite approval/reopen/resume acceptance
 pnpm run proof:inventory    # writes artifacts/inventory-proof/report.json
 pnpm run inventory:build
@@ -151,6 +152,9 @@ pnpm run inventory:video   # also requires ffmpeg
 
 The Lean runner defaults to the local toolchain described in
 [generated Lean](docs/generated-lean.md); set `LEAN` to another 4.19.0 executable.
+The coverage gate reports TypeScript loaded by the Node suite, not all repository
+files or browser execution. The Effect UI Chromium test runs separately with
+`pnpm --filter premise-effect-ui-spike test`.
 The inventory browser is dependency-free and offline; Effect and Lean execute in
 the Node/toolchain adapters, not in that browser page.
 

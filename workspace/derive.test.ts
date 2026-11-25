@@ -54,3 +54,13 @@ test('routing is generic across renamed actions and other domains; pending is ex
     sequence: 4, invalidations: [{view: 'pending'}], recipients: [], reason: 'approval-ledger',
   });
 });
+
+test('view invalidations fail closed on facts not backed by the declared write', () => {
+  const result = v1.execute(initialV1, invokeV1('unknown-write', 'reserve'));
+  assert.equal(result.status, 'committed');
+  const change = result.events.find(event => event.kind === 'change');
+  assert.ok(change);
+  assert.throws(() => deriveChange(inventoryModel, [{...change, actionId: 'missing'}]), /Unknown event action/);
+  assert.throws(() => deriveChange(inventoryModel, [{...change, semanticId: 'missing'}]), /Unknown event write/);
+  assert.throws(() => deriveChange(inventoryModel, [{...change, resource: 'reservation'}]), /Unknown event write/);
+});
