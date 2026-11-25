@@ -1,11 +1,7 @@
 import {createInterpreter, validateState} from '../semantic/core.ts';
-import type {Action, Expr, FieldSchema, Model, Scalar} from '../semantic/core.ts';
+import type {Action, Expr, FieldSchema, Model} from '../semantic/core.ts';
+import {bin, field, input, integer, lit} from './declarations.ts';
 
-const lit = (value: Scalar): Expr => ({op:'literal', value});
-const input = (name: string): Expr => ({op:'input', name});
-const field = (binding: string, name: string): Expr => ({op:'field', binding, field:name});
-const bin = (op: Extract<Expr, {left: Expr}>['op'], left: Expr, right: Expr): Expr => ({op,left,right});
-const integer = (min: number): FieldSchema => ({type:'integer',min});
 const string: FieldSchema = {type:'string'};
 function action(kind: string): Action {
   const prefix = `reservation.${kind}`, stock = `${prefix}.stock`, slot = `${prefix}.slot`;

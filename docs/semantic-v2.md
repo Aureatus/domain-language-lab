@@ -1,9 +1,9 @@
 # Lifecycle and policy-derived approvals (v2)
 
 The isolated `semantic/v2/core.ts` implements generic grouped create/update/delete
-and serializable approval requests/receipts. v1 source, consumers and existing Lean
-evidence are unchanged. **No v2 Lean proof is claimed.** A separately implemented
-[SQLite host](durable-execution.md) now persists this core's requests/grants and
+and serializable approval requests/receipts. It shares schema and expression
+primitives with v1 without changing v1 behavior. **No v2 Lean proof is claimed.**
+A separately implemented [SQLite host](durable-execution.md) persists requests/grants and
 executes one-shot resumption; see the [inventory acceptance](inventory-v2.md).
 
 See the exact integration contract in
