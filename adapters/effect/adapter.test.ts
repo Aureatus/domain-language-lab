@@ -7,7 +7,7 @@ import { issueModel, issueState } from '../../semantic/issues.ts';
 import { execute, makeStore } from './index.ts';
 
 const invocation = { id: 'effect1', action: 'issue.resolve', args: { issueId: 'i1' }, actor: 'maya', clock: 1730000000000 };
-const run = effect => Effect.runPromise(effect);
+const run = Effect.runPromise;
 
 test('committed retry identity ignores key order and retains detached invocation/model content', async () => {
   const runtime = createInterpreter(issueModel), source = structuredClone(issueState);
@@ -18,9 +18,11 @@ test('committed retry identity ignores key order and retains detached invocation
   command.args.issueId = 'i2';
   const reordered = {clock: invocation.clock, actor: invocation.actor, args: {issueId: 'i1'}, action: invocation.action, id: invocation.id};
   assert.equal((await run(execute(runtime, store, reordered))).status, 'duplicate');
-  assert.equal((await run(execute(runtime, store, command))).code, 'invocation-conflict');
+  const conflict = await run(execute(runtime, store, command));
+  assert.equal(conflict.status, 'rejected'); assert.equal(conflict.code, 'invocation-conflict');
   const changed = structuredClone(issueModel); changed.id = 'issues.changed';
-  assert.equal((await run(execute(createInterpreter(changed), store, invocation))).code, 'invocation-conflict');
+  const modelConflict = await run(execute(createInterpreter(changed), store, invocation));
+  assert.equal(modelConflict.status, 'rejected'); assert.equal(modelConflict.code, 'invocation-conflict');
 });
 
 test('real Effect execution publishes interpreter state and events atomically', async () => {
@@ -51,5 +53,7 @@ test('competing fibers serialize stale-state execution; duplicate IDs do not dou
   assert.equal(outcomes.filter(x => x.status === 'committed').length, 1);
   assert.equal(outcomes.filter(x => x.status === 'duplicate').length, 1);
   const final = await run(SynchronizedRef.get(store));
-  assert.equal(final.events.filter(x => x.invocationId === invocation.id).length, outcomes[0].result?.events?.length ?? outcomes.find(x => x.status === 'committed').events.length);
+  const committed = outcomes.find(x => x.status === 'committed');
+  assert.ok(committed);
+  assert.equal(final.events.filter(x => x.invocationId === invocation.id).length, committed.events.length);
 });

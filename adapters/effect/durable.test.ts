@@ -7,13 +7,19 @@ import { spawnSync } from 'node:child_process';
 import * as Effect from 'effect/Effect';
 import { issueModel, issueState } from '../../semantic/issues.ts';
 import { inventoryModel, initialState } from '../../inventory/model.ts';
-import { makeDurableRuntime, makeDurableStore, initializeDurableState, durableExecute, durableState, pullOutbox, acknowledgeOutbox, closeDurableStore } from './durable.ts';
+import { makeDurableRuntime, makeDurableStore, initializeDurableState, durableExecute, durableState, pullOutbox, acknowledgeOutbox, closeDurableStore, DurableStore, durableStoreLayer } from './durable.ts';
 
 const invoke = (id, args = { issueId: 'i1' }) => ({ id, action: 'issue.resolve', args, actor: 'maya', clock: 1730000000000 });
 const run = Effect.runPromise;
 const temp = () => mkdtempSync(join(tmpdir(), 'effect-durable-'));
 const worker = new URL('./durable-worker.ts', import.meta.url).pathname;
-const child = (path, mode, id) => spawnSync(process.execPath, [worker, path, mode, id], { encoding: 'utf8' });
+const child = (path: string, mode: string, id?: string) => spawnSync(process.execPath, [worker, path, mode, ...(id===undefined?[]:[id])], { encoding: 'utf8' });
+
+test('durable store layer supplies a SQLite handle and closes it when its scope ends', async t => {
+  const dir = temp(); t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const db = await run(Effect.provide(DurableStore, durableStoreLayer(join(dir, 'layer.sqlite'))));
+  assert.throws(() => db.prepare('SELECT 1'), /not open/i);
+});
 
 test('restart keeps outcomes and immutable command identity', async t => {
   const dir = temp(), path = join(dir, 'store.sqlite'); t.after(() => rmSync(dir, { recursive: true, force: true }));
@@ -71,7 +77,7 @@ test('outbox pull is ordered and ack is explicit at-least-once', async t => {
 test('separate processes serialize contenders against one SQLite state', async t => {
   const dir = temp(), path = join(dir, 'store.sqlite'); t.after(() => rmSync(dir, { recursive: true, force: true }));
   assert.equal(child(path, 'init').status, 0);
-  const outcomes = await Promise.all(['a', 'b'].map(id => new Promise(resolve => {
+  const outcomes = await Promise.all(['a', 'b'].map(id => new Promise<ReturnType<typeof child>>(resolve => {
     const p = spawnSync(process.execPath, [worker, path, 'execute', id], { encoding: 'utf8' }); resolve(p);
   })));
   assert.ok(outcomes.every(x => x.status === 0), outcomes.map(x => x.stderr).join('\n'));

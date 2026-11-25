@@ -278,7 +278,7 @@ export const acknowledgeOutbox = (db, sequence) => Effect.try({
 
 export const closeDurableStore = (db: DatabaseSync) => Effect.try({ try: () => db.close(), catch: error => error });
 
-export const DurableStore = Context.Service('DurableStore');
-export const durableStoreLayer = path => Layer.scoped(DurableStore, Effect.acquireRelease(
-  makeDurableStore(path), db => closeDurableStore(db),
+export const DurableStore = Context.Service<DatabaseSync>('DurableStore');
+export const durableStoreLayer = (path: string) => Layer.effect(DurableStore, Effect.acquireRelease(
+  makeDurableStore(path), db => Effect.orDie(closeDurableStore(db)),
 ));

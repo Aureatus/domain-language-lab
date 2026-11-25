@@ -1,10 +1,12 @@
 import {submissionStep,submissionControls,submissionWireBody} from './submission.ts';
+import type {SubmissionEvent,SubmissionState} from '../../application/submission.ts';
+import type {State} from '../../semantic/v2/types.ts';
 // Each generated actor/action form owns one driver for the mounted app.
 // The driver keeps the submitted body independently of polled defaults.
 export function submissionDriver(client,actor,action){
-  let state={phase:'editing'};
-  const step=event=>{state=submissionStep(state,event);};
-  const reply=()=>({phase:state.phase,message:state.phase==='known'?state.result.message:
+  let state: SubmissionState={phase:'editing'};
+  const step=(event: SubmissionEvent)=>{state=submissionStep(state,event);};
+  const reply=()=>({phase:state.phase,message:state.phase==='known'?state.result?.message:
     state.phase==='retryable'?'Submission not found. Retry the original submission.':
     state.phase==='unknown'?'Submission has an ambiguous outcome. Check submission before retrying.':'Submission in progress.'});
   async function run(type,args){
@@ -35,16 +37,16 @@ export function submissionDriver(client,actor,action){
 // Renderer transport/projection only. All decisions and mutations belong to HTTP.
 export function createClient({contract,contractId},base,fetcher=fetch){
   let latest=-1,cached;
-  async function request(path,body){
+  async function request(path,body?){
     const wire=body?.submissionId?submissionWireBody(body,contractId):JSON.stringify(body);
     const response=await fetcher(`${base}/api/${path}`,body===undefined?{}:{method:'POST',headers:{'content-type':'application/json'},body:wire});
     const result=await response.json();
     if(!response.ok){
       const error=Error(result.error??`HTTP ${response.status}`);
-      error.notSubmitted=path==='actions/execute'&&response.status===400&&
+      const notSubmitted=path==='actions/execute'&&response.status===400&&
         result.disposition==='not-submitted'&&result.contractId===contractId&&
         typeof body?.submissionId==='string'&&result.submissionId===body.submissionId&&typeof result.error==='string';
-      throw error;
+      throw Object.assign(error,{notSubmitted});
     }
     if(result.contractId!==contractId)throw Error('Declaration changed. Regenerate this Exact adapter.');
     if(body?.submissionId&&result.submissionId!==body.submissionId)throw Error('Submission receipt identity mismatch.');
@@ -55,8 +57,9 @@ export function createClient({contract,contractId},base,fetcher=fetch){
   const person=id=>contract.actors.find(a=>a.id===id)?.name??contract.actors.find(a=>a.id===id)?.label??id;
   const text=x=>Array.isArray(x)?x.join(', '):String(x??'');
   function project(s,actor){
-    const rows=[];
-    contract.views.forEach((v,i)=>{for(const [id,r]of Object.entries(s.state.records[v.resource])){
+    const rows: {id:string;title:string;detail:string}[]=[];
+    const records: State['records']=s.state.records;
+    contract.views.forEach((v,i)=>{for(const [id,r]of Object.entries(records[v.resource])){
       if(v.key&&id!==(v.key==='$actor'?actor:v.key)||v.ownerField&&r.values[v.ownerField]!==actor)continue;
       rows.push({id:`view:${i}:${id}`,title:v.label,detail:v.columns.map(c=>{const value=r.values[c.field];return `${c.label}: ${contract.relationships.some(r=>r.resource===v.resource&&r.field===c.field)?Array.isArray(value)?value.map(person).join(', '):person(value):text(value)}`;}).join(' · ')});
     }});

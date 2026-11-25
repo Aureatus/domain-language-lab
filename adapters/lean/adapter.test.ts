@@ -30,6 +30,7 @@ function differential(name, m, cases) {
     const amount = c.amount ?? 3;
     const state = {revision: pre.revision, records: {capacity: {main: {version: pre.version, values: {remaining: pre.remaining, previous: pre.previous}}}}};
     const result = runtime.execute(state, {id: `case${n}`, action: 'capacity.take', args: {amount}, actor: 'tester', clock: 0});
+    assert.ok(result.status === 'committed' || result.status === 'rejected');
     if (c.expected) assert.equal(result.status === 'committed' ? 'committed' : result.code, c.expected);
     let expected;
     if (result.status === 'committed') {
@@ -153,5 +154,6 @@ test('runtime stale commit rejects; this is not a generated concurrency theorem'
   const pending = runtime.prepare(state, invoke('first'));
   const other = runtime.execute(state, invoke('second'));
   assert.equal(pending.status, 'prepared'); assert.equal(other.status, 'committed');
-  assert.equal(runtime.commit(other.state, pending.prepared).code, 'stale');
+  const stale=runtime.commit(other.state, pending.prepared);
+  assert.equal(stale.status,'rejected'); assert.equal(stale.code,'stale');
 });

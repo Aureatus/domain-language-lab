@@ -3,6 +3,7 @@ import {resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {inventoryModel} from '../../inventory/model.ts';
 import {validateModel} from '../../semantic/core.ts';
+import type {Expr, Model, Scalar} from '../../semantic/types.ts';
 import {generate, hash, Unsupported} from './generate.ts';
 import {check} from './check.ts';
 import {encodeJson, encodeJsonPretty} from '../effect/json.ts';
@@ -12,8 +13,8 @@ const ACTION = 'reservation.reserve', GUARD = `${ACTION}.capacity`, UPDATE = `${
 // Pins every declaration except the two numeric expressions intentionally translated.
 // A new source shape requires a reviewed, versioned projection, not a refreshed baseline.
 const STRUCTURE = '52c581eb7a6698617d02b9565a6f60fcb2e7ab8de1d6806eb8df2f4f361b1cc0';
-const fail = message => { throw new Unsupported(message); };
-const lit = value => ({op: 'literal', value});
+function fail(message: string): never { throw new Unsupported(message); }
+const lit = (value: Scalar): Expr => ({op: 'literal', value});
 export const obligation = {
   format: 'numeric-law/v1', id: 'inventory.available-conservation.v1', action: ACTION,
   ensures: {op: 'and', left: {op: 'le', left: lit(0), right: {op: 'post', field: 'available'}}, right: {
@@ -23,21 +24,24 @@ export const obligation = {
 };
 
 // All semantic IDs in the complete source, not merely the selected action.
-function ids(source) {
+function ids(source: Model) {
   return [source.id, ...Object.keys(source.resources), ...source.relationships.map(x => x.id),
-    ...Object.entries(source.actions).flatMap(([id, a]) => [id, ...['bindings', 'policies', 'preconditions', 'updates'].flatMap(k => a[k].map(x => x.id))])].sort();
+    ...Object.entries(source.actions).flatMap(([id, a]) => [id, ...(['bindings', 'policies', 'preconditions', 'updates'] as const).flatMap(k => a[k].map(x => x.id))])].sort();
 }
 
-export function projectInventory(source = inventoryModel) {
+export function projectInventory(source: Model = inventoryModel) {
   try { validateModel(source); } catch (error) { fail(`Invalid inventory source: ${error.message}`); }
-  const skeleton = structuredClone(source), a = skeleton.actions[ACTION];
-  const guard = a?.preconditions.find(x => x.id === GUARD), update = a?.updates.find(x => x.id === UPDATE);
-  if (!guard || !update) fail('Missing retained inventory declarations');
-  guard.when = null; update.value = null;
-  if (hash(skeleton) !== STRUCTURE) fail('Inventory structural drift: versioned projection review required');
   const original = source.actions[ACTION];
+  const retainedGuard = original?.preconditions.find(x => x.id === GUARD);
+  const retainedUpdate = original?.updates.find(x => x.id === UPDATE);
+  if (!retainedGuard || !retainedUpdate) fail('Missing retained inventory declarations');
+  const skeleton = {...source, actions: {...source.actions, [ACTION]: {...original,
+    preconditions: original.preconditions.map(x => x===retainedGuard ? {...x,when:null} : x),
+    updates: original.updates.map(x => x===retainedUpdate ? {...x,value:null} : x),
+  }}};
+  if (hash(skeleton) !== STRUCTURE) fail('Inventory structural drift: versioned projection review required');
   const fields = Object.fromEntries(Object.entries(source.resources.stock.fields).filter(([, s]) => s.type === 'integer'));
-  function dependency(e) {
+  function dependency(e: Expr): void {
     switch (e.op) {
       case 'literal': if (typeof e.value === 'number' || typeof e.value === 'boolean') return; break;
       case 'input': if (e.name === 'quantity') return; break;
@@ -47,11 +51,10 @@ export function projectInventory(source = inventoryModel) {
     }
     fail(`Unexpected retained dependency: ${encodeJson(e)}`);
   }
-  const retainedGuard = original.preconditions.find(x => x.id === GUARD);
-  const retainedUpdate = original.updates.find(x => x.id === UPDATE);
   dependency(retainedGuard.when); dependency(retainedUpdate.value);
   const binding = original.bindings.find(x => x.id === `${ACTION}.stock`);
-  const model = {
+  if (!binding) fail('Missing stock binding');
+  const model: Model = {
     format: source.format, id: 'inventory.stock-capacity.v1', resources: {stock: {fields: structuredClone(fields)}}, relationships: [],
     actions: {[ACTION]: {inputs: {quantity: structuredClone(original.inputs.quantity)},
       bindings: [{...structuredClone(binding), key: lit('camera')}],
@@ -76,17 +79,16 @@ export function projectInventory(source = inventoryModel) {
   return {model, metadata};
 }
 
-export function generateInventory(source = inventoryModel, law = obligation) {
+export function generateInventory(source: Model = inventoryModel, law = obligation) {
   const projected = projectInventory(source);
   return {...generate(projected.model, law), inventory: projected.metadata};
 }
 
-export function checkInventory(directory, source = inventoryModel, law = obligation) {
+export function checkInventory(directory, source: Model = inventoryModel, law = obligation) {
   const {model, metadata} = projectInventory(source);
   mkdirSync(directory, {recursive: true});
-  const report = check(model, law, directory);
-  report.inventory = metadata;
-  report.inventory_adapter_sha256 = hash(readFileSync(fileURLToPath(import.meta.url), 'utf8'));
+  const report = {...check(model, law, directory), inventory: metadata,
+    inventory_adapter_sha256: hash(readFileSync(fileURLToPath(import.meta.url), 'utf8'))};
   writeFileSync(resolve(directory, 'inventory-projection.json'), encodeJsonPretty(metadata) + '\n');
   writeFileSync(resolve(directory, 'report.json'), encodeJsonPretty(report) + '\n');
   return report;

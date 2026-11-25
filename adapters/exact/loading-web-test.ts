@@ -7,7 +7,7 @@ if(!/^http:\/\/127\.0\.0\.1:\d+$/.test(url)||url.endsWith(':4186'))throw Error('
 const require=createRequire(`${process.env.EXACT_ROOT??'/tmp/opencode/exact-source'}/package.json`);
 const browser=await require('playwright-core').chromium.launch({headless:true});
 try{
-  const page=await browser.newPage(),errors=[];
+  const page=await browser.newPage(),errors:string[]=[];
   page.setDefaultTimeout(6000);
   page.on('pageerror',e=>errors.push(e.message));
   let gate;
