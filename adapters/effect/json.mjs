@@ -202,7 +202,7 @@ export const ActionEventsTraceSchema = openObject({
   contractId: Schema.String,
   action: Schema.String,
   actor: Schema.String,
-  args: Schema.JsonObject,
+  args: Schema.Json,
   events: Schema.Array(Schema.JsonObject),
 });
 

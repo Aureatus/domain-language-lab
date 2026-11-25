@@ -91,6 +91,11 @@ test('ActionEventsTraceSchema and SubmissionTraceSchema validate replay traces',
     encodeJson({ format: 'action-events/v1', contractId: 'c1', action: 'leave.request', actor: 'maya', args: {}, events: [{ type: 'open' }] }),
   );
   assert.equal(trace.events.length, 1);
+  const nonObjectArgsTrace = decodeJson(
+    ActionEventsTraceSchema,
+    encodeJson({ format: 'action-events/v1', contractId: 'c1', action: 'leave.request', actor: 'maya', args: null, events: [{ type: 'open' }] }),
+  );
+  assert.equal(nonObjectArgsTrace.args, null);
   assert.throws(() => decodeJson(ActionEventsTraceSchema, '{"format":"wrong","contractId":"c1","action":"a","actor":"b","args":{},"events":[]}'));
 
   const subTrace = decodeJson(SubmissionTraceSchema, '[{"type":"submit","id":"s1","body":{"actor":"maya"}},{"type":"lost"}]');
