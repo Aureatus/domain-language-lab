@@ -5,12 +5,12 @@ import type {DatabaseSync} from 'node:sqlite';
 import {mkdir, readFile} from 'node:fs/promises';
 import {resolve, dirname} from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {createRequire} from 'node:module';
 import {browserBundle} from '../browser-build.ts';
 import {inventoryModel, initialState as v1State} from '../inventory/model.ts';
 import {inventoryV2Model, initialState as v2State} from '../inventory/v2/model.ts';
 import {jsonSnapshot, validateState as validateV1} from '../semantic/core.ts';
 import {validateState as validateV2} from '../semantic/v2/core.ts';
+import {Effect} from '../adapters/effect/index.ts';
 import {makeDurableRuntime, makeDurableStore, initializeDurableState, durableState,
   durableExecute, durableApprove, durableResume, closeDurableStore} from '../adapters/effect/durable.ts';
 import {
@@ -31,16 +31,14 @@ import {
 import {deriveTools, deriveChange} from './derive.ts';
 import type {WorkspaceChange} from './derive.ts';
 
-const adapterRequire = createRequire(new URL('../adapters/effect/package.json', import.meta.url));
-const Effect = await import(adapterRequire.resolve('effect/Effect'));
 const run = Effect.runSync;
 const here = dirname(fileURLToPath(import.meta.url));
 const workspaceBundle = browserBundle(new URL('./app.ts', import.meta.url));
 const decodeWith = <S extends Schema.ConstraintDecoder<unknown>>(schema:S, value:unknown):S['Type'] => jsonSnapshot(decodeJson(schema, value));
 const scope = {identity: 'local-simulation', authentication: false, transport: 'loopback-only', clock: 'explicit-simulation-input', mutations: 'through-this-server-only'};
-const failure = (status, message) => Object.assign(new Error(message), {httpStatus: status});
+const failure = (status:number, message:string) => Object.assign(new Error(message), {httpStatus: status});
 const decodeSimulationIdentity = Schema.decodeUnknownSync(SimulationIdentity);
-function identity(value) {
+function identity(value:unknown) {
   try { decodeSimulationIdentity(value); }
   catch { throw failure(400, 'Expected a bounded simulation identity.'); }
 }
@@ -61,7 +59,7 @@ const sequence = (db:DatabaseSync) => {
   return n;
 };
 type Profile = typeof WorkspaceExecuteRequestSchema.Type.profile;
-type Binding = {db:DatabaseSync;runtime:ReturnType<typeof makeDurableRuntime>;validate:typeof validateV1|typeof validateV2};
+type Binding = {db:DatabaseSync;runtime:ReturnType<typeof makeDurableRuntime>};
 type Client = {profile:Profile;actor:string;res:ServerResponse};
 function portOf(server:Server) {
   const address=server.address();
@@ -72,28 +70,31 @@ function isProfile(profile:string|null):profile is Profile {return profile==='v1
 
 // The adapter APIs own their own transactions; this read-only projection uses
 // their documented SQLite schema so state/history/grants share ONE read snapshot.
-function snapshot(binding, profile) {
-  const {db, runtime, validate} = binding;
+function snapshot(binding:Binding, profile:Profile) {
+  const {db, runtime} = binding;
   db.exec('BEGIN');
   try {
-    const meta = Object.fromEntries(db.prepare('SELECT key,value FROM durable_meta').all().map(x => [x.key, x.value]));
-    if (meta['format'] !== 'durable-effect/v1' || meta['model_key'] !== canonical(runtime.model)) throw new Error('Durable model binding mismatch.');
-    const state = validate(runtime.model, jsonSnapshot(decodeJsonValue(meta['state_json'])));
-    if (canonical(state) !== meta['state_json']) throw new Error('Stored state is not canonical.');
+    const meta = new Map(db.prepare('SELECT key,value FROM durable_meta').all().map(x => [x['key'],x['value']]));
+    if (meta.get('format') !== 'durable-effect/v1' || meta.get('model_key') !== canonical(runtime.model)) throw new Error('Durable model binding mismatch.');
+    const stateJson=meta.get('state_json'), input=jsonSnapshot(decodeJsonValue(stateJson));
+    const state=runtime.model.format==='semantic-core/v2'?validateV2(runtime.model,input):validateV1(runtime.model,input);
+    if (canonical(state) !== stateJson) throw new Error('Stored state is not canonical.');
     const pending = db.prepare('SELECT * FROM durable_pending ORDER BY invocation_id').all().map(row => {
-      const request = decodeWith(DurablePendingRequestSchema, row.request_json);
-      const original = runtime.execute(request.prestate, request.invocation);
-      if (request.invocation?.id !== row.invocation_id || original.status !== 'pending' || canonical(original.request) !== canonical(request)) throw new Error('Malformed stored pending request.');
-      const grants = db.prepare('SELECT receipt_json FROM durable_grants WHERE invocation_id=? ORDER BY policy_id').all(row.invocation_id).map(grant => {
-        const receipt = decodeWith(DurableReceiptSchema, grant.receipt_json);
-        const approved = runtime.approve(request, {policyId: receipt.policyId, approver: receipt.approver});
+      const id=row['invocation_id'];
+      const request = decodeWith(DurablePendingRequestSchema, row['request_json']);
+      if (!('approve' in runtime)||typeof id!=='string'||request.invocation.id!==id) throw new Error('Malformed stored pending request.');
+      const original = runtime.execute(validateV2(runtime.model,request.prestate), request.invocation);
+      if (original.status !== 'pending' || canonical(original.request) !== canonical(request)) throw new Error('Malformed stored pending request.');
+      const grants = db.prepare('SELECT receipt_json FROM durable_grants WHERE invocation_id=? ORDER BY policy_id').all(id).map(grant => {
+        const receipt = decodeWith(DurableReceiptSchema, grant['receipt_json']);
+        const approved = runtime.approve(original.request, {policyId: receipt.policyId, approver: receipt.approver});
         if (approved.status !== 'approved' || canonical(approved.receipt) !== canonical(receipt)) throw new Error('Malformed stored grant.');
         return {policyId: receipt.policyId, approver: receipt.approver};
       });
-      return {invocationId: row.invocation_id, status: row.status, request, grants, resumeId: row.resume_id};
+      return {invocationId:id, status: row['status'], request, grants, resumeId: row['resume_id']};
     });
     const events = db.prepare('SELECT sequence,event_id,event_json FROM durable_outbox ORDER BY sequence').all()
-      .map(row => ({sequence: row.sequence, eventId: row.event_id, event: decodeWith(DurableEventSchema, row.event_json)}));
+      .map(row => ({sequence: row['sequence'], eventId: row['event_id'], event: decodeWith(DurableEventSchema, row['event_json'])}));
     const result = {profile, model: runtime.model, state, pending, events, tools: deriveTools(runtime.model), sequence: sequence(db), scope};
     db.exec('COMMIT'); return result;
   } catch (error) { try { db.exec('ROLLBACK'); } catch {} throw error; }
@@ -120,9 +121,9 @@ export async function createWorkspaceServer({directory = resolve('artifacts/work
     if (errors.length) throw new AggregateError(errors, 'Database cleanup failed.');
   };
   try {
-    for (const [profile, model, initial, validate] of [['v1', inventoryModel, v1State, validateV1], ['v2', inventoryV2Model, v2State, validateV2]] as const) {
+    for (const [profile, model, initial] of [['v1', inventoryModel, v1State], ['v2', inventoryV2Model, v2State]] as const) {
       const runtime = makeDurableRuntime(model), db = run(makeDurableStore(resolve(directory, `${profile}.sqlite`), {busyTimeout: 250}));
-      bindings.set(profile, {runtime, db, validate});
+      bindings.set(profile, {runtime, db});
       if (!db.prepare('SELECT value FROM durable_meta WHERE key=?').get('format')) run(initializeDurableState(runtime, db, initial));
       else run(durableState(runtime, db)); // Fail startup on changed model/corrupt state; never reset it.
     }
@@ -131,7 +132,7 @@ export async function createWorkspaceServer({directory = resolve('artifacts/work
       if (!client.res.write(`id: ${change.sequence}\nevent: change\ndata: ${encodeJson(change)}\n\n`)) client.res.destroy();
     };
     const http = server = createServer(async (req, res) => {
-      const json = (status, value) => { res.writeHead(status, {'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store'}); res.end(encodeJson(value)); };
+      const json = (status:number, value:unknown) => { res.writeHead(status, {'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store'}); res.end(encodeJson(value)); };
       try {
         if (closing) throw failure(503, 'Server closing.');
         const allowedHosts = [`127.0.0.1:${portOf(http)}`, `localhost:${portOf(http)}`];
@@ -166,12 +167,12 @@ export async function createWorkspaceServer({directory = resolve('artifacts/work
           if (!binding) throw failure(400, 'Unknown profile.');
           const {runtime, db} = binding;
           const before = sequence(db);
-          const result = run(source.kind === 'execute' ? durableExecute(runtime, db, source.invocation)
-            : source.kind === 'approve' ? durableApprove(runtime, db, source.command, {authenticatedApprover: source.actor})
-              : durableResume(runtime, db, source.command));
+          const result = source.kind === 'execute' ? run(durableExecute(runtime, db, source.invocation))
+            : source.kind === 'approve' ? run(durableApprove(runtime, db, source.command, {authenticatedApprover: source.actor}))
+              : run(durableResume(runtime, db, source.command));
           const after = sequence(db);
           if (after !== before) {
-            const change = deriveChange(runtime.model, result.events ?? [], {sequence: after,
+            const change = deriveChange(runtime.model, result.status==='committed'?result.events:[], {sequence: after,
               pending: result.status === 'pending' || result.status === 'approved' || (kind === 'resume' && result.status === 'committed'),
               reason: result.status === 'committed' ? 'commit' : result.status === 'approved' || result.status === 'pending' ? 'approval-ledger' : 'outcome'});
             for (const client of streams) if (client.profile === source.profile) send(client, change);
@@ -185,8 +186,8 @@ export async function createWorkspaceServer({directory = resolve('artifacts/work
           res.writeHead(200, {'content-type': 'text/javascript; charset=utf-8', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff'});
           return res.end(script);
         }
-        const files = {'/': ['index.html', 'text/html'], '/index.html': ['index.html', 'text/html']};
-        const file = files[url.pathname];
+        const files:Record<string,[string,string]> = {'/': ['index.html', 'text/html'], '/index.html': ['index.html', 'text/html']};
+        const file = Object.hasOwn(files,url.pathname)?files[url.pathname]:undefined;
         if (!file) throw failure(404, 'Not found.');
         let content;
         try { content = await readFile(resolve(here, file[0])); } catch (e) { if (e instanceof Error&&'code' in e&&e.code==='ENOENT') throw failure(404, 'Frontend file not available.'); throw e; }
@@ -199,7 +200,7 @@ export async function createWorkspaceServer({directory = resolve('artifacts/work
     });
     server.requestTimeout = 10000; server.headersTimeout = 10000;
     await new Promise<void>((accept, reject) => {
-      const onError = error => { http.off('listening', onListen); reject(error); };
+      const onError = (error:Error) => { http.off('listening', onListen); reject(error); };
       const onListen = () => { http.off('error', onError); accept(); };
       http.once('error', onError); http.once('listening', onListen); http.listen(port, '127.0.0.1');
     });
