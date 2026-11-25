@@ -33,7 +33,7 @@
     "durable:generated": "node inventory/v2/generated.ts artifacts/durable-generated-report.json",
     "inventory:durable": "node inventory/v2/demo.ts",
     "test:durable": "node --test adapters/effect/durable*.test.ts inventory/v2/*.test.ts semantic/v2/*.test.ts",
-    "adapters:install": "corepack pnpm install --frozen-lockfile",
+    "adapters:install": "pnpm install --frozen-lockfile",
     "inventory:build": "node inventory/build.ts",
     "inventory:test": "node inventory/browser-test.ts",
     "inventory:video": "node inventory/video.ts",
