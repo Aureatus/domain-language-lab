@@ -18,6 +18,8 @@ A research and design repository for an Ash-inspired domain language with Effect
 
 - **[Expo Exact adapter](docs/exact-adapter.md):** generates Exact Contract and a typed HTTP data layer from the shared application contract. The pinned compiler, generated web UI and native Android request/grant/resume workflow have been exercised. CLI reads confirmed the same native-created records. iOS and native offline/stale-failure scenarios remain unexecuted. Mapping tests: `node --test adapters/exact/test.mjs`.
 
+- **[Effect UI spike](docs/effect-ui.md):** renders one derived leave-request form from the same application contract. Chromium tests cover recovery of a lost execute response against the real backend.
+
 - **[Shared domain, modules and views](docs/modules-and-views.md):** `leave/time-away.domain` holds the domain, `leave/demo.domain` holds fixtures, and `leave/browser.domain`, `leave/cli.domain`, and `leave/mobile.domain` import them. Typed references and exact singleton selectors derive record bindings. Browser and CLI execute against one backend (`npm run leave`, then `npm run leave:cli -- list`). The mobile entry is a declaration; native adapter execution is tracked separately.
 
 - **[Standalone syntax](docs/standalone-syntax.md):** a real experimental parser and module resolver elaborate the source into the existing semantic model. Run `npm run syntax:check -- leave/browser.domain`, `npm run syntax:lint -- leave/browser.domain --strict`, or `npm run leave`. The [highlighted source reader](artifacts/time-away-highlighted.html) provides whole-source navigation and exact-source copy/download. [Syntax ergonomics](docs/syntax-ergonomics.md) covers grouped declarations, expanded constraints and schema reuse.
