@@ -1,4 +1,5 @@
 import {createInterpreter,validateState,jsonSnapshot} from '../semantic/v2/core.ts';
+import {ownValue} from '../semantic/core.ts';
 import type {Action, FieldSchema, Invocation, Model, State, Value} from '../semantic/v2/types.ts';
 import {adapters} from './inputs.ts';
 import {loadingModes} from './loading.ts';
@@ -61,7 +62,7 @@ export function deriveApplication(declaration:unknown) {
   if(!actors.length)throw Error('Declare local simulation actors.');
   for(const [name,config] of Object.entries(configs)){if(!Object.hasOwn(model.actions,name))throw Error(`Unknown action ${name}`);objectMap(config);}
   const actions=Object.fromEntries(Object.entries(model.actions).map(([id,a]): [string,ApplicationAction]=>{
-    const config=configs[id]??{};
+    const config=ownValue(configs,id)??{};
     exact(config,['label','description','fields','adapters']);
     const label=optionalText(config['label'])??title(id),description=optionalText(config['description'])??'';
     const fieldConfigs=Object.hasOwn(config,'fields')?objectMap(config['fields']):{};
@@ -79,7 +80,7 @@ export function deriveApplication(declaration:unknown) {
       return {...item,name,mapping};
     });
     const fields=Object.entries(a.inputs).map(([name,schema]):ApplicationField=>{
-      const f=fieldConfigs[name]??{};
+      const f=ownValue(fieldConfigs,name)??{};
       exact(f,['label','default','binding','reference','widget']);
       const fieldLabel=optionalText(f['label'])??title(name);
       let binding:ApplicationField['binding'],reference:ApplicationField['reference'],defaultValue:ApplicationField['default'];

@@ -15,6 +15,17 @@ test('leave contract retains the published submission identity',()=>{
     '136de0f000fc5aed5febb25583ca25c9ecdacb562bd42b50b54124f2c92d4144');
 });
 
+test('absent presentation does not inherit config for valid prototype-named inputs and actions',()=>{
+  const source=structuredClone(fixture);
+  present(source.domain.actions['supply.take']).inputs['toString']={type:'string'};
+  source.domain.actions['toString']={inputs:{},bindings:[],preconditions:[],policies:[],updates:[],inserts:[],deletes:[],observe:[]};
+  const {actions:_actions,...application}=source.application;
+  const {contract}=deriveApplication({...source,application});
+  const action=present(contract.actions['supply.take']);
+  assert.ok(action.fields.some(field=>field.name==='toString'&&field.widget==='text'));
+  assert.equal(present(contract.actions['toString']).id,'toString');
+});
+
 test('automatic input types, inferred references, added actions/inputs and policy changes alter contract',()=>{
   const {contract}=deriveApplication(fixture),a=present(contract.actions['supply.take']);
   assert.deepEqual(a.fields.map(f=>[f.name,f.widget]),[['cabinetKey','select'],['quantity','number'],['reason','select'],['tracked','checkbox']]);
