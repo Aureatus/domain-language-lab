@@ -1,5 +1,11 @@
 // Renderer/tool projections only: authorization and transitions stay in the core.
-export function deriveTools(model) {
+import type {Model as V1Model} from '../semantic/types.ts';
+import type {Event,FieldSchema,Model as V2Model,Recipient} from '../semantic/v2/types.ts';
+
+type Model = V1Model|V2Model;
+type Invalidation = {view:'history'|'pending'|'snapshot'|'resource'|'relationship';resource?:string;relationship?:string;key?:string};
+export type WorkspaceChange = {sequence?:number;invalidations:Invalidation[];recipients:Recipient[];reason:string};
+export function deriveTools(model:Model):{name:string;inputs:Readonly<Record<string,FieldSchema>>;policyIds:string[];preconditionIds:string[]}[] {
   return Object.entries(model.actions).map(([name, action]) => ({
     name, inputs: structuredClone(action.inputs),
     policyIds: action.policies.map(x => x.id),
@@ -7,25 +13,27 @@ export function deriveTools(model) {
   }));
 }
 
-export function deriveDependencies(model) {
+export function deriveDependencies(model:Model) {
   return Object.entries(model.actions).map(([actionId, action]) => {
-    const bindings = new Map([...action.bindings, ...(action.inserts ?? [])].map(x => [x.id, x.resource]));
+    const inserts = 'inserts' in action ? action.inserts : [];
+    const deletes = 'deletes' in action ? action.deletes : [];
+    const bindings = new Map([...action.bindings, ...inserts].map(x => [x.id, x.resource]));
     return {actionId, observations: action.observe.map(x => ({
       binding: x.binding, resource: bindings.get(x.binding),
       ...model.relationships.find(r => r.id === x.relationship), relationship: x.relationship,
     })), writes: [
       ...action.updates.map(x => ({semanticId: x.id, resource: bindings.get(x.target), field: x.field, kind: 'change'})),
-      ...(action.inserts ?? []).map(x => ({semanticId: x.id, resource: x.resource, kind: 'create'})),
-      ...(action.deletes ?? []).map(x => ({semanticId: x.id, resource: bindings.get(x.target), kind: 'delete'})),
+      ...inserts.map(x => ({semanticId: x.id, resource: x.resource, kind: 'create'})),
+      ...deletes.map(x => ({semanticId: x.id, resource: bindings.get(x.target), kind: 'delete'})),
     ]};
   });
 }
 
 /** View dependencies are not human notification subscriptions. In particular,
  * actor exclusion in the core's recipient snapshot must not suppress its UI. */
-export function deriveChange(model, events, {sequence, pending = false, reason = 'commit'} = {}) {
-  const invalidations = new Map(), recipients = new Map();
-  const add = value => invalidations.set(JSON.stringify(value), value);
+export function deriveChange(model:Model, events:readonly Event[], {sequence, pending = false, reason = 'commit'}:{sequence?:number;pending?:boolean;reason?:string} = {}):WorkspaceChange {
+  const invalidations = new Map<string,Invalidation>(), recipients = new Map<string,Recipient>();
+  const add = (value:Invalidation) => invalidations.set(JSON.stringify(value), value);
   const dependencies = deriveDependencies(model);
   for (const event of events) {
     add({view: 'history'});

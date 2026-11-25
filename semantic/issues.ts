@@ -1,5 +1,7 @@
 /** Second consumer, illustrative issue data; no dependency on or edits to live/. */
-export const issueModel = {
+import type {Model} from './types.ts';
+
+export const issueModel:Model = {
   format: 'semantic-core/v1', id: 'issues.v1',
   resources: {
     issues: {fields: {status: {type: 'string', enum: ['open', 'resolved']}, assignee: {type: 'string'}, watchers: {type: 'ids'}, updatedAt: {type: 'integer', min: 0}}},

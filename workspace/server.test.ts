@@ -5,6 +5,7 @@ import {join} from 'node:path';
 import {DatabaseSync} from 'node:sqlite';
 import {request} from 'node:http';
 import {createWorkspaceServer} from './server.ts';
+import type {deriveTools} from './derive.ts';
 import {invocation as v1} from '../inventory/model.ts';
 import {invocation as v2} from '../inventory/v2/model.ts';
 
@@ -22,7 +23,7 @@ test('serves the workspace browser bundle without exposing TypeScript sources', 
   assert.match(await page.text(), /src="\/app\.js"/);
   const script = await fetch(f.url + '/app.js');
   assert.equal(script.status, 200);
-  assert.match(script.headers.get('content-type'), /^text\/javascript/);
+  assert.match(script.headers.get('content-type')??'', /^text\/javascript/);
   assert.ok((await script.text()).length > 0);
   assert.equal((await fetch(f.url + '/app.ts')).status, 404);
 });
@@ -34,10 +35,11 @@ const execute = (f, profile, invocation) => post(f, 'execute', {profile, invocat
 const approve = (f, id, invocationId) => post(f, 'approve', {profile: 'v2', command: {id, invocationId, policyId: 'reserve.warehouse-approval'}, actor: 'warehouse'});
 const resume = (f, id, invocationId, clock = 11) => post(f, 'resume', {profile: 'v2', command: {id, invocationId, clock}});
 
-async function sse(f, t, actor = 'alice', last = undefined) {
+async function sse(f, t, actor = 'alice', last?:number) {
   const controller = new AbortController(); t.after(() => controller.abort());
   const response = await fetch(`${f.url}/api/events?profile=v2&actor=${actor}`, {signal: controller.signal, headers: last === undefined ? {} : {'last-event-id': String(last)}});
   assert.equal(response.status, 200);
+  assert.ok(response.body);
   const reader = response.body.getReader(); let buffer = '';
   return {close: () => controller.abort(), async next() {
     while (!buffer.includes('\n\n')) {
@@ -45,7 +47,8 @@ async function sse(f, t, actor = 'alice', last = undefined) {
     }
     const index = buffer.indexOf('\n\n'), frame = buffer.slice(0, index); buffer = buffer.slice(index + 2);
     assert(frame.includes('event: change'));
-    return JSON.parse(frame.split('\n').find(x => x.startsWith('data: ')).slice(6));
+    const data=frame.split('\n').find(x => x.startsWith('data: '));
+    assert.ok(data);return JSON.parse(data.slice(6));
   }};
 }
 
@@ -54,7 +57,7 @@ test('v1 persists interpreter outcomes, schema/tool parity and independent v2 DB
   assert.equal(before.model.format, 'semantic-core/v1'); assert.equal(before.scope.authentication, false);
   assert.equal((await execute(f, 'v1', v1('reserve1', 'reserve'))).status, 'committed');
   assert.equal((await execute(f, 'v1', v1('reserve1', 'reserve'))).status, 'duplicate');
-  const invalid = v1('invalid1', 'reserve'); invalid.args.quantity = '3';
+  const call=v1('invalid1','reserve'), invalid={...call,args:{...call.args,quantity:'3'}};
   assert.equal((await execute(f, 'v1', invalid)).code, 'schema');
   assert.equal(before.tools.find(x => x.name === invalid.action).inputs.quantity.type, 'integer');
   assert.equal((await get(f)).state.revision, 0);
@@ -101,7 +104,7 @@ test('multi-client SSE preserves actor views, grant changes and reconnect/restar
   assert((await reconnected.next()).invalidations.some(x => x.view === 'pending'));
   reconnected.close();
   const db = new DatabaseSync(join(f.directory, 'v2.sqlite'));
-  assert.equal(db.prepare('SELECT count(*) n FROM durable_outbox WHERE acknowledged=1').get().n, 0);
+  assert.equal(db.prepare('SELECT count(*) n FROM durable_outbox WHERE acknowledged=1').get()?.n, 0);
   // Even externally acknowledged rows remain historical UI facts.
   db.prepare('UPDATE durable_outbox SET acknowledged=1').run(); db.close();
   const saved = await get(f); await f.restart();
@@ -121,7 +124,7 @@ test('stale/expired approvals, competing commands, denied grant and invalid sche
   assert.equal((await post(f, 'approve', {profile: 'v2', command: {id: 'bad-grant', invocationId: 'expired', policyId: 'reserve.warehouse-approval'}, actor: 'alice'})).code, 'unauthorized-approval');
   await approve(f, 'grant-expired', 'expired');
   assert.equal((await resume(f, 'resume-expired', 'expired', 20)).code, 'precondition');
-  const invalid = v2('invalid', 'reserve', {reservationId: 'invalid'}); invalid.args.quantity = '2';
+  const call=v2('invalid','reserve',{reservationId:'invalid'}),invalid={...call,args:{...call.args,quantity:'2'}};
   assert.equal((await execute(f, 'v2', invalid)).code, 'schema');
   const snap = await get(f); assert.equal(snap.state.revision, 1); assert(snap.pending.every(x => x.status === 'pending'));
 });
@@ -154,7 +157,8 @@ test('every tool schema is enforced by its profile interpreter, not a UI-only de
   let n = 0;
   for (const profile of ['v1', 'v2']) {
     const snap = await get(f, profile);
-    for (const tool of snap.tools) {
+    const tools:ReturnType<typeof deriveTools>=snap.tools;
+    for (const tool of tools) {
       for (const [field, schema] of Object.entries(tool.inputs)) {
         const args = Object.fromEntries(Object.entries(tool.inputs).map(([key, value]) => [key,
           value.type === 'integer' ? Math.max(value.min ?? 0, 1) : value.type === 'string' ? value.enum?.[0] ?? 'camera' : value.type === 'boolean' ? true : []]));

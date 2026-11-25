@@ -23,13 +23,13 @@ await page.addInitScript(()=>{
   });
 });
 let scene=0,started;
-const chapters=[];
-async function caption(text){await page.locator('#demo-caption').evaluate((el,text)=>el.textContent=text,text);chapters.push({second:Math.round((Date.now()-started)/1000),text});}
+const chapters:{second:number;text:string}[]=[];
+async function caption(text:string){await page.locator('#demo-caption').evaluate((el,text)=>el.textContent=text,text);chapters.push({second:Math.round((Date.now()-started)/1000),text});}
 async function pace(){scene++;const delay=scene*5900-(Date.now()-started);if(delay>0)await page.waitForTimeout(delay);}
-async function click(selector){const el=page.locator(selector);await el.scrollIntoViewIfNeeded();const box=await el.boundingBox();await page.mouse.move(box.x+box.width/2,box.y+box.height/2,{steps:16});await page.waitForTimeout(180);await page.mouse.click(box.x+box.width/2,box.y+box.height/2);await page.waitForTimeout(200);}
+async function click(selector){const el=page.locator(selector);await el.scrollIntoViewIfNeeded();const box=await el.boundingBox();if(!box)throw Error(`No visible control: ${selector}`);await page.mouse.move(box.x+box.width/2,box.y+box.height/2,{steps:16});await page.waitForTimeout(180);await page.mouse.click(box.x+box.width/2,box.y+box.height/2);await page.waitForTimeout(200);}
 async function fill(selector,value){await click(selector);await page.locator(selector).fill(String(value));}
 async function select(selector,value){await click(selector);await page.selectOption(selector,value);}
-async function ready(profile){await page.waitForFunction(profile=>!document.querySelector('#action-form').inert&&document.querySelector('#revision').textContent.startsWith(profile),profile);}
+async function ready(profile:string){await page.waitForFunction(profile=>document.querySelector<HTMLElement>('#action-form')?.inert===false&&document.querySelector('#revision')?.textContent?.startsWith(profile),profile);}
 async function execute(action,args={},clock=100){
   await select('#action',`reservation.${action}`);
   for(const [name,value] of Object.entries(args))await fill(`#input-${name}`,value);
@@ -81,7 +81,7 @@ try{
   await page.locator('#relationship').scrollIntoViewIfNeeded();await click('#history details:first-child summary');await pace();
   await caption('Both profiles use the same execute API. Durable history is evidence of past commits, never the source of current stock.');
   await page.evaluate(()=>scrollTo(0,0));await page.screenshot({path:new URL('workspace-video-final.png',artifacts).pathname});await pace();
-  const video=page.video();await context.close();const source=await video.path();
+  const video=page.video();await context.close();if(!video)throw Error('Missing video recording');const source=await video.path();
   const output=new URL('workspace-v1-v2-demo.mp4',artifacts).pathname;
   const conversion=spawnSync('ffmpeg',['-y','-i',source,'-c:v','libx264','-preset','fast','-crf','22','-pix_fmt','yuv420p','-movflags','+faststart',output],{encoding:'utf8'});
   if(conversion.status!==0)throw Error(conversion.stderr);
