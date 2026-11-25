@@ -1,4 +1,5 @@
 import {test} from 'node:test';
+import type {TestContext} from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdtemp,rm} from 'node:fs/promises';
 import {Worker} from 'node:worker_threads';
@@ -9,11 +10,11 @@ import {createApplicationServer} from './server.ts';
 import {fixture} from './fixture.ts';
 
 const actor='nora',action='supply.take',args={cabinetKey:'tools',quantity:1,reason:'Repair',tracked:true};
-async function post(url,kind,body,status=200){
+async function post(url:string,kind:string,body:object,status=200){
   const response=await fetch(`${url}/api/${kind.includes('/')?kind:`actions/${kind}`}`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});
   const data=await response.json();assert.equal(response.status,status,JSON.stringify(data));return data;
 }
-async function setup(t){
+async function setup(t:TestContext){
   const directory=await mkdtemp('/tmp/opencode/submissions-'),servers: Awaited<ReturnType<typeof createApplicationServer>>[]=[];
   t.after(async()=>{for(const s of servers)await s.close();await rm(directory,{recursive:true,force:true});});
   async function start(){const s=await createApplicationServer(fixture,{directory});servers.push(s);return s;}

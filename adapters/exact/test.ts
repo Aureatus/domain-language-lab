@@ -15,6 +15,7 @@ import {createClient} from './client.ts';
 import {startGateway} from './serve.ts';
 import {renamedFixture} from '../../application/fixture.ts';
 import {deriveApplication} from '../../application/derive.ts';
+import {present} from '../../semantic/test-support.ts';
 import loadingFixture from './loading-fixture.ts';
 
 async function scratch(t:TestContext,prefix:string){
@@ -81,27 +82,27 @@ test('generated Exact mapping uses real durable HTTP pending, grants, resume and
     await writeAdapter(envelope,'artifacts/exact-app',{api:'http://127.0.0.1:4186'});
     const {createClient:generatedClient}=await import(pathToFileURL('artifacts/exact-app/client.mjs').href);
     assert.deepEqual(await generatedClient(envelope,server.url).snapshot(),await c.snapshot());
-    const balance=()=>c.snapshot().then(s=>s.state.records.employee.maya.values.balance);
-    const start=await balance();
+    const balance=()=>c.snapshot().then(s=>s.state.records['employee']?.['maya']?.values['balance']);
+    const start=await balance();assert.ok(typeof start==='number');
     const request={actor:'maya',action:'leave.request',args:{start:'2026-11-23',end:'2026-11-25'}};
     const preview=await c.request('actions/preview',request);assert.equal(preview.status,'pending');
     const execute=await c.command('actions/execute',request);assert.equal(execute.ok,true);assert.equal(await balance(),start);
-    let s=await c.snapshot();const p=s.pending.at(-1),r=p.requirements[0],approver=r.approvers[0];
-    assert.equal(c.project(s,'maya').inbox[0].complete,false);
-    assert.equal(c.project(s,approver).inbox[0].grants[0].eligible,true);
+    let s=await c.snapshot();const p=present(s.pending.at(-1)),r=present(p.requirements[0]),approver=present(r.approvers[0]);
+    assert.equal(present(c.project(s,'maya').inbox[0]).complete,false);
+    assert.equal(present(present(c.project(s,approver).inbox[0]).grants[0]).eligible,true);
     const grant=await c.command('approvals/grant',{actor:approver,requestId:p.id,policyId:r.policyId});assert.equal(grant.ok,true);assert.equal(await balance(),start);
-    assert.equal(c.project(await c.snapshot(),approver).inbox[0].complete,true);
+    assert.equal(present(c.project(await c.snapshot(),approver).inbox[0]).complete,true);
     const resume=await c.command('approvals/resume',{actor:approver,requestId:p.id});assert.equal(resume.ok,true);assert.equal(await balance(),start-3);
     assert.equal(c.project(await c.snapshot(),approver).inbox.length,0);
     const duplicate=await c.command('approvals/resume',{actor:approver,requestId:p.id});assert.equal(duplicate.ok,false);assert.match(duplicate.message,/Approval is saved, but completion failed/);
     await c.request('actions/execute',{...request,actor:'leo'});
-    const staleRequest=(await c.snapshot()).pending.at(-1);
+    const staleRequest=present((await c.snapshot()).pending.at(-1));
     await c.request('approvals/grant',{actor:approver,requestId:staleRequest.id,policyId:r.policyId});
     await c.request('actions/execute',{actor:approver,action:'settings.change',args:{threshold:4}});
     const stale=await c.command('approvals/resume',{actor:approver,requestId:staleRequest.id});
     assert.equal(stale.ok,false);assert.match(stale.message,/Approval is saved, but completion failed/);
-    const retained=(await c.snapshot()).pending.at(-1);assert.equal(retained.grants.length,1);assert.equal(retained.stale,true);
-    assert.equal((await c.snapshot()).state.records.employee.leo.values.balance,5);
+    const retained=present((await c.snapshot()).pending.at(-1));assert.equal(retained.grants.length,1);assert.equal(retained.stale,true);
+    assert.equal((await c.snapshot()).state.records['employee']?.['leo']?.values['balance'],5);
     const bad=structuredClone(envelope);bad.contract.actions['leave.request'].fields.find((f:{hidden:boolean})=>!f.hidden).schema.type='ids';assert.throws(()=>generate(bad,{api:server.url}),/Unsupported field/);
     const mismatch=createClient({...envelope,contractId:'wrong'},server.url);await assert.rejects(()=>mismatch.snapshot(),/Declaration changed/);
     const offline=createClient(envelope,server.url,async()=>{throw Error('offline');});const failure=await offline.command('approvals/resume',{});assert.equal(failure.ok,false);assert.match(failure.message,/ambiguous outcome/);
@@ -116,12 +117,12 @@ test('renamed non-leave schemas generate references, enums, integers and boolean
     const generated=await writeAdapter(envelope,'artifacts/exact-fixture',{api:'http://127.0.0.1:4186'});
     assert.match(generated.contract,/type="checkbox"/);assert.match(generated.contract,/select value=/);assert.match(generated.ts,/Number\(v1\)/);
     assert.ok(!generated.ts.includes('leave.request'));
-    const s=await c.snapshot(),args={...s.defaults.ari['kit.issue'],units:2};
+    const s=await c.snapshot(),args={...present(s.defaults['ari']?.['kit.issue']),units:2};
     await c.request('actions/execute',{actor:'ari',action:'kit.issue',args});
-    const p=(await c.snapshot()).pending[0];assert.equal(p.requirements[0].approvers[0],'devon');
-    await c.request('approvals/grant',{actor:'devon',requestId:p.id,policyId:p.requirements.find((r:{approvers:string[]})=>r.approvers.includes('devon')).policyId});
+    const p=present((await c.snapshot()).pending[0]);assert.equal(present(p.requirements[0]).approvers[0],'devon');
+    await c.request('approvals/grant',{actor:'devon',requestId:p.id,policyId:present(p.requirements.find(r=>r.approvers.includes('devon'))).policyId});
     await c.request('approvals/resume',{actor:'devon',requestId:p.id});
-    assert.equal((await c.snapshot()).state.records.rack.parts.values.remaining,6);
+    assert.equal((await c.snapshot()).state.records['rack']?.['parts']?.values['remaining'],6);
   }finally{await server.close();}
 });
 
@@ -133,22 +134,23 @@ test('inbox coverage follows every captured server requirement, not a single man
   const server=await createApplicationServer({...model,domain},{directory:await scratch(t,'exact-multi-')});
   try{
     const envelope=await(await fetch(server.url+'/api/contract')).json(),c=createClient(envelope,server.url),s=await c.snapshot();
-    await c.request('actions/execute',{actor:'ari',action:'kit.issue',args:{...s.defaults.ari['kit.issue'],units:2}});
-    const p=(await c.snapshot()).pending[0];assert.equal(p.requirements.length,2);
-    await c.request('approvals/grant',{actor:'devon',requestId:p.id,policyId:p.requirements[0].policyId});
-    assert.equal(c.project(await c.snapshot(),'ari').inbox[0].complete,false);
+    await c.request('actions/execute',{actor:'ari',action:'kit.issue',args:{...present(s.defaults['ari']?.['kit.issue']),units:2}});
+    const p=present((await c.snapshot()).pending[0]);assert.equal(p.requirements.length,2);
+    await c.request('approvals/grant',{actor:'devon',requestId:p.id,policyId:present(p.requirements[0]).policyId});
+    assert.equal(present(c.project(await c.snapshot(),'ari').inbox[0]).complete,false);
     const incomplete=await c.command('approvals/resume',{actor:'ari',requestId:p.id});assert.equal(incomplete.ok,false);
-    await c.request('approvals/grant',{actor:'ari',requestId:p.id,policyId:p.requirements.find((r:{approvers:string[]})=>r.approvers.includes('ari')).policyId});
-    assert.equal(c.project(await c.snapshot(),'ari').inbox[0].complete,true);
+    await c.request('approvals/grant',{actor:'ari',requestId:p.id,policyId:present(p.requirements.find(r=>r.approvers.includes('ari'))).policyId});
+    assert.equal(present(c.project(await c.snapshot(),'ari').inbox[0]).complete,true);
     const complete=await c.command('approvals/resume',{actor:'ari',requestId:p.id});assert.equal(complete.ok,true);
-    assert.equal((await c.snapshot()).state.records.rack.parts.values.remaining,6);
+    assert.equal((await c.snapshot()).state.records['rack']?.['parts']?.values['remaining'],6);
     await writeFile('artifacts/exact-multiple-requirements-report.json',JSON.stringify({requirements:p.requirements,oneGrantComplete:false,twoGrantsComplete:true,incompleteResume:incomplete,completeResume:complete,remaining:6,scope:'Real renamed fixture HTTP/SQLite run; self-approval explicitly declared in second test policy.'},null,2));
   }finally{await server.close();}
 });
 
 test('transport never overwrites a newer accepted snapshot with an older HTTP reply',async()=>{
-  const contract={actors:[]},responses=[{contractId:'same',snapshotVersion:8,marker:'new'},{contractId:'same',snapshotVersion:7,marker:'old'},{contractId:'other',snapshotVersion:9}];
+  const {contract}=deriveApplication(declaration),responses=[{contractId:'same',snapshotVersion:8,marker:'new'},{contractId:'same',snapshotVersion:7,marker:'old'},{contractId:'other',snapshotVersion:9}];
   const c=createClient({contract,contractId:'same'},'http://127.0.0.1:1',async()=>Response.json(responses.shift()));
-  assert.equal((await c.snapshot()).marker,'new');assert.equal((await c.snapshot()).marker,'new');
+  const first=await c.snapshot(),second=await c.snapshot();
+  assert.ok('marker' in first&&'marker' in second);assert.equal(first.marker,'new');assert.equal(second.marker,'new');
   await assert.rejects(()=>c.snapshot(),/Declaration changed/);
 });

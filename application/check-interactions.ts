@@ -17,7 +17,7 @@ const {declaration}=loadSource(entry),derived=deriveApplication(declaration),{co
 const actor=values.actor??contract.actors[0]?.id;
 if(!actor||!Object.hasOwn(contract.actions,action)||!contract.actors.some(a=>a.id===actor))throw Error('Unknown action or actor.');
 const {args,selection}=values.args?{args:decodeJsonObject(values.args),selection:'explicit arguments'}:exampleArgs(derived,action,actor);
-const report=await checkInteractions(declaration,contract,{action,actor,args,submissionId:'review-request-1'},{mutant:values.mutant});
+const report=await checkInteractions(declaration,contract,{action,actor,args,submissionId:'review-request-1'},values.mutant?{mutant:values.mutant}:{});
 const {counterexample,...summary}=report;
 if(counterexample){
   const path=values.out??join(await mkdtemp(join(tmpdir(),'interaction-check-')),'counterexample.json');

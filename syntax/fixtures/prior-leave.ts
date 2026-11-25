@@ -1,11 +1,12 @@
 // TEST ONLY: fixed pre-text-frontend declaration, not imported by production.
 // Kept independently from the parser/source so parity detects semantic drift.
-const literal=value=>({op:'literal',value});
-const input=name=>({op:'input',name});
-const field=(binding,name)=>({op:'field',binding,field:name});
-const bin=(op,left,right)=>({op,left,right});
-const actor={op:'actor'},string={type:'string'},integer=min=>({type:'integer',min});
-const e=name=>field('request.employee',name),threshold=field('request.settings','threshold');
+import type {Scalar} from '../../semantic/v2/types.ts';
+const literal=(value:Scalar)=>({op:'literal',value});
+const input=(name:string)=>({op:'input',name});
+const field=(binding:string,name:string)=>({op:'field',binding,field:name});
+const bin=<L,R>(op:string,left:L,right:R)=>({op,left,right});
+const actor={op:'actor'},string={type:'string'},integer=(min:number)=>({type:'integer',min});
+const e=(name:string)=>field('request.employee',name),threshold=field('request.settings','threshold');
 export const domain={
   format:'semantic-core/v2',id:'time-away',
   resources:{employee:{fields:{name:string,balance:integer(0),manager:string}},settings:{fields:{threshold:integer(1),manager:string}},leave:{fields:{owner:string,manager:string,start:string,end:string,days:integer(1),status:{type:'string',enum:['approved']}}}},

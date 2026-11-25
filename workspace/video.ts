@@ -22,15 +22,15 @@ await page.addInitScript(()=>{
     const caption=document.createElement('div');caption.id='demo-caption';caption.setAttribute('role','status');document.body.append(caption);
   });
 });
-let scene=0,started;
+let scene=0,started:number;
 const chapters:{second:number;text:string}[]=[];
 async function caption(text:string){await page.locator('#demo-caption').evaluate((el,text)=>el.textContent=text,text);chapters.push({second:Math.round((Date.now()-started)/1000),text});}
 async function pace(){scene++;const delay=scene*5900-(Date.now()-started);if(delay>0)await page.waitForTimeout(delay);}
-async function click(selector){const el=page.locator(selector);await el.scrollIntoViewIfNeeded();const box=await el.boundingBox();if(!box)throw Error(`No visible control: ${selector}`);await page.mouse.move(box.x+box.width/2,box.y+box.height/2,{steps:16});await page.waitForTimeout(180);await page.mouse.click(box.x+box.width/2,box.y+box.height/2);await page.waitForTimeout(200);}
-async function fill(selector,value){await click(selector);await page.locator(selector).fill(String(value));}
-async function select(selector,value){await click(selector);await page.selectOption(selector,value);}
+async function click(selector:string){const el=page.locator(selector);await el.scrollIntoViewIfNeeded();const box=await el.boundingBox();if(!box)throw Error(`No visible control: ${selector}`);await page.mouse.move(box.x+box.width/2,box.y+box.height/2,{steps:16});await page.waitForTimeout(180);await page.mouse.click(box.x+box.width/2,box.y+box.height/2);await page.waitForTimeout(200);}
+async function fill(selector:string,value:unknown){await click(selector);await page.locator(selector).fill(String(value));}
+async function select(selector:string,value:string){await click(selector);await page.selectOption(selector,value);}
 async function ready(profile:string){await page.waitForFunction(profile=>document.querySelector<HTMLElement>('#action-form')?.inert===false&&document.querySelector('#revision')?.textContent?.startsWith(profile),profile);}
-async function execute(action,args={},clock=100){
+async function execute(action:string,args:Record<string,unknown>={},clock=100){
   await select('#action',`reservation.${action}`);
   for(const [name,value] of Object.entries(args))await fill(`#input-${name}`,value);
   await fill('#clock',clock);
@@ -38,8 +38,8 @@ async function execute(action,args={},clock=100){
   await click('#action-form button[type=submit]');const result=await (await response).json();
   await page.locator('#result strong').filter({hasText:result.status}).waitFor(); return result;
 }
-async function operation(selector,endpoint){const response=page.waitForResponse(r=>r.url().endsWith(`/api/${endpoint}`)&&r.request().method()==='POST');await click(selector);const result=await(await response).json();await page.locator('#result strong').filter({hasText:result.status}).waitFor();return result;}
-async function actor(value){await select('#actor',value);await ready(pageProfile);}
+async function operation(selector:string,endpoint:string){const response=page.waitForResponse(r=>r.url().endsWith(`/api/${endpoint}`)&&r.request().method()==='POST');await click(selector);const result=await(await response).json();await page.locator('#result strong').filter({hasText:result.status}).waitFor();return result;}
+async function actor(value:string){await select('#actor',value);await ready(pageProfile);}
 let pageProfile='v1';
 try{
   await page.goto(server.url);await ready('v1');started=Date.now();

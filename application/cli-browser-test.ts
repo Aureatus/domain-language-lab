@@ -9,7 +9,7 @@ import declaration from '../leave/model.ts';
 const exec=promisify(execFile);
 const server=await createApplicationServer(declaration,{directory:await mkdtemp('/tmp/opencode/cross-view-')});
 const browser=await chromium.launch({headless:true});
-const cli=async(...args)=>JSON.parse((await exec(process.execPath,['application/cli.ts','--view','leave/cli.domain',...args,'--url',server.url,'--json'])).stdout);
+const cli=async(...args:string[])=>JSON.parse((await exec(process.execPath,['application/cli.ts','--view','leave/cli.domain',...args,'--url',server.url,'--json'])).stdout);
 try{
   const page=await browser.newPage();await page.goto(server.url);
   await page.locator('[data-field="balance"]').filter({hasText:'5'}).waitFor();
@@ -23,7 +23,7 @@ try{
   await cli('execute','leave.request','--actor','leo','--args','{"start":"2026-11-23","end":"2026-11-25"}');
   await page.selectOption('#actor','sam');await page.locator('[data-grant]').waitFor();
   await page.locator('[data-grant]').click();await page.locator('.saved-grant').waitFor();
-  const pending=(await cli('inbox','--actor','leo')).find(x=>x.status==='pending');
+  const pending=(await cli('inbox','--actor','leo')).find((x:{status:string})=>x.status==='pending');
   const form=page.locator('[data-action="settings.change"]');await form.locator('[name="threshold"]').fill('2');await form.locator('[type="submit"]').click();
   await page.locator('[data-field="threshold"]').filter({hasText:'2'}).waitFor();
   assert.equal((await cli('resume',pending.id,'--actor','sam')).code,'stale');

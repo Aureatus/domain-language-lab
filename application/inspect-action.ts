@@ -4,6 +4,7 @@ import {readFile,writeFile} from 'node:fs/promises';
 import {createHash} from 'node:crypto';
 import {loadSource} from '../syntax/load.ts';
 import {deriveApplication} from './derive.ts';
+import type {ReviewEvent} from './action-review.ts';
 import {exampleArgs,actionReview} from './action-review.ts';
 import {walkthrough} from './action-walkthrough.ts';
 import {interactionOracle} from './interaction-check.ts';
@@ -38,7 +39,7 @@ for await(const event of trace?.events??walkthrough(declaration,{actor,action,ar
   const snap=event.snapshot??(payload&&typeof payload==='object'&&'snapshot' in payload?payload.snapshot:undefined);
   if(snap&&(typeof snap!=='object'||!('contractId' in snap)||snap.contractId!==contractId))throw Error('Snapshot contract mismatch.');
   let rule: string | null=null;
-  try{const step=fold(event);steps.push(step);if(trace?.['failure'])rule=check(event,step);}
+  try{const reviewEvent=event as ReviewEvent,step=fold(reviewEvent);steps.push(step);if(trace?.['failure'])rule=check(reviewEvent,step);}
   catch(e){if(!trace?.['failure'])throw e;rule=`projection.error: ${errorMessage(e)}`;}
   events.push(event);
   if(rule){firstFailure={rule,eventCount:events.length};break;}

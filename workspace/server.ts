@@ -121,7 +121,10 @@ export async function createWorkspaceServer({directory = resolve('artifacts/work
     if (errors.length) throw new AggregateError(errors, 'Database cleanup failed.');
   };
   try {
-    for (const [profile, model, initial] of [['v1', inventoryModel, v1State], ['v2', inventoryV2Model, v2State]] as const) {
+    const profiles:[['v1',typeof inventoryModel,typeof v1State],['v2',typeof inventoryV2Model,typeof v2State]]=[
+      ['v1',inventoryModel,v1State],['v2',inventoryV2Model,v2State]
+    ];
+    for (const [profile, model, initial] of profiles) {
       const runtime = makeDurableRuntime(model), db = run(makeDurableStore(resolve(directory, `${profile}.sqlite`), {busyTimeout: 250}));
       bindings.set(profile, {runtime, db});
       if (!db.prepare('SELECT value FROM durable_meta WHERE key=?').get('format')) run(initializeDurableState(runtime, db, initial));

@@ -136,8 +136,10 @@ export const durableExecute = (runtime:Runtime,db:DatabaseSync,invocation:Invoca
       const previous = db.prepare('SELECT model_key,command_key,outcome_json FROM durable_invocations WHERE id=?').get(command.id);
       if (previous) {
         db.exec('COMMIT');
-        if (previous['model_key'] === modelKey && previous['command_key'] === canonical(command))
-          return { status: 'duplicate' as const, result: decodeOutcome(previous['outcome_json'], runtime.model) };
+        if (previous['model_key'] === modelKey && previous['command_key'] === canonical(command)) {
+          const duplicate:{status:'duplicate';result:ReturnType<typeof decodeOutcome>}={status:'duplicate',result:decodeOutcome(previous['outcome_json'],runtime.model)};
+          return duplicate;
+        }
         return conflict();
       }
       const result = execute(runtime,db,modelKey,command);

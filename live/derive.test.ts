@@ -5,8 +5,12 @@ import {describeChange, runDerivedChecks} from './derive.ts';
 import {present} from '../semantic/test-support.ts';
 
 const make = () => createApp({clock: () => 123});
-const capture = app => JSON.stringify({state: app.state, model: app.model, workspace: app.exportWorkspace()});
-const policy = (report, action, actorId, entry = 'invokeTool') => report.cases.find(row => row.id === `${action}:${actorId}:${entry}:policy`);
+const capture = (app:ReturnType<typeof make>) => JSON.stringify({state: app.state, model: app.model, workspace: app.exportWorkspace()});
+const policy = (report:ReturnType<typeof runDerivedChecks>,action:string,actorId:string,entry='invokeTool')=>{
+  const result=present(report.cases.find(row=>row.id===`${action}:${actorId}:${entry}:policy`));
+  assert.ok('ok' in result.expected);
+  return {...result,expected:result.expected};
+};
 
 test('declaration diff reports exact roles/routes, no-op and ordering without mutation', () => {
   const app = make();
@@ -63,9 +67,9 @@ test('generated current-declaration checks exercise both entry points and leave 
       }
     }
   }
-  assert.equal(policy(report, 'reopen', 'u2').actual.ok, true);
-  assert.equal(policy(report, 'resolve', 'u1').actual.ok, true);
-  assert.equal(policy(report, 'assign', 'u1').actual.ok, true);
+  assert.equal(policy(report, 'reopen', 'u2').actual?.ok, true);
+  assert.equal(policy(report, 'resolve', 'u1').actual?.ok, true);
+  assert.equal(policy(report, 'assign', 'u1').actual?.ok, true);
   assert.ok(report.cases.some(row => row.id.endsWith(':missing-title')));
   assert.ok(report.cases.some(row => row.id.endsWith(':enum-priority')));
   assert.ok(report.cases.some(row => row.id.endsWith(':reference-assignee')));
@@ -88,9 +92,9 @@ test('role and routing edits change the independently generated expectations', (
     {recipient: 'u3', reasons: ['assignee'], paths: [{from: 'i1', relationship: 'assignee', to: 'u3'}]},
   ]);
   assert.notDeepEqual(policy(original, 'watch', 'u3').expected.recipients, policy(report, 'watch', 'u3').expected.recipients);
-  const watcher = policy(report, 'watch', 'u3').expected.recipients.find(row => row.recipient === 'u2');
-  assert.deepEqual(watcher.reasons, ['watchers', 'opener']);
-  assert.ok(policy(report, 'watch', 'u3').expected.recipients.every(row => row.recipient !== 'u3'));
+  const watcher = policy(report, 'watch', 'u3').expected.recipients?.find(row => row.recipient === 'u2');
+  assert.deepEqual(present(watcher).reasons, ['watchers', 'opener']);
+  assert.ok(policy(report, 'watch', 'u3').expected.recipients?.every(row => row.recipient !== 'u3'));
 });
 
 test('all-denied declarations pass negative cases but honestly report absent positive coverage', () => {
@@ -114,7 +118,7 @@ test('unreachable reopen setup is unknown, never weakens resolve policy to pass'
   for (const actor of app.state.users) {
     const row = policy(report, 'reopen', actor.id);
     assert.equal(row.status, 'unknown');
-    assert.match(row.reason, /no authorized setup actor/);
+    assert.match(present(row.reason), /no authorized setup actor/);
     assert.equal(row.actual, null);
   }
   assert.equal(capture(app), before);
@@ -138,9 +142,9 @@ test('failed setup dispatch and exhausted history remain unknown rather than fal
   assert.equal(report.result, 'unknown');
   const reopen = policy(report, 'reopen', 'u1');
   assert.equal(reopen.status, 'unknown');
-  assert.match(reopen.reason, /Setup unavailable: resolve: Workspace history limit exceeded/);
+  assert.match(present(reopen.reason), /Setup unavailable: resolve: Workspace history limit exceeded/);
   assert.equal(policy(report, 'comment', 'u1').status, 'unknown');
-  assert.match(policy(report, 'comment', 'u1').reason, /Resource-bound/);
+  assert.match(present(policy(report,'comment','u1').reason), /Resource-bound/);
   assert.ok(report.cases.filter(row => row.status === 'passed').every(row => 'ok' in row.expected && row.expected.ok === false && row.actual?.unchanged));
   assert.equal(capture(app), before);
 });

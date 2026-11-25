@@ -10,22 +10,23 @@ import {present} from '../semantic/test-support.ts';
 
 const loaded=loadSource('leave/browser.domain');
 const flattened=loaded.modules.map(m=>m.source.split('\n').filter(l=>!/^(module|import|use)\b/.test(l)).join('\n')).join('\n');
-const parse=text=>parseSource(text,{filename:'references.domain'});
+const parse=(text:string)=>parseSource(text,{filename:'references.domain'});
 test('loading declarations preserve explicit scope and reject invalid or duplicate modes',()=>{
-  const global=row=>flattened.replace('\napplication\n',`\napplication\n  ${row}\n`);
-  const view=(s,row)=>s.replace('    field name label "Team member"',`    ${row}\n    field name label "Team member"`);
-  const contract=s=>deriveApplication(parse(s).declaration).contract;
+  const global=(row:string)=>flattened.replace('\napplication\n',`\napplication\n  ${row}\n`);
+  const view=(s:string,row:string)=>s.replace('    field name label "Team member"',`    ${row}\n    field name label "Team member"`);
+  const contract=(s:string)=>deriveApplication(parse(s).declaration).contract;
   const base=contract(flattened);assert.ok(!Object.hasOwn(base,'loading')&&base.views.every(v=>!Object.hasOwn(v,'loading')));
   for(const [index,mode] of ['text','icon','skeleton','wait'].entries()){
     const local=['wait','text','icon','skeleton'][index],c=contract(view(global(`loading ${mode}`),`loading ${local}`));
     assert.deepEqual(c,{...base,loading:mode,views:[{...base.views[0],loading:local},...base.views.slice(1)]});
   }
-  for(const insert of [global,row=>view(flattened,row)]){
+  for(const insert of [global,(row:string)=>view(flattened,row)]){
     assert.throws(()=>parse(insert('loading spinner')),/Expected loading mode/);
     assert.throws(()=>parse(insert('loading wait\n    loading icon')),/Duplicate declaration 'loading'/);
   }
-  for(const target of [a=>a,a=>a.views[0]])for(const invalid of [null,true,'spinner',{mode:'icon'}]){
-    const d=structuredClone(loaded.declaration);target(d.application).loading=invalid;
+  for(const scope of ['application','view'])for(const invalid of [null,true,'spinner',{mode:'icon'}]){
+    const d=structuredClone(loaded.declaration),app=present(d.application);
+    Reflect.set(scope==='application'?app:present(app.views[0]),'loading',invalid);
     assert.throws(()=>deriveApplication(d),/Expected loading mode/);
   }
 });
@@ -59,7 +60,7 @@ test('references lower lazily, fail closed, retain policy authorization and reco
   const denied=d.runtime.execute(d.initialState,{...inv,actor:'leo'});
   assert.equal(denied.status,'rejected');assert.equal(denied.code,'denied');
   const originalSettings=present(d.initialState.records['settings']);
-  const settings={...originalSettings,alternate:present(originalSettings['leave-rule'])};delete settings['leave-rule'];
+  const settings:{-readonly [K in keyof typeof originalSettings]:typeof originalSettings[K]}={...originalSettings,alternate:present(originalSettings['leave-rule'])};delete settings['leave-rule'];
   const missing=d.runtime.execute({...d.initialState,records:{...d.initialState.records,settings}},inv);
   assert.equal(missing.status,'rejected');assert.equal(missing.code,'missing-record');
   const employee={...d.initialState.records['employee']};delete employee['maya'];
@@ -78,7 +79,7 @@ test('references lower lazily, fail closed, retain policy authorization and reco
 });
 test('real relative graph resolution rejects cycles, duplicate IDs/imports, missing use and domain leakage',()=>{
   const dir=mkdtempSync('/tmp/opencode/modules-');
-  const put=(name,text)=>writeFileSync(`${dir}/${name}.domain`,text);
+  const put=(name:string,text:string)=>writeFileSync(`${dir}/${name}.domain`,text);
   put('a','module "a" view\nimport "./b.domain"\nuse "b"\n');
   put('b','module "b" domain\nimport "./a.domain"\ndomain "b"\n');
   assert.throws(()=>loadSource(`${dir}/a.domain`),/cycle/);

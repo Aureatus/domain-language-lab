@@ -11,8 +11,8 @@ import {createApplicationServer} from '../application/server.ts';
 
 import source from './fixtures/legacy-source.ts';
 import {present} from '../semantic/test-support.ts';
-const parse=s=>parseSource(s,{filename:'fixture.domain'});
-const invocation=(derived,days=1,id='syntax-test')=>buildInvocation(derived.contract,{action:'leave.request',actor:'maya',args:{start:'2026-11-23',end:days===1?'2026-11-23':'2026-11-24'},id,clock:1});
+const parse=(s:string)=>parseSource(s,{filename:'fixture.domain'});
+const invocation=(derived:ReturnType<typeof deriveApplication>,days=1,id='syntax-test')=>buildInvocation(derived.contract,{action:'leave.request',actor:'maya',args:{start:'2026-11-23',end:days===1?'2026-11-23':'2026-11-24'},id,clock:1});
 
 test('independent fixed prior fixture exactly equals full parsed model, state and metadata',()=>{
   assert.deepEqual(parse(source).declaration,prior);
@@ -46,7 +46,7 @@ test('strings, escapes, comments, keyword-looking field end and tight operators 
 });
 
 test('precedence, parentheses, comparison reversal and left-associative subtraction elaborate explicitly',()=>{
-  const policy=expr=>present(present(parse(source.replace('not actor == employeeId',expr)).declaration.domain.actions['leave.request']).policies[0]).when;
+  const policy=(expr:string)=>present(present(parse(source.replace('not actor == employeeId',expr)).declaration.domain.actions['leave.request']).policies[0]).when;
   assert.deepEqual(policy('not actor == employeeId'),present(prior.domain.actions['leave.request'].policies[0]).when);
   const e=policy('not days + 1 <= employee.balance and actor != employeeId or false');
   assert.equal(e.op,'or');assert.equal(e.left.op,'and');assert.equal(e.left.left.op,'not');
@@ -115,7 +115,7 @@ test('source-only threshold and input edits change actual derived forms and poli
 test('existing prior-model SQLite pending binding survives text loader with no model migration',async()=>{
   const directory=await mkdtemp('/tmp/opencode/syntax-binding-');
   let server=await createApplicationServer(prior,{directory});
-  const post=async(path,body)=>(await fetch(`${server.url}/api/${path}`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)})).json();
+  const post=async(path:string,body:object)=>(await fetch(`${server.url}/api/${path}`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)})).json();
   let pending;
   try{pending=await post('actions/execute',{actor:'maya',action:'leave.request',args:{start:'2026-11-23',end:'2026-11-25'}});assert.equal(pending.status,'pending');}finally{await server.close();}
   server=await createApplicationServer(current,{directory});
@@ -129,5 +129,5 @@ test('existing prior-model SQLite pending binding survives text loader with no m
 test('source counter includes domain author text rather than hiding it behind the bridge',()=>{
   const result=spawnSync(process.execPath,['application/count.ts','leave','model.ts','server.ts'],{encoding:'utf8'});
   assert.equal(result.status,0,result.stderr);const report=JSON.parse(result.stdout);
-  assert.ok(report.files.some(f=>f.path==='leave/time-away.domain'));assert.ok(report.files.some(f=>f.path==='leave/demo.domain'));assert.equal(report.total.files,5);
+  assert.ok(report.files.some((f:{path:string})=>f.path==='leave/time-away.domain'));assert.ok(report.files.some((f:{path:string})=>f.path==='leave/demo.domain'));assert.equal(report.total.files,5);
 });

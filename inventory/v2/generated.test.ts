@@ -24,9 +24,14 @@ test('six seeded 30-step SQLite histories predict outcomes and replay exact obse
     assert.ok(item.observations.some(x => x.result.status === 'duplicate'));
     assert.equal(checkHistory(item.commands, item.observations).status, 'passed');
   }
-  for (const name of ['duplicateDecrementDetected', 'bogusStaleCommitDetected', 'missingExpectedCommitDetected']) {
-    assert.equal(report.oracle.mutationChecks[name].detected, true);
-    assert.ok(report.oracle.mutationChecks[name].cause.message);
+  const checks:Record<string,unknown>=report.oracle.mutationChecks;
+  const names=['duplicateDecrementDetected', 'bogusStaleCommitDetected', 'missingExpectedCommitDetected'];
+  for (const name of names) {
+    const check=checks[name];
+    assert.ok(check&&typeof check==='object'&&'detected' in check&&'cause' in check);
+    assert.equal(check.detected, true);
+    const cause=check.cause;
+    assert.ok(cause&&typeof cause==='object'&&'message' in cause&&cause.message);
   }
   // Exercise the public checker on altered returned outcomes/state through the
   // same entire history, rather than an isolated arithmetic invariant.

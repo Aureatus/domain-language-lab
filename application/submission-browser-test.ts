@@ -5,6 +5,7 @@ import {execFile} from 'node:child_process';
 import {mkdtemp,rm} from 'node:fs/promises';
 import {promisify} from 'node:util';
 import {chromium} from 'playwright';
+import type {ApplicationReceipt} from './client.ts';
 import {createApplicationServer} from './server.ts';
 import declaration from '../leave/model.ts';
 
@@ -13,8 +14,9 @@ const directory=await mkdtemp('/tmp/opencode/submission-browser-');
 let server,browser;
 try {
   server=await createApplicationServer(declaration,{directory});
-  const cli=async(...args)=>JSON.parse((await exec(process.execPath,[
-    'application/cli.ts','--view','leave/cli.domain',...args,'--url',server.url,'--json'
+  const url=server.url;
+  const cli=async(...args:string[])=>JSON.parse((await exec(process.execPath,[
+    'application/cli.ts','--view','leave/cli.domain',...args,'--url',url,'--json'
   ],{timeout:15000})).stdout);
   browser=await chromium.launch({headless:true});
   const page=await browser.newPage(), errors: string[]=[];
@@ -35,7 +37,7 @@ try {
 
   // Deliver the actual POST once; only Chromium loses the reply, after the
   // real server has persisted and returned the pending result.
-  let posted,recorded;
+  let posted:string|null=null,recorded:ApplicationReceipt|undefined;
   await page.route(`**${execute}`,async route=>{
     posted=route.request().postData();
     const response=await route.fetch({maxRetries:0});
@@ -45,12 +47,13 @@ try {
   await form.locator('[type=submit]').click();
   const check=page.getByRole('button',{name:'Check submission',exact:true});
   await check.waitFor();
+  assert.ok(typeof posted==='string'&&recorded?.snapshot);
   assert.equal(recorded.status,'pending');
   assert.equal(await start.inputValue(),dates.start);
   assert.equal(await end.inputValue(),dates.end);
-  const original=recorded.snapshot.pending[0];
+  const [original]=recorded.snapshot.pending;assert.ok(original);
   assert.equal(recorded.snapshot.pending.length,1);
-  assert.equal(original.invocation.args.days,3);
+  assert.equal(original.invocation.args['days'],3);
   await page.reload();await check.waitFor();
   assert.equal(await end.inputValue(),dates.end);
   assert.equal(await form.locator('[type=submit]').isDisabled(),true);
@@ -69,7 +72,7 @@ try {
   const row=page.locator('[data-request]');
   assert.equal(await row.getAttribute('data-request'),original.id);
   const inbox=await cli('inbox','--actor','sam');
-  assert.deepEqual(inbox.map(p=>p.id),[original.id]);
+  assert.deepEqual(inbox.map((p:{id:string})=>p.id),[original.id]);
   assert.equal(await balance.textContent(),'5');
   assert.equal((await cli('grant',original.id,'--actor','sam','--policy','leave.manager-approval')).status,'approved');
   assert.equal((await cli('list','employee')).maya.values.balance,5);
@@ -78,10 +81,10 @@ try {
   await balance.filter({hasText:/^2$/}).waitFor();
   const saved=page.locator('[data-resource="leave"] [data-record]');
   await saved.waitFor();
-  assert.equal(await saved.getAttribute('data-record'),original.invocation.args.leaveId);
+  assert.equal(await saved.getAttribute('data-record'),original.invocation.args['leaveId']);
   assert.equal(executeCount,1,'only the original browser submit may dispatch execute');
 
-  const snapshot=async()=>await(await fetch(server.url+'/api/snapshot')).json();
+  const snapshot=async()=>await(await fetch(url+'/api/snapshot')).json();
   const before=await snapshot();
   const replay=await fetch(server.url+execute,{method:'POST',headers:{'content-type':'application/json'},body:posted});
   assert.equal(replay.ok,true,`same submission replay returned ${replay.status}`);
@@ -92,7 +95,7 @@ try {
   const after=await snapshot();
   assert.deepEqual(after.pending,before.pending);
   assert.deepEqual(after.state,before.state);
-  assert.deepEqual(Object.keys(after.state.records.leave),[original.invocation.args.leaveId]);
+  assert.deepEqual(Object.keys(after.state.records.leave),[original.invocation.args['leaveId']]);
   assert.equal(after.state.records.employee.maya.values.balance,2);
   assert.equal((await cli('reconcile',JSON.parse(posted).submissionId,'--actor','maya')).status,'pending','Original execute receipt survives completion');
   // The other ambiguity: a POST that never reached the backend.

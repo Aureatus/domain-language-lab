@@ -1,9 +1,10 @@
 import {errorMessage} from '../errors.ts';
 import {isDeepStrictEqual as equal} from 'node:util';
 import {actionReview} from './action-review.ts';
+import type {ReviewEvent} from './action-review.ts';
+import type {ApplicationContract} from './derive.ts';
 import {walkthrough} from './action-walkthrough.ts';
 import type {WalkthroughEvent} from './action-walkthrough.ts';
-type ReviewEvent = WalkthroughEvent | {type:'switch'; actor:string} | {type:'refresh-start'} | {type:'refresh-end'; snapshot: Extract<WalkthroughEvent,{snapshot:unknown}>['snapshot']};
 type Observation = ReturnType<ReturnType<typeof actionReview>>;
 
 // All linear extensions of these small causal graphs. Events contain actual
@@ -36,11 +37,13 @@ function* schedules(events: WalkthroughEvent[],peer: string | undefined): Genera
 
 // The oracle follows input facts and required observable behavior. It does
 // not consult the implementation's transition table or mutate its state.
-export function interactionOracle(actor){
-  let unresolved=false,canCheck=false,refresh=false,draft,id,visibleReceipt=null,viewer=actor,grantState,peerBeforeReceipt,content,last;
-  return (event,step)=>{
+export function interactionOracle(actor:string){
+  let unresolved=false,canCheck=false,refresh=false,viewer=actor;
+  let draft:Observation['draft']|undefined,id:string|undefined,visibleReceipt:string|undefined;
+  let grantState:unknown,peerBeforeReceipt:unknown,content:unknown,last:Observation|undefined;
+  return (event:ReviewEvent,step:Observation)=>{
     const previous=last;last=step;
-    if(['submit','check'].includes(event.type)&&!previous?.controls[event.type])return 'interaction.disabled-command';
+    if((event.type==='submit'||event.type==='check')&&!previous?.controls[event.type])return 'interaction.disabled-command';
     if(event.type==='switch')viewer=event.actor;
     if(event.type==='draft'&&viewer===actor){draft=event.body.args;id=event.id;}
     if(event.type==='submit')unresolved=true;
@@ -55,7 +58,7 @@ export function interactionOracle(actor){
     if(owner&&unresolved&&(step.controls.submit||step.receipt))return 'submission.no-fresh-submit-before-receipt';
     if(owner&&unresolved&&(step.controls.check!==canCheck||step.controls.retry))return 'submission.recovery-controls';
     if(owner&&draft&&!equal(draft,step.draft))return 'draft.retained';
-    if(owner&&visibleReceipt&&(step.receipt?.submissionId!==id||step.receipt.status!==visibleReceipt))return 'submission.original-receipt';
+    if(owner&&visibleReceipt&&(step.receipt?.submissionId!==id||step.receipt?.status!==visibleReceipt))return 'submission.original-receipt';
     if(!owner){
       if(step.receipt||step.evidence||step.controls.check||step.controls.retry||step.submission!=='editing')return 'submission.owner-isolation';
       const form={draft:step.draft,controls:step.controls,views:step.views,inbox:step.inbox};
@@ -71,14 +74,18 @@ export function interactionOracle(actor){
       content=records;
     }
     if(event.type==='grant'&&event.result.status==='approved'){
+      if(!event.result.snapshot)throw Error('Missing grant snapshot.');
       if(visibleReceipt!=='pending'||!equal(event.result.snapshot.state,grantState))return 'approval.grant-is-not-completion';
       if(step.evidence?.status!=='approved'||step.receipt?.status!=='pending')return 'approval.grant-presentation';
     }
-    if(event.type==='receipt')grantState=event.result.snapshot.state;
+    if(event.type==='receipt'){
+      if(!event.result.snapshot)throw Error('Missing receipt snapshot.');
+      grantState=event.result.snapshot.state;
+    }
     return null;
   };
 }
-export async function checkInteractions(declaration,contract,command,options={}){
+export async function checkInteractions(declaration:unknown,contract:ApplicationContract,command:Parameters<typeof walkthrough>[1],options:Parameters<typeof actionReview>[3]={}){
   const events: WalkthroughEvent[]=[];for await(const event of walkthrough(declaration,command))events.push(event);
   const peer=contract.actors.find(x=>x.id!==command.actor)?.id;
   let shortest: {rule:string; family:string; events:ReviewEvent[]; observed:Observation | undefined} | null=null,count=0,observations=0;

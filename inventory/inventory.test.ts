@@ -4,7 +4,7 @@ import {runtime,inventoryModel,initialState,invocation} from './model.ts';
 import {createHost,competition,replay} from './host.ts';
 import {inspectInventory} from './oracle.ts';
 import {present} from '../semantic/test-support.ts';
-const run=(host,command)=>host.step({type:'execute',invocation:command});
+const run=(host:ReturnType<typeof createHost>,command:ReturnType<typeof invocation>)=>host.step({type:'execute',invocation:command});
 test('reserve is grouped, routed and conserved; cancel returns stock',()=>{
   const h=createHost();
   const r=run(h,invocation('reserveA','reserve'));
@@ -12,7 +12,7 @@ test('reserve is grouped, routed and conserved; cancel returns stock',()=>{
   assert.equal(present(present(h.state.records['reservation'])['slotA']).values['quantity'],3);
   assert.equal(present(present(h.state.records['reservation'])['slotA']).version,1);
   assert.equal(r.events.length,5);
-  assert.deepEqual(r.events[0].recipients.map(r=>r.recipient),['bob','warehouse']);
+  assert.deepEqual(present(r.events[0]).recipients.map(r=>r.recipient),['bob','warehouse']);
   const cancelled=run(h,invocation('cancelA','cancel'));
   assert.equal(cancelled.status,'committed');assert.equal(present(present(h.state.records['stock'])['camera']).values['available'],5);assert.ok(h.oracle.ok);
   assert.equal(run(h,invocation('cancelAgain','cancel')).code,'precondition');
@@ -23,7 +23,7 @@ test('expiry boundary is inclusive; owner receives operator event with both supp
   assert.equal(run(h,invocation('early','expire','slotA','warehouse',29)).code,'precondition');assert.equal(h.state,before);
   const r=run(h,invocation('boundary','expire','slotA','warehouse',30));
   assert.equal(r.status,'committed');assert.ok(h.oracle.ok);
-  assert.equal(r.events[0].recipients.find(r=>r.recipient==='alice').paths.length,2);
+  assert.equal(present(present(r.events[0]).recipients.find(r=>r.recipient==='alice')).paths.length,2);
   assert.equal(present(present(h.state.records['reservation'])['slotA']).values['status'],'expired');
 });
 test('all ownership policies reject atomically, including expiration by owner',()=>{
