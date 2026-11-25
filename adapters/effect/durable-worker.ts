@@ -22,6 +22,6 @@ try {
   } else if (mode === 'stock') {
     const result = await Effect.runPromise(durableExecute(makeDurableRuntime(inventoryModel), db,
       stockInvocation(id, 'reserve', id === 'stock-a' ? 'slotA' : 'slotB')));
-    process.stdout.write(`${result.status}:${result.code ?? ''}\n`);
+    process.stdout.write(`${result.status}:${result.status==='rejected'?result.code:''}\n`);
   }
 } finally { if (db.isOpen) await Effect.runPromise(closeDurableStore(db)); }

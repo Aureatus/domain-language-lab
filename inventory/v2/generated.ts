@@ -30,9 +30,10 @@ type Pending = {invocation: Execute['command']; prestate: OracleState; grants: G
 type Prediction = {status: 'committed' | 'pending' | 'approved' | 'rejected'; code?: string; invocation?: Execute['command']; state?: OracleState}
   | {status: 'duplicate'; result: Prediction; code?: never; state?: never};
 type Oracle = {state: OracleState; pending: Record<string, Pending>; ledger: Map<string, {op: Operation; expected: Prediction}>};
+type ObservedEvent = {readonly id:string;readonly kind?:unknown;readonly invocationId?:unknown;readonly actionId?:unknown;readonly actor?:unknown;readonly clock?:unknown;readonly revision?:unknown};
 type ObservedResult = {
   status: string; code?: string;
-  state?: OracleState; events?: readonly (typeof import('../../adapters/effect/json.ts').DurableEventSchema)['Type'][];
+  state?: unknown; events?: readonly ObservedEvent[];
   result?: ObservedResult;
   policyIds?: readonly string[];
   request?: ApprovalRequest;
@@ -301,7 +302,7 @@ async function snapshot(path: string, commands: Operation[]) {
 }
 async function execute(path: string, op: Operation): Promise<ObservedResult> {
   const api = op.api;
-  return durable(path, (rt, db) => {
+  return durable(path, async (rt, db) => {
     if (op.api === 'execute') return run(durableExecute(rt, db, op.command));
     if (op.api === 'approve') return run(durableApprove(rt, db, op.command, op.host));
     if (op.api === 'resume') return run(durableResume(rt, db, op.command));
@@ -332,7 +333,7 @@ export function mutationChecks(commands: Operation[], observations: Observation[
       assert.ok(camera&&row.result.state);
       row.snapshot.state = {...state, records:{...state.records, stock:{...state.records['stock'],
         camera:{...camera, values:{...camera.values, available:count(camera.values['available']) - 1}}}}};
-      row.result.state.records.stock.camera.values.available--;
+      row.result = {...row.result,state:row.snapshot.state};
     }],
     missingExpectedCommitDetected: [commitIndex, row => { row.result = {status:'rejected', code:'precondition'}; }],
   } satisfies Record<string, [number, (row: Observation) => void]>;

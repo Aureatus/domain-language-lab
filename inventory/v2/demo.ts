@@ -86,7 +86,8 @@ export async function runDurableDemo() {
       const retry = steps.find(x => x.phase === 'retry');
       assert.ok(retry);
       assert.deepEqual(retry.results.map(x => x.status), ['duplicate', 'duplicate', 'rejected']);
-      assert.equal(retry.results[2]?.code, 'consumed');
+      const consumed=retry.results[2];
+      assert.ok(consumed?.status==='rejected');assert.equal(consumed.code,'consumed');
       assert.deepEqual(retry.after, retry.before);
       const finish = steps.at(-1);
       assert.ok(finish);

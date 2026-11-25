@@ -1,6 +1,6 @@
 /** semantic-core/v1: browser-safe, data-only, bounded reference interpreter. */
 import {errorMessage} from '../errors.ts';
-import type {Committed, Event, Expr, FieldSchema, Interpreter, Invocation, Model, Preparation, Prepared, Recipient, Rejected, State} from './types.ts';
+import type {Committed, Event, Expr, FieldSchema, Interpreter, Invocation, InvocationInput, Model, Preparation, Prepared, Recipient, Rejected, State} from './types.ts';
 export type * from './types.ts';
 type Patch = Pick<Extract<Event,{kind:'change'}>,'semanticId'|'resource'|'key'|'field'|'before'|'after'>;
 type CoreValue=Invocation['args'][string];
@@ -17,7 +17,10 @@ const obj = (x:unknown):x is Record<string,unknown> => x !== null && typeof x ==
 function fail(code:string,message?:string):never { throw Object.assign(new Error(message),{code}); }
 function assert(p:unknown,message:string|undefined,code='invalid'):asserts p { if(!p)fail(code,message); }
 const safeKey = (k:unknown):k is string => typeof k === 'string' && /^[A-Za-z][A-Za-z0-9_.:-]*$/.test(k) && !['__proto__', 'constructor', 'prototype'].includes(k);
-const keys = (x:unknown,names:readonly string[]) => assert(obj(x) && Object.keys(x).length === names.length && names.every(k => own(x, k)), `Expected exactly ${names.join(', ')}`);
+function keys(x:unknown,names:readonly string[]):Record<string,unknown> {
+  assert(obj(x) && Object.keys(x).length === names.length && names.every(k => own(x, k)), `Expected exactly ${names.join(', ')}`);
+  return x;
+}
 const freeze = <T>(x:T):T => { if (x && typeof x === 'object') { Object.values(x).forEach(freeze); Object.freeze(x); } return x; };
 
 /** Reject accessors, cycles, exotic objects, sparse arrays and non-safe JSON numbers. */
@@ -68,6 +71,10 @@ function value(s:FieldSchema,x:unknown):asserts x is CoreValue {
     : s.type === 'boolean' ? typeof x === 'boolean'
     : Array.isArray(x) && x.every(id => typeof id === 'string' && safeKey(id));
   assert(valid, `Value violates ${s.type} schema`, 'schema');
+}
+function checkArgs(inputs:Readonly<Record<string,FieldSchema>>,args:unknown):asserts args is Invocation['args'] {
+  const record=keys(args,Object.keys(inputs));
+  for(const [name,schema] of Object.entries(inputs))value(schema,record[name]);
 }
 function fields(o:unknown) { assert(obj(o), 'Expected field map'); Object.values(o).forEach(schema); }
 type Kind=FieldSchema['type'];
@@ -184,14 +191,15 @@ const rejection = (state:State,error:unknown):Rejected=>Object.freeze({status:'r
 export function createInterpreter(source: unknown): Readonly<Interpreter> {
   const model = validateModel(source), tokens = new WeakMap<Token,Plan>();
   const relations = new Map(model.relationships.map(r => [r.id, r]));
-  function prepare(state:State, invocation:Invocation):Preparation {
+  function prepare(state:State, invocation:InvocationInput):Preparation {
     try {
-      const before = checkState(model, state), inv = jsonSnapshot(invocation);
-      keys(inv, ['id', 'action', 'args', 'actor', 'clock']);
-      assert(safeKey(inv.id) && safeKey(inv.actor) && Number.isSafeInteger(inv.clock) && inv.clock >= 0, 'Invalid invocation identity/clock');
-      const a=ownValue(model.actions,inv.action);
-      assert(a,'Unknown action');keys(inv.args,Object.keys(a.inputs));
-      for (const [k, s] of Object.entries(a.inputs)) value(s, inv.args[k]);
+      const before = checkState(model, state), input = jsonSnapshot(invocation);
+      keys(input, ['id', 'action', 'args', 'actor', 'clock']);
+      assert(safeKey(input.id) && safeKey(input.actor) && Number.isSafeInteger(input.clock) && input.clock >= 0, 'Invalid invocation identity/clock');
+      const a=ownValue(model.actions,input.action);
+      assert(a,'Unknown action');const {args}=input;
+      checkArgs(a.inputs,args);
+      const inv:Invocation={...input,args};
       const bound = new Map<string,Bound>(), ctx = {inv, bound};
       for (const b of a.bindings) {
         const key=evaluate(b.key,ctx),record=ownValue(ownValue(before.records,b.resource),key);
@@ -258,5 +266,5 @@ export function createInterpreter(source: unknown): Readonly<Interpreter> {
       return freeze({status: 'committed', state: plan.state, events: plan.events});
     } catch (error) { return rejection(state, error); }
   }
-  return Object.freeze({model, prepare, commit, execute(state:State, inv:Invocation) { const p = prepare(state, inv); return p.status === 'prepared' ? commit(state, p.prepared) : p; }});
+  return Object.freeze({model, prepare, commit, execute(state:State, inv:InvocationInput) { const p = prepare(state, inv); return p.status === 'prepared' ? commit(state, p.prepared) : p; }});
 }

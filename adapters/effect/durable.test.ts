@@ -12,6 +12,11 @@ import {present} from '../../semantic/test-support.ts';
 
 const invoke = (id:string, args = { issueId: 'i1' }) => ({ id, action: 'issue.resolve', args, actor: 'maya', clock: 1730000000000 });
 const run = Effect.runPromise;
+function withStatus<T extends {status:string},S extends T['status']>(value:T,status:S):Extract<T,{status:S}> {
+  const matches=(candidate:T):candidate is Extract<T,{status:S}>=>candidate.status===status;
+  assert.ok(matches(value),`Expected ${status}, got ${value.status}`);
+  return value;
+}
 const temp = () => mkdtempSync(join(tmpdir(), 'effect-durable-'));
 const worker = new URL('./durable-worker.ts', import.meta.url).pathname;
 const child = (path: string, mode: string, id?: string) => spawnSync(process.execPath, [worker, path, mode, ...(id===undefined?[]:[id])], { encoding: 'utf8' });
@@ -35,7 +40,7 @@ test('restart keeps outcomes and immutable command identity', async t => {
   assert.equal(replay.status, 'duplicate'); assert.equal(replay.result.status, 'committed');
   const reordered = { clock: 1730000000000, actor: 'maya', args: { issueId: 'i1' }, action: 'issue.resolve', id: 'durable1' };
   assert.equal((await run(durableExecute(runtime, db, reordered))).status, 'duplicate');
-  assert.equal((await run(durableExecute(runtime, db, invoke('durable1', { issueId: 'i2' })))).code, 'invocation-conflict');
+  assert.equal(withStatus(await run(durableExecute(runtime, db, invoke('durable1', { issueId: 'i2' }))),'rejected').code, 'invocation-conflict');
   await run(closeDurableStore(db));
 });
 
@@ -47,10 +52,10 @@ test('pending and rejected outcomes reserve IDs; changed model/input conflicts a
   await run(initializeDurableState(pendingRuntime, db, issueState));
   const p = await run(durableExecute(pendingRuntime, db, invoke('p')));
   assert.equal(p.status, 'pending');
-  assert.equal((await run(durableExecute(rt, db, invoke('p')))).code, 'invocation-conflict');
+  assert.equal(withStatus(await run(durableExecute(rt, db, invoke('p'))),'rejected').code, 'invocation-conflict');
   const denied = await run(durableExecute(pendingRuntime, db, invoke('bad', { issueId: 'missing' })));
   assert.equal(denied.status, 'rejected');
-  assert.equal((await run(durableExecute(pendingRuntime, db, invoke('bad')))).code, 'invocation-conflict');
+  assert.equal(withStatus(await run(durableExecute(pendingRuntime, db, invoke('bad'))),'rejected').code, 'invocation-conflict');
   await run(closeDurableStore(db));
 });
 
