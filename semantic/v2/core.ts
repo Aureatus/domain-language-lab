@@ -1,7 +1,7 @@
 /** semantic-core/v2. Explicit independent lifecycle profile; v1 is unchanged. */
 import {errorMessage} from '../../errors.ts';
 import {jsonSnapshot,ownValue} from '../core.ts';
-import type {ApprovalReceipt, ApprovalRequest, ApprovalResult, Committed, Event, Expr, FieldSchema, Grant, Interpreter, Invocation, Model, Pending, Prepared, PreparedResult, Recipient, RecordSnapshot, Rejected, State, Value} from './types.ts';
+import type {ApprovalReceipt, ApprovalRequest, ApprovalResult, Committed, Event, Expr, FieldSchema, Grant, Interpreter, Invocation, InvocationInput, Model, Pending, Prepared, PreparedResult, Recipient, RecordSnapshot, Rejected, State, Value} from './types.ts';
 export type * from './types.ts';
 type Patch<K extends 'change'|'create'|'delete'> = Omit<Extract<Event,{kind:K}>,'kind'|'id'|'modelId'|'actionId'|'invocationId'|'actor'|'clock'|'revision'|'recipients'>;
 export {jsonSnapshot};
@@ -16,7 +16,7 @@ const obj = (x:unknown):x is Record<string,unknown> => x !== null && typeof x ==
 function fail(code:string,message?:string):never { throw Object.assign(new Error(message),{code}); }
 function assert(p:unknown,message:string|undefined,code='invalid'):asserts p { if(!p)fail(code,message); }
 const safeKey = (k:unknown):k is string => typeof k === 'string' && /^[A-Za-z][A-Za-z0-9_.:-]*$/.test(k) && !['constructor', 'prototype', '__proto__'].includes(k);
-const keys = (x:unknown,names:readonly string[]) => assert(obj(x) && Object.keys(x).length === names.length && names.every(k => own(x, k)), `Expected exactly ${names.join(', ')}`);
+function keys(x:unknown,names:readonly string[]):asserts x is Record<string,unknown> {assert(obj(x) && Object.keys(x).length === names.length && names.every(k => own(x, k)), `Expected exactly ${names.join(', ')}`);}
 const canonical = (x:unknown):string => Array.isArray(x) ? `[${x.map(canonical).join(',')}]` : obj(x)
   ? `{${Object.keys(x).sort().map(k => `${JSON.stringify(k)}:${canonical(x[k])}`).join(',')}}` : JSON.stringify(x);
 const equal = (a:unknown,b:unknown) => canonical(a) === canonical(b);
@@ -36,6 +36,10 @@ function value(s:FieldSchema,x:unknown):asserts x is Value {
     : s.type === 'string' ? typeof x === 'string' && (!s.enum || s.enum.includes(x))
     : s.type === 'boolean' ? typeof x === 'boolean' : Array.isArray(x) && x.every(safeKey);
   assert(valid, `Value violates ${s.type} schema`, 'schema');
+}
+function checkArgs(inputs:Readonly<Record<string,FieldSchema>>,args:unknown):asserts args is Invocation['args'] {
+  keys(args,Object.keys(inputs));
+  for(const [name,schema] of Object.entries(inputs))value(schema,args[name]);
 }
 function fields(o:unknown) { assert(obj(o), 'Expected field map'); Object.values(o).forEach(schema); }
 type Kind=FieldSchema['type'];
@@ -153,13 +157,14 @@ const rejection = (state:State,error:unknown):Rejected=>Object.freeze({status:'r
 export function createInterpreter(source: unknown): Readonly<Interpreter> {
   const model = validateModel(source), tokens = new WeakMap<Token,Plan>();
   const relations = new Map(model.relationships.map(r => [r.id, r]));
-  function context(state:State,invocation:Invocation) {
-    const before = checkState(model, state), inv = jsonSnapshot(invocation);
-    keys(inv, ['id', 'action', 'args', 'actor', 'clock']);
-    assert(safeKey(inv.id) && safeKey(inv.actor) && Number.isSafeInteger(inv.clock) && inv.clock >= 0, 'Invalid invocation');
-    const a=ownValue(model.actions,inv.action);
-    assert(a,'Unknown action');keys(inv.args,Object.keys(a.inputs));
-    for (const [k, s] of Object.entries(a.inputs)) value(s, inv.args[k]);
+  function context(state:State,invocation:InvocationInput) {
+    const before = checkState(model, state), input = jsonSnapshot(invocation);
+    keys(input, ['id', 'action', 'args', 'actor', 'clock']);
+    assert(safeKey(input.id) && safeKey(input.actor) && Number.isSafeInteger(input.clock) && input.clock >= 0, 'Invalid invocation');
+    const a=ownValue(model.actions,input.action);
+    assert(a,'Unknown action');const {args}=input;
+    checkArgs(a.inputs,args);
+    const inv:Invocation={...input,args};
     const bound = new Map<string,Bound>(), ctx = {inv, bound};
     for (const b of a.bindings) {
       const key = evaluate(b.key, ctx); assert(safeKey(key), 'Invalid record key');
@@ -262,7 +267,7 @@ export function createInterpreter(source: unknown): Readonly<Interpreter> {
     tokens.set(token, {before: canonical(before), state: nextState, events});
     return Object.freeze({status: 'prepared', prepared: token as Prepared});
   }
-  function prepare(state:State,invocation:Invocation):PreparedResult|Pending|Rejected {
+  function prepare(state:State,invocation:InvocationInput):PreparedResult|Pending|Rejected {
     try {
       const c = context(state, invocation);
       return c.requirements.length ? Object.freeze({status: 'pending', policyIds: Object.freeze(c.requirements.map(p => p.policyId)), request: requestFor(c), state}) : plan(c);
@@ -309,6 +314,6 @@ export function createInterpreter(source: unknown): Readonly<Interpreter> {
   }
   const finish = (state:State,p:PreparedResult|Pending|Rejected) => p.status === 'prepared' ? commit(state, p.prepared) : p;
   return Object.freeze({model, prepare, commit, approve, prepareResume,
-    execute(state:State,invocation:Invocation) { return finish(state, prepare(state, invocation)); },
+    execute(state:State,invocation:InvocationInput) { return finish(state, prepare(state, invocation)); },
     resume(...args:Parameters<Interpreter['resume']>) { const p=prepareResume(...args);return p.status==='prepared'?commit(args[0],p.prepared):p; }});
 }

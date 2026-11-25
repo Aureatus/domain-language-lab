@@ -22,6 +22,7 @@ export interface Model {
 export interface RecordSnapshot {readonly version: number; readonly values: Readonly<Record<string, Value>>}
 export interface State {readonly revision: number; readonly records: Readonly<Record<string, Readonly<Record<string, RecordSnapshot>>>>}
 export interface Invocation {readonly id: string; readonly action: string; readonly args: Readonly<Record<string, Value>>; readonly actor: string; readonly clock: number}
+export type InvocationInput = Omit<Invocation,'args'>&{readonly args:unknown};
 export interface Requirement {readonly policyId: string; readonly approvers: readonly string[]; readonly allowSelfApproval: boolean}
 export interface ApprovalRequest {readonly format: 'semantic-approval-request/v2'; readonly model: Model; readonly invocation: Invocation; readonly prestate: State; readonly requirements: readonly Requirement[]}
 export interface Grant {readonly policyId: string; readonly approver: string}
@@ -40,9 +41,9 @@ export type Preparation = PreparedResult | Pending | Rejected;
 export type ApprovalResult = Readonly<{status: 'approved'; receipt: ApprovalReceipt}> | Failure;
 export interface Interpreter {
   readonly model: Model;
-  prepare(state: State, invocation: Invocation): Preparation;
+  prepare(state: State, invocation: InvocationInput): Preparation;
   commit(state: State, token: Prepared): Committed | Rejected;
-  execute(state: State, invocation: Invocation): Committed | Pending | Rejected;
+  execute(state: State, invocation: InvocationInput): Committed | Pending | Rejected;
   approve(request: ApprovalRequest, grant: Grant): ApprovalResult;
   prepareResume(state: State, invocation: Invocation, request: ApprovalRequest, receipts: readonly ApprovalReceipt[], options: {readonly clock: number}): PreparedResult | Rejected;
   resume(state: State, invocation: Invocation, request: ApprovalRequest, receipts: readonly ApprovalReceipt[], options: {readonly clock: number}): Committed | Rejected;

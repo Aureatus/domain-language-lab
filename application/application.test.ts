@@ -1,8 +1,10 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtemp} from 'node:fs/promises';
+import {mkdtemp,rm} from 'node:fs/promises';
 import {createHash} from 'node:crypto';
-import {encodeJson} from '../adapters/effect/json.ts';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
+import {decodeJsonObject,encodeJson} from '../adapters/effect/json.ts';
 import {deriveApplication,buildInvocation} from './derive.ts';
 import {createApplicationServer} from './server.ts';
 import {fixture,renamedFixture,extendedFixture} from './fixture.ts';
@@ -24,6 +26,27 @@ test('absent presentation does not inherit config for valid prototype-named inpu
   const action=present(contract.actions['supply.take']);
   assert.ok(action.fields.some(field=>field.name==='toString'&&field.widget==='text'));
   assert.equal(present(contract.actions['toString']).id,'toString');
+});
+
+test('schema-invalid JSON is durably rejected and can be reconciled',async t=>{
+  const directory=await mkdtemp(join(tmpdir(),'application-invalid-receipt-'));
+  t.after(()=>rm(directory,{recursive:true,force:true}));
+  const server=await createApplicationServer(leave,{directory});
+  t.after(()=>server.close());
+  const submit=async(path:string,body:object)=>{
+    const response=await fetch(`${server.url}/api/actions/${path}`,{method:'POST',headers:{'content-type':'application/json'},body:encodeJson(body)});
+    assert.equal(response.status,200);
+    return decodeJsonObject(await response.text());
+  };
+  const receipt={actor:'leo',submissionId:'null-threshold'};
+  const rejected=await submit('execute',{...receipt,action:'settings.change',args:{threshold:null}});
+  assert.equal(rejected['status'],'rejected');
+  assert.equal(rejected['code'],'schema');
+  const reconciled=await submit('reconcile',receipt);
+  assert.equal(reconciled['submissionId'],receipt.submissionId);
+  assert.equal(reconciled['status'],'rejected');
+  assert.equal(reconciled['code'],'schema');
+  assert.deepEqual(reconciled['args'],{threshold:null});
 });
 
 test('automatic input types, inferred references, added actions/inputs and policy changes alter contract',()=>{

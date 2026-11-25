@@ -1,6 +1,6 @@
 import {createInterpreter,validateState,jsonSnapshot} from '../semantic/v2/core.ts';
 import {ownValue} from '../semantic/core.ts';
-import type {Action, FieldSchema, Invocation, Model, State, Value} from '../semantic/v2/types.ts';
+import type {Action, FieldSchema, Model, State, Value} from '../semantic/v2/types.ts';
 import {adapters} from './inputs.ts';
 import {loadingModes} from './loading.ts';
 export {loadingModes};
@@ -168,7 +168,7 @@ export function inputDefaults(contract:ApplicationContract,actionId:string,state
     else if(!f.hidden)args[f.name]=(f.schema.type==='string'?f.schema.enum?.[0]:undefined)??(f.reference?Object.keys(state.records[f.reference.resource]??{})[0]:f.schema.type==='integer'?f.schema.min??0:f.schema.type==='boolean'?false:'');
   }return args;
 }
-export function buildInvocation(contract:ApplicationContract,{action,actor,args,id,clock}:{action:string;actor:string;args:unknown;id:string;clock:number}):Invocation {
+export function buildInvocation(contract:ApplicationContract,{action,actor,args,id,clock}:{action:string;actor:string;args:unknown;id:string;clock:number}) {
   const declaration=typeof action==='string'&&Object.hasOwn(contract.actions,action)?contract.actions[action]:undefined;
   if(!declaration)throw Error('Unknown action.');
   if(!contract.actors.some(a=>a.id===actor))throw Error('Choose a known person.');
@@ -176,10 +176,5 @@ export function buildInvocation(contract:ApplicationContract,{action,actor,args,
   const inputs={...args};
   for(const f of declaration.fields)if(f.binding)inputs[f.name]=({actor, 'operation-id':id,clock,constant:f.binding.value})[f.binding.source];
   for(const adapter of declaration.adapters)adapters[adapter.name].apply(inputs,adapter.mapping);
-  const values:Record<string,Value>={};
-  for(const [key,value] of Object.entries(inputs)){
-    if(!isValue(value))throw Error(`Invalid input: ${key}`);
-    values[key]=value;
-  }
-  return {id,actor,clock,action,args:values};
+  return {id,actor,clock,action,args:inputs};
 }
