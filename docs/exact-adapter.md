@@ -101,6 +101,14 @@ Web is served at `http://127.0.0.1:4186`, **not** a separate-origin Exact dev
 server. The scoped adapter gateway forwards to an ephemeral shared backend.
 Do not weaken global origin checks to make a cross-origin web loop work.
 
+The gateway closes every API connection after responding. The pinned Exact
+Android transport can automatically resend a POST if a reused connection
+drops before any response arrives. Closing all API connections (including
+snapshot reads) keeps execute on a fresh connection, where Exact reports a
+disconnect instead. After a lost reply, use **Check submission** before
+retrying. This applies to the loopback gateway, not to other hosts given to
+the generator.
+
 ### Android
 
 Install a JDK (17 or newer) and the Android SDK command-line tools. Set
