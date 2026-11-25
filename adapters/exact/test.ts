@@ -1,4 +1,5 @@
 import {test} from 'node:test';
+import type {TestContext} from 'node:test';
 import './submission.test.ts';
 import assert from 'node:assert/strict';
 import {Agent,request} from 'node:http';
@@ -16,7 +17,7 @@ import {renamedFixture} from '../../application/fixture.ts';
 import {deriveApplication} from '../../application/derive.ts';
 import loadingFixture from './loading-fixture.ts';
 
-async function scratch(t,prefix){
+async function scratch(t:TestContext,prefix:string){
   const directory=await mkdtemp(join(tmpdir(),prefix));
   t.after(()=>rm(directory,{recursive:true,force:true}));
   return directory;
@@ -101,7 +102,7 @@ test('generated Exact mapping uses real durable HTTP pending, grants, resume and
     assert.equal(stale.ok,false);assert.match(stale.message,/Approval is saved, but completion failed/);
     const retained=(await c.snapshot()).pending.at(-1);assert.equal(retained.grants.length,1);assert.equal(retained.stale,true);
     assert.equal((await c.snapshot()).state.records.employee.leo.values.balance,5);
-    const bad=structuredClone(envelope);bad.contract.actions['leave.request'].fields.find(f=>!f.hidden).schema.type='ids';assert.throws(()=>generate(bad,{api:server.url}),/Unsupported field/);
+    const bad=structuredClone(envelope);bad.contract.actions['leave.request'].fields.find((f:{hidden:boolean})=>!f.hidden).schema.type='ids';assert.throws(()=>generate(bad,{api:server.url}),/Unsupported field/);
     const mismatch=createClient({...envelope,contractId:'wrong'},server.url);await assert.rejects(()=>mismatch.snapshot(),/Declaration changed/);
     const offline=createClient(envelope,server.url,async()=>{throw Error('offline');});const failure=await offline.command('approvals/resume',{});assert.equal(failure.ok,false);assert.match(failure.message,/ambiguous outcome/);
     await writeFile('artifacts/exact-http-report.json',JSON.stringify({format:'exact-http-mapping/v1',contractId:envelope.contractId,initialBalance:start,pendingBalance:start,grantBalance:start,resumedBalance:start-3,preview:preview.status,requestId:p.id,grant:grant.message,resume:resume.message,duplicate:duplicate.message,staleCompletion:stale.message,staleGrantRetained:retained.grants.length===1,staleBalance:5,scope:'Real HTTP/SQLite mapping test, not Exact UI or native execution.'},null,2));
@@ -118,16 +119,18 @@ test('renamed non-leave schemas generate references, enums, integers and boolean
     const s=await c.snapshot(),args={...s.defaults.ari['kit.issue'],units:2};
     await c.request('actions/execute',{actor:'ari',action:'kit.issue',args});
     const p=(await c.snapshot()).pending[0];assert.equal(p.requirements[0].approvers[0],'devon');
-    await c.request('approvals/grant',{actor:'devon',requestId:p.id,policyId:p.requirements.find(r=>r.approvers.includes('devon')).policyId});
+    await c.request('approvals/grant',{actor:'devon',requestId:p.id,policyId:p.requirements.find((r:{approvers:string[]})=>r.approvers.includes('devon')).policyId});
     await c.request('approvals/resume',{actor:'devon',requestId:p.id});
     assert.equal((await c.snapshot()).state.records.rack.parts.values.remaining,6);
   }finally{await server.close();}
 });
 
 test('inbox coverage follows every captured server requirement, not a single manager assumption',async t=>{
-  const model=renamedFixture(),policy=structuredClone(model.domain.actions['kit.issue'].policies[1]);
-  policy.id='kit.second-review';policy.approvers={op:'literal',value:'ari'};policy.allowSelfApproval=true;model.domain.actions['kit.issue'].policies.push(policy);
-  const server=await createApplicationServer(model,{directory:await scratch(t,'exact-multi-')});
+  const model=renamedFixture(),issue=model.domain.actions['kit.issue'],original=issue?.policies[1];
+  assert.ok(issue&&original?.effect==='approval-required');
+  const policy={...original,id:'kit.second-review',approvers:{op:'literal',value:'ari'},allowSelfApproval:true};
+  const domain={...model.domain,actions:{...model.domain.actions,'kit.issue':{...issue,policies:[...issue.policies,policy]}}};
+  const server=await createApplicationServer({...model,domain},{directory:await scratch(t,'exact-multi-')});
   try{
     const envelope=await(await fetch(server.url+'/api/contract')).json(),c=createClient(envelope,server.url),s=await c.snapshot();
     await c.request('actions/execute',{actor:'ari',action:'kit.issue',args:{...s.defaults.ari['kit.issue'],units:2}});
@@ -135,7 +138,7 @@ test('inbox coverage follows every captured server requirement, not a single man
     await c.request('approvals/grant',{actor:'devon',requestId:p.id,policyId:p.requirements[0].policyId});
     assert.equal(c.project(await c.snapshot(),'ari').inbox[0].complete,false);
     const incomplete=await c.command('approvals/resume',{actor:'ari',requestId:p.id});assert.equal(incomplete.ok,false);
-    await c.request('approvals/grant',{actor:'ari',requestId:p.id,policyId:p.requirements.find(r=>r.approvers.includes('ari')).policyId});
+    await c.request('approvals/grant',{actor:'ari',requestId:p.id,policyId:p.requirements.find((r:{approvers:string[]})=>r.approvers.includes('ari')).policyId});
     assert.equal(c.project(await c.snapshot(),'ari').inbox[0].complete,true);
     const complete=await c.command('approvals/resume',{actor:'ari',requestId:p.id});assert.equal(complete.ok,true);
     assert.equal((await c.snapshot()).state.records.rack.parts.values.remaining,6);

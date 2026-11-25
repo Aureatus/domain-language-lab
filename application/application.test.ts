@@ -82,10 +82,10 @@ test('all matching approval policies must be granted; inbox records actual requi
   const x=extendedFixture();
   present(x.domain.actions['supply.take']).policies.push({id:'supply.second-review',effect:'approval-required',when:{op:'literal',value:true},approvers:{op:'literal',value:'quinn'}});
   const server=await createApplicationServer(x,{directory:await mkdtemp('/tmp/opencode/multiple-approvals-')});
-  const post=async(path,body)=>{const r=await fetch(`${server.url}/api/${path}`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});assert.equal(r.status,200);return r.json();};
+  const post=async(path:string,body:object)=>{const r=await fetch(`${server.url}/api/${path}`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});assert.equal(r.status,200);return r.json();};
   try{
     let r=await post('actions/execute',{actor:'nora',action:'supply.take',args:{cabinetKey:'tools',quantity:2,reason:'Repair',tracked:false,memo:'Both policies'}});
-    const p=r.snapshot.pending[0];assert.deepEqual(p.requirements.map(r=>r.approvers),[['rory'],['quinn']]);
+    const p=r.snapshot.pending[0];assert.deepEqual(p.requirements.map((r:{approvers:string[]})=>r.approvers),[['rory'],['quinn']]);
     await post('approvals/grant',{actor:'rory',requestId:p.id,policyId:p.requirements[0].policyId});
     r=await post('approvals/resume',{actor:'rory',requestId:p.id});assert.equal(r.status,'rejected');assert.equal(r.snapshot.state.records.cabinet.tools.values.stock,8);
     r=await post('approvals/grant',{actor:'quinn',requestId:p.id,policyId:p.requirements[1].policyId});assert.equal(r.snapshot.pending[0].grants.length,2);
@@ -93,40 +93,51 @@ test('all matching approval policies must be granted; inbox records actual requi
   }finally{await server.close();}
 });
 test('invalid/unsupported presentation, references, bindings, adapters fail at startup',()=>{
-  const mutations=[
-    x=>x.application.actions.unknown={},
-    x=>x.application.actions['leave.request'].fields.typo={},
-    x=>x.application.actions['leave.request'].fields.start.widget='html',
-    x=>x.application.actions['leave.request'].fields.start.template='<h1>custom</h1>',
-    x=>x.application.actions['leave.request'].fields.employeeId.binding.source='javascript',
-    x=>x.application.actions['leave.request'].adapters[0].name='unknown/v1',
-    x=>x.application.actions['leave.request'].adapters[0].mapping.output='typo',
-    x=>x.application.actions['settings.change'].fields.threshold.default.field='typo',
-    x=>x.application.views[0].fields[0].field='typo',
-    x=>x.application.views[0].resource='unknown',
-    x=>x.application.actors.push(x.application.actors[0]),
-    x=>x.application.actions['leave.request'].fields.start.reference={resource:'employee',labelField:'typo'},
-    x=>x.application.actions['settings.change'].fields.threshold.default='not a number',
-    x=>x.application.actions['settings.change'].fields.threshold.binding={source:'actor'},
-    x=>x.application.views[2].columns[1].format='eval',
-    x=>x.application.actions['leave.request'].fields.employeeId.binding=null,
-    x=>x.application.actions=[],
-    x=>x.handler='not supported',
-    x=>x.application.actions['leave.request'].fields.employeeId.default='maya',
-    x=>x.application.actions.toString={},
-    x=>x.application.actions['leave.request']=null,
-    x=>x.application.actions['leave.request'].fields.start=null,
-    x=>x.application.actions['leave.request'].adapters=null,
-    x=>x.application.views=null,
+  const request=['application','actions','leave.request'],fields=[...request,'fields'];
+  const threshold=['application','actions','settings.change','fields','threshold'];
+  const firstActor=present(leave.application.actors[0]);
+  const mutations:[parent:string[],key:string,value:unknown][]=[
+    [['application','actions'],'unknown',{}],
+    [fields,'typo',{}],
+    [[...fields,'start'],'widget','html'],
+    [[...fields,'start'],'template','<h1>custom</h1>'],
+    [[...fields,'employeeId','binding'],'source','javascript'],
+    [[...request,'adapters','0'],'name','unknown/v1'],
+    [[...request,'adapters','0','mapping'],'output','typo'],
+    [[...threshold,'default'],'field','typo'],
+    [['application','views','0','fields','0'],'field','typo'],
+    [['application','views','0'],'resource','unknown'],
+    [['application','actors'],String(leave.application.actors.length),firstActor],
+    [[...fields,'start'],'reference',{resource:'employee',labelField:'typo'}],
+    [threshold.slice(0,-1),'threshold',{...present(leave.application.actions['settings.change']?.fields['threshold']),default:'not a number'}],
+    [threshold,'binding',{source:'actor'}],
+    [['application','views','2','columns','1'],'format','eval'],
+    [[...fields,'employeeId'],'binding',null],
+    [['application'],'actions',[]],
+    [[],'handler','not supported'],
+    [[...fields,'employeeId'],'default','maya'],
+    [['application','actions'],'toString',{}],
+    [['application','actions'],'leave.request',null],
+    [fields,'start',null],
+    [request,'adapters',null],
+    [['application'],'views',null],
   ];
-  for(const mutate of mutations){const x=structuredClone(leave);mutate(x);assert.throws(()=>deriveApplication(x));}
+  for(const [path,key,value] of mutations){
+    const x=structuredClone(leave);
+    let target:unknown=x;
+    for(const member of path){assert.ok(target&&typeof target==='object'&&Object.hasOwn(target,member));target=Reflect.get(target,member);}
+    assert.ok(target&&typeof target==='object');
+    assert.ok(Reflect.set(target,key,value));
+    assert.throws(()=>deriveApplication(x));
+  }
 });
-for(const [name,declaration,action,actor,approver,args,resource,record,stock,policy] of [
+const cases:[name:string,declaration:unknown,action:string,actor:string,approver:string,args:object,resource:string,record:string,stock:string,policy:string][]=[
   ['non-leave',fixture,'supply.take','nora','quinn',{cabinetKey:'tools',quantity:2,reason:'Repair',tracked:true},'cabinet','tools','stock','supply.review'],
   ['systematically renamed',renamedFixture(),'kit.issue','ari','devon',{rackId:'parts',units:2,purpose:'Repair',logged:true},'rack','parts','remaining','kit.authorization'],
-])test(`${name}: same contract drives generic route, pending requirements, grant/resume, projections`,async()=>{
+];
+for(const [name,declaration,action,actor,approver,args,resource,record,stock,policy] of cases)test(`${name}: same contract drives generic route, pending requirements, grant/resume, projections`,async()=>{
   const server=await createApplicationServer(declaration,{directory:await mkdtemp('/tmp/opencode/application-test-')});
-  const post=async(path,body)=>{const response=await fetch(`${server.url}/api/${path}`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});assert.equal(response.status,200);return response.json();};
+  const post=async(path:string,body:object)=>{const response=await fetch(`${server.url}/api/${path}`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});assert.equal(response.status,200);return response.json();};
   try{
     const {contractId,contract}=await(await fetch(`${server.url}/api/contract`)).json();assert.deepEqual(contract,deriveApplication(declaration).contract);
     let r=await post('actions/preview',{actor,action,args});assert.equal(r.status,'pending');assert.deepEqual(r.requirements,[{policyId:policy,approvers:[approver],allowSelfApproval:false}]);
