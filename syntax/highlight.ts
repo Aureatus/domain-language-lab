@@ -6,23 +6,25 @@ import {loadSource} from './load.ts';
 
 const keywords=new Set('module import use singleton identity domain resource fields field relationships relationship from action inputs input bindings bind key id preconditions requires require policies policy deny allow when approve by changes update set end create as observations observe through initial revision records record version application title eyebrow subtitle scope loading actor label name present description default adapter output view summary list format type like min max enum ownerField reference widget constant source'.split(' '));
 const types=new Set(['string','integer','boolean']);
-const escape=s=>s.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const entities:Record<string,string>={'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'};
+const escape=(s:string)=>s.replace(/[&<>"']/g,c=>entities[c]);
+type Parsed=ReturnType<typeof parseSource>;
 
 // Use the real lexer so strings, escapes and comments share the language's rules.
 // Styling is lexical only, not a claim of semantic validity.
-export function highlight(source,{quietIds=false}={}){
-  const tokens=tokenize(source),out=[];let cursor=0,head=true,previous;
+export function highlight(source:string,{quietIds=false}={}){
+  const tokens=tokenize(source),out:string[]=[];let cursor=0,head=true,previous:string|number|undefined;
   const starts=new Set(),ends=new Set();
   if(quietIds){
-    let statement='';
+    let statement:string|number='';
     tokens.forEach((t,i)=>{
       if(i===0||tokens[i-1].kind==='newline')statement=t.value;
-      if(['bind','require','approve','set','create'].includes(statement)&&t.kind==='word'&&t.value==='id'&&['word','string'].includes(tokens[i+1]?.kind)&&(tokens[i+2]?.kind==='newline'||tokens[i+2]?.value==='as')){
+      if(typeof statement==='string'&&['bind','require','approve','set','create'].includes(statement)&&t.kind==='word'&&t.value==='id'&&['word','string'].includes(tokens[i+1]?.kind)&&(tokens[i+2]?.kind==='newline'||tokens[i+2]?.value==='as')){
         starts.add(t.start);ends.add(tokens[i+1].end);
       }
     });
   }
-  const gap=s=>escape(s).replace(/#[^\n]*/g,c=>`<span class="comment">${c}</span>`);
+  const gap=(s:string)=>escape(s).replace(/#[^\n]*/g,c=>`<span class="comment">${c}</span>`);
   for(const [i,t] of tokens.entries()){
     if(t.end===t.start)continue;
     out.push(gap(source.slice(cursor,t.start)));
@@ -35,9 +37,10 @@ export function highlight(source,{quietIds=false}={}){
       if(['true','false'].includes(t.value))cls='number';
       else if(['and','or','not'].includes(t.value))cls='operator';
       else if(types.has(t.value))cls='type';
-      else if(keywords.has(t.value)&&(head||(!['field','input','resource','records','record','bind','set'].includes(previous)&&previous!=='.'&&t.value!=='end')))cls='keyword';
+      else if(keywords.has(t.value)&&(head||((typeof previous!=='string'||!['field','input','resource','records','record','bind','set'].includes(previous))&&previous!=='.'&&t.value!=='end')))cls='keyword';
       // Grouped rows may use keyword-looking identifiers (name/end/actor).
-      if(head&&['string','integer','boolean','like','from'].includes(tokens[i+1]?.value))cls='';
+      const next=tokens[i+1]?.value;
+      if(head&&typeof next==='string'&&['string','integer','boolean','like','from'].includes(next))cls='';
     }
     const text=escape(source.slice(t.start,t.end));
     out.push(cls?`<span class="${cls}">${text}</span>`:text);
@@ -47,14 +50,17 @@ export function highlight(source,{quietIds=false}={}){
   out.push(gap(source.slice(cursor)));return out.join('');
 }
 
-export function sourcePage(source,title='Domain source',{inline=false,fullHref='time-away-highlighted.html',parsedSections}={}){
-  let sections,diagnostic='',rendered;
+export function sourcePage(source:string,title='Domain source',{inline=false,fullHref='time-away-highlighted.html',parsedSections}:{
+  inline?:boolean;fullHref?:string;parsedSections?:Parsed['sections'];
+}={}){
+  let sections:Parsed['sections'],diagnostic='',rendered:string;
    try{sections=parsedSections??parseSource(source,{filename:title}).sections;rendered=highlight(source);}
   catch(error){diagnostic=error.message;sections=[{kind:'raw',name:'Original source',line:1}];rendered=escape(source);}
   const lines=rendered.split('\n');if(lines.at(-1)==='')lines.pop();
-  const group=s=>({domain:'Resources',resource:'Resources',relationship:'Resources',relationships:'Resources',action:'Actions',initial:'Initial data',application:'Interface',raw:'Source'}[s.kind]);
+  const groups:Record<string|number,string>={domain:'Resources',resource:'Resources',relationship:'Resources',relationships:'Resources',action:'Actions',initial:'Initial data',application:'Interface',raw:'Source'};
+  const group=(s:Parsed['sections'][number])=>groups[s.kind];
   const code=(start,end)=>`<pre><code>${lines.slice(start-1,end).map((s,j)=>`<span class="line" id="L${start+j}"><a class="ln" href="#L${start+j}" aria-label="Line ${start+j}">${start+j}</a><span class="text">${s}</span></span>`).join('')}</code></pre>`;
-  const nav=sections.map((s,i)=>`${i===0||group(s)!==group(sections[i-1])?`<h2>${group(s)}</h2>`:''}<a href="#L${s.line}">${escape(s.name)}</a>`).join('');
+  const nav=sections.map((s,i)=>`${i===0||group(s)!==group(sections[i-1])?`<h2>${group(s)}</h2>`:''}<a href="#L${s.line}">${escape(String(s.name))}</a>`).join('');
   // One uninterrupted code region: no source lines are folded or filtered.
   const chunks=`<div class="source-section">${code(1,lines.length)}</div>`;
   // Embed exact bytes as escaped text, never as executable script or rewritten code.
@@ -72,14 +78,16 @@ addEventListener('hashchange',reveal);reveal();
 </script></body></html>`.replaceAll('max-height:100vh','max-height:900px');
 }
 
-export function moduleSourcePage(path){
+export function moduleSourcePage(path:string|URL){
   const loaded=loadSource(path);
   const frames=loaded.modules.map(m=>`<h2>${escape(m.filename)}</h2><p>${escape(m.kind??'legacy')} · ${escape(m.id??'single file')}</p><iframe title="${escape(m.filename)}" srcdoc="${escape(sourcePage(m.source,m.filename,{parsedSections:loaded.sections.filter(s=>s.filename===m.filename)}))}"></iframe>`).join('');
   return `<!doctype html><html lang="en"><meta charset="utf-8"><title>Source modules</title><style>body{background:#101925;color:#e1e9f3;font:14px system-ui;margin:24px}h2,p{overflow-wrap:anywhere}iframe{width:100%;height:750px;border:1px solid #35475c}</style><h1>Complete source import closure</h1><p>Entry: ${escape(loaded.entry)}. Every file below is complete, with exact-source copy/download. No author code is omitted.</p>${frames}</html>`;
 }
 
 // Compact static projection for inline chat; exact excerpts, not pseudocode.
-export function sourceExcerptPage(source,{filename='leave/time-away.domain',ids=['settings','settings.change'],fullHref='time-away-highlighted.html',parsed}={}){
+export function sourceExcerptPage(source:string,{filename='leave/time-away.domain',ids=['settings','settings.change'],fullHref='time-away-highlighted.html',parsed}:{
+  filename?:string;ids?:string[];fullHref?:string;parsed?:Pick<Parsed,'sourceMap'>;
+}={}){
   const {sourceMap}=parsed??parseSource(source,{filename}),lines=highlight(source).split('\n');
   const excerpts=ids.map(id=>{
     const span=sourceMap[id];if(!span)throw Error(`Unknown excerpt ID '${id}'.`);

@@ -24,7 +24,8 @@ test('stable IDs map to exact spans; whitespace/comments change no semantic cont
     const s=sourceMap[id],actual=readFileSync(s.filename,'utf8'),excerpt=actual.slice(s.start.offset,s.end.offset);
     assert.ok(excerpt.includes(id)||id==='request.employee',`${id} maps to its declaration or typed-reference identity`);
     assert.equal(actual.slice(0,s.start.offset).split('\n').length,s.start.line);
-    assert.equal(s.start.column,actual.slice(0,s.start.offset).split('\n').at(-1).length+1);
+    const prefix=actual.slice(0,s.start.offset).split('\n').at(-1);
+    assert.ok(prefix!==undefined);assert.equal(s.start.column,prefix.length+1);
     if(id==='leave.create')assert.match(excerpt,/end$/);
   }
   const formatted=source.split('\n').map(l=>`  ${l} # ignored`).join('\n');
@@ -36,7 +37,8 @@ test('strings, escapes, comments, keyword-looking field end and tight operators 
   const altered=source.replace('title "Time away"','title "A # title \\"quoted\\" \\n tab\\t slash\\\\"');
   assert.equal(parse(altered).declaration.application.title,'A # title "quoted" \n tab\t slash\\');
   assert.deepEqual(parse(source.replace('employee.balance - days','employee.balance-days')).declaration,prior);
-  assert.equal(parse(source).declaration.application.actions['leave.request'].adapters[0].mapping.end,'end');
+  const adapter=parse(source).declaration.application.actions['leave.request'].adapters?.[0];
+  assert.ok(adapter);assert.equal(adapter.mapping.end,'end');
   assert.equal(tokenize('days>=3 # x\n')[1].value,'>=');
   assert.throws(()=>parse(source.replace('field balance label "Days remaining"','field name label "Days remaining"')),/Duplicate view field/);
   assert.throws(()=>parse(source.replace('settings from settings key "leave-rule" id "request.settings"','employee from settings key "leave-rule" id "request.settings"')),/Duplicate binding alias/);
@@ -46,7 +48,8 @@ test('precedence, parentheses, comparison reversal and left-associative subtract
   const policy=expr=>parse(source.replace('not actor == employeeId',expr)).declaration.domain.actions['leave.request'].policies[0].when;
   assert.deepEqual(policy('not actor == employeeId'),prior.domain.actions['leave.request'].policies[0].when);
   const e=policy('not days + 1 <= employee.balance and actor != employeeId or false');
-  assert.equal(e.op,'or');assert.equal(e.left.op,'and');assert.equal(e.left.left.op,'not');assert.equal(e.left.left.value.left.op,'add');assert.equal(e.left.right.op,'not');
+  assert.equal(e.op,'or');assert.equal(e.left.op,'and');assert.equal(e.left.left.op,'not');
+  assert.equal(e.left.left.value.op,'le');assert.equal(e.left.left.value.left.op,'add');assert.equal(e.left.right.op,'not');
   assert.equal(policy('(days + 1) > (employee.balance - 1)').op,'lt');
   const sub=parse(source.replace('employee.balance - days','employee.balance - days - 1')).declaration.domain.actions['leave.request'].updates[0].value;
   assert.equal(sub.op,'sub');assert.equal(sub.left.op,'sub');
@@ -74,7 +77,7 @@ for(const [label,mutate,pattern] of [
   ['unknown operator',s=>s.replace('days <= employee.balance','days * 2 <= employee.balance'),/Expected 'id'/],
   ['ill typed expression',s=>s.replace('days <= employee.balance','"days" <= employee.balance'),/Binary type mismatch/],
   ['unsafe integer',s=>s.replace('balance = 5','balance = 9007199254740992'),/safe integer/],
-])test(`reject ${label} with filename, line and column`,()=>{
+] satisfies [string,(source:string)=>string,RegExp][])test(`reject ${label} with filename, line and column`,()=>{
   assert.throws(()=>parse(mutate(source)),e=>e instanceof SourceError&&/^fixture\.domain:\d+:\d+:/.test(e.message)&&pattern.test(e.message),label);
 });
 
@@ -83,15 +86,17 @@ test('parsed execution keeps grouped prestate inserts, denial, preconditions and
   assert.equal(result.status,'committed');assert.equal(result.state.records.employee.maya.values.balance,4);
   assert.deepEqual(result.events.map(e=>e.kind),['action','change','create']);assert.deepEqual(result.events[0].recipients.map(r=>r.recipient),['sam']);
   assert.equal(result.state.records.leave[inv.id].values.days,1);
-  assert.equal(d.runtime.execute(d.initialState,{...inv,actor:'leo'}).code,'denied');
-  assert.equal(d.runtime.execute(d.initialState,{...inv,args:{...inv.args,days:6}}).code,'precondition');
+  const denied=d.runtime.execute(d.initialState,{...inv,actor:'leo'});
+  assert.equal(denied.status,'rejected');assert.equal(denied.code,'denied');
+  const precondition=d.runtime.execute(d.initialState,{...inv,args:{...inv.args,days:6}});
+  assert.equal(precondition.status,'rejected');assert.equal(precondition.code,'precondition');
   // Insert must read old balance 5, not updated balance 4, even though set precedes it.
   const modified=parse(source.replace('days = input.days','days = employee.balance')).declaration;
   const g=deriveApplication(modified),r=g.runtime.execute(g.initialState,invocation(g));
   assert.equal(r.state.records.leave[inv.id].values.days,5);assert.equal(r.state.records.employee.maya.values.balance,4);
   // Invalid create rolls back the update, publishing no facts.
-  const existing=structuredClone(d.initialState);existing.records.leave[inv.id]=result.state.records.leave[inv.id];
-  const failed=d.runtime.execute(existing,inv);assert.equal(failed.code,'existing-record');assert.equal(failed.state.records.employee.maya.values.balance,5);assert.equal(failed.events,undefined);
+  const existing={...d.initialState,records:{...d.initialState.records,leave:{...d.initialState.records.leave,[inv.id]:result.state.records.leave[inv.id]}}};
+  const failed=d.runtime.execute(existing,inv);assert.equal(failed.status,'rejected');assert.equal(failed.code,'existing-record');assert.equal(failed.state.records.employee.maya.values.balance,5);assert.equal('events' in failed?failed.events:undefined,undefined);
 });
 
 test('source-only threshold and input edits change actual derived forms and policy execution',()=>{
@@ -99,8 +104,9 @@ test('source-only threshold and input edits change actual derived forms and poli
   assert.equal(original.runtime.execute(original.initialState,inv).status,'committed');
   const edited=source.replace('threshold = 3','threshold = 2').replace('days like leave.days','days like leave.days\n    reason string enum "rest" "travel"');
   const d=deriveApplication(parse(edited).declaration),field=d.contract.actions['leave.request'].fields.find(f=>f.name==='reason');
-  assert.equal(field.widget,'select');assert.deepEqual(field.schema.enum,['rest','travel']);
-  assert.equal(d.runtime.execute(d.initialState,inv).code,'invalid');
+  assert.ok(field);assert.equal(field.widget,'select');assert.equal(field.schema.type,'string');assert.deepEqual(field.schema.enum,['rest','travel']);
+  const invalid=d.runtime.execute(d.initialState,inv);
+  assert.equal(invalid.status,'rejected');assert.equal(invalid.code,'invalid');
   const pending=d.runtime.execute(d.initialState,{...inv,args:{...inv.args,reason:'rest'}});
   assert.equal(pending.status,'pending');assert.equal(pending.state.records.employee.maya.values.balance,5);assert.deepEqual(pending.request.requirements[0].approvers,['sam']);
 });

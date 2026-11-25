@@ -34,7 +34,7 @@ test('three explicit views share the exact legacy domain/state; browser preserve
     const {declaration,modules}=loadSource(`leave/${view}.domain`);
     assert.deepEqual(declaration.domain,prior.domain);assert.deepEqual(declaration.initialState,prior.initialState);
     assert.equal(modules.filter(m=>m.kind==='domain').length,1);
-    assert.equal(modules.at(-1).kind,'view');
+    assert.equal(modules.at(-1)?.kind,'view');
   }
   assert.deepEqual(deriveApplication(loaded.declaration).contract,deriveApplication(prior).contract);
   assert.deepEqual(loaded.bindingOrigins.map(b=>[b.id,b.kind]),[['request.employee','typed-reference'],['request.settings','singleton-selector'],['edit.settings','singleton-selector']]);
@@ -55,19 +55,21 @@ test('references lower lazily, fail closed, retain policy authorization and reco
   assert.throws(()=>parse(flattened.replace('employeeId reference employee as employee','employeeId reference employee as employee\n    another reference employee as settings')),/Ambiguous reference 'settings'/);
   const d=deriveApplication(loaded.declaration);
   const inv=buildInvocation(d.contract,{action:'leave.request',actor:'maya',args:{start:'2026-11-20',end:'2026-11-20'},id:'test',clock:1});
-  assert.equal(d.runtime.execute(d.initialState,{...inv,actor:'leo'}).code,'denied');
-  const missing=structuredClone(d.initialState);delete missing.records.settings['leave-rule'];
-  missing.records.settings.alternate=structuredClone(d.initialState.records.settings['leave-rule']);
-  assert.equal(d.runtime.execute(missing,inv).code,'missing-record');
-  const noEmployee=structuredClone(d.initialState);delete noEmployee.records.employee.maya;
-  assert.equal(d.runtime.execute(noEmployee,inv).code,'missing-record');
+  const denied=d.runtime.execute(d.initialState,{...inv,actor:'leo'});
+  assert.equal(denied.status,'rejected');assert.equal(denied.code,'denied');
+  const settings={...d.initialState.records.settings,alternate:d.initialState.records.settings['leave-rule']};delete settings['leave-rule'];
+  const missing=d.runtime.execute({...d.initialState,records:{...d.initialState.records,settings}},inv);
+  assert.equal(missing.status,'rejected');assert.equal(missing.code,'missing-record');
+  const employee={...d.initialState.records.employee};delete employee.maya;
+  const noEmployee=d.runtime.execute({...d.initialState,records:{...d.initialState.records,employee}},inv);
+  assert.equal(noEmployee.status,'rejected');assert.equal(noEmployee.code,'missing-record');
   const unused=parse(flattened.replace('leaveId string','leaveId string\n    optional reference employee as unused')).declaration;
   assert.deepEqual(unused.domain.actions['leave.request'].bindings,prior.domain.actions['leave.request'].bindings);
   const renamed=parse(flattened.replaceAll('employee','person').replaceAll('settings','configuration')).declaration;
   assert.deepEqual(renamed.domain.actions['leave.request'].bindings.map(b=>b.resource),['person','configuration']);
   const r=deriveApplication(renamed).runtime.execute(renamed.initialState,{...inv,args:{...inv.args,personId:'maya'}});
   // The old employeeId is intentionally not accepted after renaming the schema.
-  assert.equal(r.code,'invalid');
+  assert.equal(r.status,'rejected');assert.equal(r.code,'invalid');
   const args={...inv.args,personId:inv.args.employeeId};delete args.employeeId;
   assert.equal(deriveApplication(renamed).runtime.execute(renamed.initialState,{...inv,args}).status,'committed');
 });

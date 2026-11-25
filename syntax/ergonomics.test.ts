@@ -20,8 +20,10 @@ test('expanded bounds and multi-enum, schema reuse and safe derived IDs execute'
   assert.deepEqual(model.relationships,[{id:'supply.supervisor',resource:'supply',field:'manager'}]);
   const d=deriveApplication(declaration),invoke=(balance,status='held')=>d.runtime.execute(d.initialState,{id:'adjust',action:'supply.adjust',actor:'sam',clock:1,args:{key:'depot',balance,status}});
   assert.equal(invoke(30).status,'committed');
-  for(const balance of [-1,31])assert.equal(invoke(balance).code,'schema');
-  assert.equal(invoke(1,'unknown').code,'schema');
+  for(const [balance,status] of [[-1,'held'],[31,'held'],[1,'unknown']] as const){
+    const outcome=invoke(balance,status);
+    assert.equal(outcome.status,'rejected');assert.equal(outcome.code,'schema');
+  }
   assert.deepEqual(lintSource(text),[]);
 });
 test('inline and expanded schemas are exact sugar; legacy singular forms remain accepted',()=>{
@@ -51,13 +53,14 @@ for(const [label,from,to,pattern] of [
   ['binding inside observations','    item through "supply.supervisor"','    bind other from supply key "depot" id "other"',/Expected 'through'/],
   ['inherited schema source','like supply.balance','like supply.constructor',/Unknown schema source/],
   ['derived binding collision','id "supply.capacity"','id "supply.adjust.item"',/Duplicate semantic ID/],
-])test(`group validation rejects ${label}`,()=>{
+] satisfies [string,string,string,RegExp][])test(`group validation rejects ${label}`,()=>{
   const changed=label==='inverted bounds'?text.replace('      min 0','      min 1').replace(from,to):text.replace(from,to);
   assert.notEqual(changed,text);assert.throws(()=>parse(changed),pattern);
 });
 test('grouped input lint locations and keyword-looking identifiers are contextual',()=>{
   const edited=text.replace('    key string','    unused like supply.title\n    key string');
   const warning=lintSource(edited).find(d=>d.ruleId==='usage/unused-input');
+  assert.ok(warning);
   assert.equal(warning.line,edited.split('\n').indexOf('    unused like supply.title')+1);assert.equal(warning.column,5);
   const html=highlight('fields\n  name string\n  end like supply.title\nend\n');
   assert.match(html,/>fields<\/span>/);assert.doesNotMatch(html,/class="keyword">name/);assert.doesNotMatch(html,/class="keyword">end<\/span> like/);

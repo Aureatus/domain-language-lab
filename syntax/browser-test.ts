@@ -10,7 +10,7 @@ const {declaration}=parseSource(edited,{filename:'edited.domain'});
 const server=await createApplicationServer(declaration,{directory:await mkdtemp('/tmp/opencode/syntax-browser-')});
 const browser=await chromium.launch({headless:true});
 try{
-  const page=await browser.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));await page.goto(server.url);
+  const page=await browser.newPage(),errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));await page.goto(server.url);
   const form=page.locator('[data-action="leave.request"]');await form.waitFor();
   assert.equal(await form.locator('select[name="reason"]').count(),1);
   assert.deepEqual(await form.locator('[name="reason"] option').allTextContents(),['rest','travel']);

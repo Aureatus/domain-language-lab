@@ -5,6 +5,7 @@ if(!['check','serve'].includes(command)||!path)throw Error('Usage: node syntax/c
 const {declaration,sourceMap}=loadSource(resolve(path));
 if(command==='check')console.log(`Valid ${declaration.domain.id}: ${Object.keys(sourceMap).length} source mappings; semantic-core/v2 + model-application/v1.`);
 else {
+  if(!declaration.application)throw Error('Missing application block.');
   const {createApplicationServer}=await import('../application/server.ts');
   const server=await createApplicationServer(declaration,{directory:resolve(process.env.APPLICATION_DIR??'artifacts/syntax-data'),port:Number(process.env.PORT??4174)});
   console.log(`${declaration.application.title}: ${server.url}`);
