@@ -4,13 +4,14 @@ import {createRequire} from 'node:module';
 const url=process.argv[2];
 if(!url||!/^http:\/\/127\.0\.0\.1:\d+$/.test(url)||url.endsWith(':4186'))throw Error('Supply an isolated adapter URL.');
 const require=createRequire(`${process.env['EXACT_ROOT']??'/tmp/opencode/exact-source'}/package.json`);
-const browser=await require('playwright-core').chromium.launch({headless:true});
+const playwright:typeof import('playwright')=require('playwright-core');
+const browser=await playwright.chromium.launch({headless:true});
 try{
   const page=await browser.newPage(),writes:{submissionId:string}[]=[],errors:string[]=[];
   page.on('pageerror',e=>errors.push(e.message));
   page.setDefaultTimeout(8000);
   const actor=page.getByTestId('actor'),notice=page.getByTestId('notice');
-  const field=name=>page.getByTestId('maya:leave.request:'+name);
+  const field=(name:string)=>page.getByTestId('maya:leave.request:'+name);
   const balance=async()=>(await (await fetch(url+'/api/snapshot')).json()).state.records.employee.maya.values.balance;
   assert.equal(await balance(),5);
   await page.goto(url);

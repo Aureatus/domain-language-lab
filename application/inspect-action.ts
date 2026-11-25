@@ -52,7 +52,7 @@ else{
   console.log(`${declarationAction.label} · ${actor}\n${selection}: ${encodeJson(args)}\n${trace?'Offline replay; file provenance is not authenticated.':'Isolated database.'} Input and transport schedule simulated; receipts and snapshots recorded in the original run.\n`);
   for(const s of steps){
     if(s.step===1&&trace?.['mutant'])console.log(`Replaying deliberate test fault: ${trace['mutant']} (${failure&&typeof failure==='object'&&'rule' in failure?failure['rule']:'unspecified rule'})`);
-    const actions=Object.keys(s.controls).filter(k=>s.controls[k]).join(', ')||'none';
+    const actions=Object.entries(s.controls).filter(([,enabled])=>enabled).map(([name])=>name).join(', ')||'none';
     console.log(`${s.step}. ${s.event}${s.performedBy?' by '+s.performedBy:''} [${s.source}] → ${s.submission}; submission lifecycle permits: ${actions}`);
     if(s.message)console.log(`   ${s.message}`);
     console.log(`   Draft: ${encodeJson(s.draft)} · Inbox: ${s.inbox.length} · Original receipt: ${s.receipt?.status??'not observed'}`);

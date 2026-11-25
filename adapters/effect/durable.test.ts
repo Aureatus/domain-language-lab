@@ -10,7 +10,7 @@ import { inventoryModel } from '../../inventory/model.ts';
 import { makeDurableRuntime, makeDurableStore, initializeDurableState, durableExecute, durableState, pullOutbox, acknowledgeOutbox, closeDurableStore, DurableStore, durableStoreLayer } from './durable.ts';
 import {present} from '../../semantic/test-support.ts';
 
-const invoke = (id, args = { issueId: 'i1' }) => ({ id, action: 'issue.resolve', args, actor: 'maya', clock: 1730000000000 });
+const invoke = (id:string, args = { issueId: 'i1' }) => ({ id, action: 'issue.resolve', args, actor: 'maya', clock: 1730000000000 });
 const run = Effect.runPromise;
 const temp = () => mkdtempSync(join(tmpdir(), 'effect-durable-'));
 const worker = new URL('./durable-worker.ts', import.meta.url).pathname;

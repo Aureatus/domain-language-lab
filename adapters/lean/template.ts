@@ -1,6 +1,7 @@
 // Proof strategy is separate from both the transition declarations and source law.
 // A failed tactic is a rejected obligation, never a weakened proposition.
-export function render({adapter, projection, metadata, max, fields, inputs, body, lawId, ensures, witnessPre, witnessInputs, witnessPost}) {
+type Template={adapter:string;projection:string;metadata:{source_sha256:string;obligation_sha256:string;declaration_ids:readonly string[]};max:number;fields:readonly string[];inputs:readonly string[];body:string;lawId:string;ensures:string;witnessPre:string;witnessInputs:string;witnessPost:string};
+export function render({adapter, projection, metadata, max, fields, inputs, body, lawId, ensures, witnessPre, witnessInputs, witnessPost}:Template) {
   return `import Std
 namespace Generated
 -- Adapter ${adapter}; projection ${projection}

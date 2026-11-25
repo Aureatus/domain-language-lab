@@ -9,7 +9,7 @@ import {loadSource} from './load.ts';
 import legacy from './fixtures/legacy-source.ts';
 import {present} from '../semantic/test-support.ts';
 const text=readFileSync(new URL('./fixtures/schema-groups.domain',import.meta.url),'utf8');
-const parse=s=>parseSource(s,{filename:'groups.domain'});
+const parse=(s:string)=>parseSource(s,{filename:'groups.domain'});
 test('expanded bounds and multi-enum, schema reuse and safe derived IDs execute',()=>{
   const {declaration,sourceMap}=parse(text),model=declaration.domain;
   assert.deepEqual(present(model.resources['supply']).fields['balance'],{type:'integer',min:0,max:30});
@@ -19,7 +19,7 @@ test('expanded bounds and multi-enum, schema reuse and safe derived IDs execute'
   assert.equal(present(present(model.actions['supply.adjust']).bindings[0]).id,'supply.adjust.item');
   assert.ok(sourceMap['supply.adjust.item']);
   assert.deepEqual(model.relationships,[{id:'supply.supervisor',resource:'supply',field:'manager'}]);
-  const d=deriveApplication(declaration),invoke=(balance,status='held')=>d.runtime.execute(d.initialState,{id:'adjust',action:'supply.adjust',actor:'sam',clock:1,args:{key:'depot',balance,status}});
+  const d=deriveApplication(declaration),invoke=(balance:number,status='held')=>d.runtime.execute(d.initialState,{id:'adjust',action:'supply.adjust',actor:'sam',clock:1,args:{key:'depot',balance,status}});
   assert.equal(invoke(30).status,'committed');
   for(const [balance,status] of [[-1,'held'],[31,'held'],[1,'unknown']] as const){
     const outcome=invoke(balance,status);

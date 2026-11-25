@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {present,withStatus} from "../semantic/test-support.ts";
 import {runtime,initialState} from './model.ts';
 import {businessDays,requestInvocation} from './test-support.ts';
-const request=(id,start,end,actor='maya')=>requestInvocation({id,actor,start,end,clock:1});
+const request=(id:string,start:string,end:string,actor='maya')=>requestInvocation({id,actor,start,end,clock:1});
 test('weekday input adapter validates real ISO dates and captured charged days',()=>{
   assert.equal(businessDays('2026-11-20','2026-11-23'),2);
   assert.equal(businessDays('2026-11-23','2026-11-25'),3);

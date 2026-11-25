@@ -33,7 +33,7 @@ test('lexical, unsupported, core and metadata errors fail rather than advisory p
 });
 test('CLI JSON, exit policies, missing files and invalid arguments',()=>{
   const dir=mkdtempSync('/tmp/opencode/lint-'),path=dir+'/test.domain';
-  const run=(...args)=>spawnSync(process.execPath,['syntax/lint.ts',...args],{encoding:'utf8'});
+  const run=(...args:string[])=>spawnSync(process.execPath,['syntax/lint.ts',...args],{encoding:'utf8'});
   writeFileSync(path,source+'# trailing  \n');
   let result=run(path,'--json');assert.equal(result.status,0);assert.equal(JSON.parse(result.stdout).warnings,1);
   assert.equal(run(path,'--strict').status,1);

@@ -19,9 +19,9 @@ await page.addInitScript(()=>{
   });
 });
 await page.goto(new URL('artifacts/inventory.html',root).href);await page.waitForLoadState('networkidle');
-const pause=ms=>page.waitForTimeout(ms);
-async function caption(text){await page.locator('#demo-caption').evaluate((el,text)=>el.textContent=text,text);}
-async function click(selector){const box=await page.locator(selector).boundingBox();if(!box)throw Error(`Invisible ${selector}`);await page.mouse.move(box.x+box.width/2,box.y+box.height/2,{steps:24});await pause(350);await page.mouse.click(box.x+box.width/2,box.y+box.height/2);await pause(600);}
+const pause=(ms:number)=>page.waitForTimeout(ms);
+async function caption(text:string){await page.locator('#demo-caption').evaluate((el,text)=>el.textContent=text,text);}
+async function click(selector:string){const box=await page.locator(selector).boundingBox();if(!box)throw Error(`Invisible ${selector}`);await page.mouse.move(box.x+box.width/2,box.y+box.height/2,{steps:24});await pause(350);await page.mouse.click(box.x+box.width/2,box.y+box.height/2);await pause(600);}
 await caption('Five cameras. Two clients each request three. All commands use the shared interpreter.');await pause(3500);
 await caption('Deliberate mutant: the host commits against old snapshots and overwrites the latest state.');await click('#broken');await pause(4500);
 await caption('Actual failure: six units accepted from five; slotA was overwritten. The independent ledger catches it.');await pause(4500);

@@ -1,7 +1,7 @@
 // Legacy single-file frontend coverage. The independent prior-leave.ts fixture
 // remains the semantic equality oracle; this text projection is not that oracle.
 import {readFileSync} from 'node:fs';
-const read=name=>readFileSync(new URL(`../../leave/${name}.domain`,import.meta.url),'utf8').split('\n').filter(line=>! /^(module|import|use)\b/.test(line)).join('\n');
+const read=(name:string)=>readFileSync(new URL(`../../leave/${name}.domain`,import.meta.url),'utf8').split('\n').filter(line=>! /^(module|import|use)\b/.test(line)).join('\n');
 export default [read('time-away')
   .replace('resource settings singleton key "leave-rule"','resource settings')
   .replace('action "leave.request" identity request','action "leave.request"')

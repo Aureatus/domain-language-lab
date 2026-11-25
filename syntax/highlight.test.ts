@@ -11,7 +11,7 @@ test('highlighting preserves source and escapes HTML without interpreting string
   assert.ok(rendered.includes('class="comment"># &lt;comment&gt;'));
   assert.ok(rendered.includes('class="string">&quot;a#&lt;b&gt;'));
   assert.ok(!rendered.includes('class="keyword">end'));
-  const decoded=rendered.replace(/<[^>]*>/g,'').replace(/&(amp|lt|gt|quot|#39);/g,(_,v)=>({amp:'&',lt:'<',gt:'>',quot:'"','#39':"'"}[v]));
+  const decoded=rendered.replace(/<[^>]*>/g,'').replace(/&(amp|lt|gt|quot|#39);/g,(_,v:string)=>new Map(Object.entries({amp:'&',lt:'<',gt:'>',quot:'"','#39':"'"})).get(v)??v);
   assert.equal(decoded,source);
   assert.ok(sourcePage(source,'<file>').includes('<title>&lt;file&gt;</title>'));
 });
