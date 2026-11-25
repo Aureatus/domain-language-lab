@@ -58,7 +58,11 @@ export function generateHistory(seed: number, maxSteps = 32): Action[] {
   integer('seed', seed, 0, 0xffffffff);
   integer('maxSteps', maxSteps, 1, 1000);
   const next = random(seed);
-  const pick = <T>(items: readonly T[]): T => items[next() % items.length];
+  const pick = <T>(items: readonly T[]): T => {
+    const item=items[next()%items.length];
+    if(item===undefined)throw Error('Expected a nonempty selection pool');
+    return item;
+  };
   const actor = (): Actor => ({ id: pick(['actor-1', 'actor-2']), role: pick(roles) });
   const mutation = (): Action => pick<Action>([
     { kind: 'edit', summary: pick(summaries) },
@@ -287,7 +291,9 @@ export function shrinkHistory(history: Action[], mutant = false, budget = 2000) 
     for (let index = 0; index < minimal.length && attempts < budget; index++) {
       const candidate = minimal.filter((_, i) => i !== index);
       if (accepts(candidate)) { minimal = candidate; changed = true; break; }
-      for (const value of simpler(minimal[index])) {
+      const action=minimal[index];
+      if(!action)throw Error('Missing action in shrink history');
+      for (const value of simpler(action)) {
         const candidate = clone(minimal); candidate[index] = value;
         if (accepts(candidate)) { minimal = candidate; changed = true; break; }
         if (attempts >= budget) break;
@@ -361,8 +367,10 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
     const flag = args[i];
     if (flag === '--mutant') { options.staleApprovalMutant = true; continue; }
     const names = { '--seed': 'seed', '--samples': 'samples', '--max-steps': 'maxSteps', '--shrink-budget': 'shrinkBudget' } as const;
-    if (!Object.hasOwn(names, flag) || args[i + 1] === undefined || args[i + 1].trim() === '') throw new Error(`Invalid argument: ${flag}`);
-    options[names[flag as keyof typeof names]] = Number(args[++i]);
+    const value=args[i+1];
+    if (flag===undefined || !Object.hasOwn(names, flag) || value===undefined || value.trim() === '') throw new Error(`Invalid argument: ${flag}`);
+    options[names[flag as keyof typeof names]] = Number(value);
+    i++;
   }
   const report = runProperties(options);
   await mkdir('artifacts', { recursive: true });

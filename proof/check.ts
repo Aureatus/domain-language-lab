@@ -39,10 +39,10 @@ try {
   // Fail closed: every expected theorem must report its complete transitive axiom set.
   for (const name of expected) {
     const lines = log.split('\n').filter(line => line.startsWith(`'ApprovalPilot.${name}' `));
-    if (lines.length !== 1) throw new Error(`Missing/duplicate axiom report for ${name}`);
-    const line = lines[0];
-    const parsed = line.match(/depends on axioms: \[([^\]]*)\]$/);
-    const axioms = parsed ? parsed[1].split(',').map(x => x.trim()).filter(Boolean)
+    const [line] = lines;
+    if (line === undefined || lines.length !== 1) throw new Error(`Missing/duplicate axiom report for ${name}`);
+    const reported = line.match(/depends on axioms: \[([^\]]*)\]$/)?.[1];
+    const axioms = reported !== undefined ? reported.split(',').map(x => x.trim()).filter(Boolean)
       : line.endsWith('does not depend on any axioms') ? [] : null;
     if (!axioms) throw new Error(`Unrecognized axiom output: ${line}`);
     report.theorem_axioms[name] = axioms;

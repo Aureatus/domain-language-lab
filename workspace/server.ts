@@ -45,7 +45,7 @@ function identity(value) {
   catch { throw failure(400, 'Expected a bounded simulation identity.'); }
 }
 async function body<S extends Schema.ConstraintDecoder<unknown>>(req:IncomingMessage, schema:S):Promise<S['Type']> {
-  if (req.headers['content-type']?.split(';')[0].trim() !== 'application/json') throw failure(415, 'Expected application/json.');
+  if (req.headers['content-type']?.split(';')[0]?.trim() !== 'application/json') throw failure(415, 'Expected application/json.');
   let size = 0; const chunks:Buffer[] = [];
   for await (const chunk of req) {
     size += chunk.length;

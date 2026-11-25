@@ -22,7 +22,7 @@ type Snapshot = {
   events?:{sequence:number;eventId:string;event:{type?:string;kind?:string}}[];
 };
 const entities:Record<string,string>={'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'};
-const esc = (value:unknown) => String(value ?? '').replace(/[&<>"']/g, c => entities[c]);
+const esc = (value:unknown) => String(value ?? '').replace(/[&<>"']/g, c => entities[c] ?? c);
 const json = value => JSON.stringify(value, null, 2);
 let snapshot:Snapshot|undefined, stream:EventSource|undefined, generation = 0, requestSerial = 0, busy = false;
 const drafts = new Map<string,{fields:Record<string,string>;clock:string;tool:string}>();

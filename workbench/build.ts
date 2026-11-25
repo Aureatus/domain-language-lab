@@ -21,7 +21,7 @@ for (const decision of ['approval', 'allow', 'deny'] as Decision[]) {
   policies[decision] = { model: variant, diff: policyDiff(model, variant) };
   for (const role of ['support', 'reviewer', 'viewer'] as Role[]) {
     for (const priority of ['high', 'normal'] as Priority[]) {
-      for (let scheduleIndex = 0; scheduleIndex < schedules.length; scheduleIndex++) {
+      for (const [scheduleIndex,schedule] of schedules.entries()) {
         for (const mutant of [false, true]) {
           const initial = { ...ticket(), priority };
           const runtime = new Runtime(variant, initial, () => 1000);
@@ -31,7 +31,7 @@ for (const decision of ['approval', 'allow', 'deny'] as Decision[]) {
             events: structuredClone(runtime.events), deliveries: structuredClone(runtime.deliveries) });
           capture('initial');
           capture('request', runtime.request({ id: role === 'support' ? 'support-1' : `${role}-1`, role }, 'Original resolution'));
-          for (const step of schedules[scheduleIndex]) {
+          for (const step of schedule) {
             const result = step === 'approve' ? runtime.approve(reviewer)
               : step === 'edit' ? runtime.editSummary('Changed resolution')
               : runtime.execute({ staleApprovalMutant: mutant });
@@ -44,7 +44,7 @@ for (const decision of ['approval', 'allow', 'deny'] as Decision[]) {
               && !isDeepStrictEqual(subject, event.details['subject']) ? [event.id] : [];
           });
           cases[[decision, role, priority, scheduleIndex, mutant].join('|')] = {
-            inputs: { decision, role, priority, schedule: schedules[scheduleIndex], mutant, clock: 1000 },
+            inputs: { decision, role, priority, schedule, mutant, clock: 1000 },
             initial, frames, violations, trace: runtime.export(),
           };
         }
