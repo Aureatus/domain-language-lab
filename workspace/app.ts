@@ -1,3 +1,4 @@
+import {errorMessage} from '../errors.ts';
 import type {ApprovalRequest,FieldSchema,Grant,RecordSnapshot,State,Value} from '../semantic/v2/types.ts';
 
 function $(id:string) {
@@ -93,7 +94,7 @@ async function refresh(gen = generation) {
     if (first) { actionInput.innerHTML = current.tools.map(t => `<option>${esc(t.name)}</option>`).join(''); buildForm(); }
     render(current); $('notice').textContent = ''; $('action-form').inert = false; executeJSON.disabled = false;
     if (stream?.readyState === EventSource.OPEN) $('connection').textContent = 'Connected · snapshot current';
-  } catch (error) { if (gen === generation && serial === requestSerial) { $('notice').textContent = `Snapshot unavailable: ${error.message}. Reconnect to retry.`; $('connection').textContent = 'Reconnecting · snapshot unavailable'; } }
+  } catch (error) { if (gen === generation && serial === requestSerial) { $('notice').textContent = `Snapshot unavailable: ${errorMessage(error)}. Reconnect to retry.`; $('connection').textContent = 'Reconnecting · snapshot unavailable'; } }
 }
 function connect() {
   stream?.close(); const gen = ++generation; snapshot = undefined;
@@ -115,7 +116,7 @@ async function command(endpoint, body) {
     $('result').dataset['status'] = outcome.status;
     $('result').innerHTML = `<strong>${esc(value.status)}${outcome.code ? ` · ${esc(outcome.code)}` : ''}</strong><p>${esc(outcome.reason ?? (outcome.status === 'pending' ? 'Awaiting approval. Stock has not changed.' : 'Server result received.'))} ${esc(help[outcome.code] ?? '')}</p><details><summary>Exact server result</summary><pre>${esc(json(value))}</pre></details>`;
     await refresh(gen);
-  } catch(error) { if(gen === generation) { $('result').dataset['status']='error'; $('result').textContent=`Command not confirmed: ${error.message}. Check connection and history before retrying.`; } }
+  } catch(error) { if(gen === generation) { $('result').dataset['status']='error'; $('result').textContent=`Command not confirmed: ${errorMessage(error)}. Check connection and history before retrying.`; } }
   finally { busy = false; }
 }
 $('action-form').addEventListener('submit', event => { event.preventDefault(); const inv = invocation(); toolInput.value = json(inv); saveDraft(); command('execute',{profile:context().profile,invocation:inv}); });
@@ -123,6 +124,6 @@ $('fields').addEventListener('input',syncJSON); clockInput.addEventListener('inp
 actionInput.addEventListener('change', buildForm);
 for (const name of ['profile','actor']) $(name).addEventListener('change', () => { $('result').replaceChildren(); connect(); });
 $('reconnect').addEventListener('click', () => {saveDraft(); connect();});
-executeJSON.addEventListener('click', () => {try {command('execute',{profile:context().profile,invocation:JSON.parse(toolInput.value)});}catch(error){$('result').dataset['status']='error';$('result').textContent=`Invalid JSON: ${error.message}`;}});
+executeJSON.addEventListener('click', () => {try {command('execute',{profile:context().profile,invocation:JSON.parse(toolInput.value)});}catch(error){$('result').dataset['status']='error';$('result').textContent=`Invalid JSON: ${errorMessage(error)}`;}});
 $('pending').addEventListener('click', event => {const button = event.target instanceof Element?event.target.closest('button'):null; if (!button) return; const {profile,actor} = context(); if(button.dataset['grant']) command('approve',{profile,actor,command:{id:id(),invocationId:button.dataset['grant'],policyId:button.dataset['policy']}}); else if(button.dataset['resume']) { if(!resumeClock.reportValidity()) return; command('resume',{profile,command:{id:id(),invocationId:button.dataset['resume'],clock:Number(resumeClock.value)}}); }});
 connect();

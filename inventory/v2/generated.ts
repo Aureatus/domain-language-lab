@@ -1,3 +1,4 @@
+import {asError,errorMessage} from '../../errors.ts';
 import assert from 'node:assert/strict';
 import {mkdtemp, mkdir, readFile, writeFile} from 'node:fs/promises';
 import {join, resolve, dirname} from 'node:path';
@@ -257,7 +258,8 @@ export function checkHistory(commands: Operation[], observations: Observation[])
       previousEvents = copy(events);
     } catch (error) {
       const actual=observations[index]?.result;
-      return {status:'counterexample', index, command:op, ...(expected===undefined?{}:{expected}), ...(actual===undefined?{}:{actual}), cause:{name:error.name, message:error.message, expected:error.expected, actual:error.actual}, failingPrefix:commands.slice(0, index + 1)};
+      const detail=error instanceof assert.AssertionError?{expected:error.expected,actual:error.actual}:{};
+      return {status:'counterexample', index, command:op, ...(expected===undefined?{}:{expected}), ...(actual===undefined?{}:{actual}), cause:{name:asError(error).name, message:errorMessage(error), ...detail}, failingPrefix:commands.slice(0, index + 1)};
     }
   }
   return {status:'passed', steps:commands.length};
@@ -284,12 +286,12 @@ async function execute(path: string, op: Operation): Promise<ObservedResult> {
 async function observe(path: string, commands: Operation[]): Promise<{observations: Observation[]; failure?: Counterexample}> {
   const observations: Observation[] = [];
   try { await durable(path, (rt, db) => run(initializeDurableState(rt, db, initialState))); }
-  catch (error) { return {observations, failure:{status:'counterexample', phase:'initialize', cause:{name:error.name, message:error.message}, failingPrefix:[]}}; }
+  catch (error) { return {observations, failure:{status:'counterexample', phase:'initialize', cause:{name:asError(error).name, message:errorMessage(error)}, failingPrefix:[]}}; }
   for (let index = 0; index < commands.length; index++) {
     // The replay contract is JSON data. Optional undefined JS properties (for
     // example conflict.state) cannot survive report serialization.
     try { observations.push({result:copy(await execute(path, commands[index])), snapshot:await snapshot(path, commands)}); }
-    catch (error) { return {observations, failure:{status:'counterexample', index, command:commands[index], cause:{name:error.name, message:error.message}, failingPrefix:commands.slice(0, index + 1)}}; }
+    catch (error) { return {observations, failure:{status:'counterexample', index, command:commands[index], cause:{name:asError(error).name, message:errorMessage(error)}, failingPrefix:commands.slice(0, index + 1)}}; }
   }
   return {observations};
 }
@@ -337,7 +339,7 @@ export async function runGenerated({reportPath, seed = 0x51a7, runs = 6, steps =
         if (baseline) {
           for (let index = 0; index < Math.max(baseline.length, observed.observations.length); index++) {
             try { assert.deepEqual(observed.observations[index], baseline[index], 'saved report observations must replay exactly'); }
-            catch (error) { item.checks = 'counterexample'; item.counterexample = {status:'counterexample', phase:'saved-replay', index, command:commands[index], cause:{name:error.name, message:error.message}, failingPrefix:commands.slice(0, index + 1)}; break; }
+            catch (error) { item.checks = 'counterexample'; item.counterexample = {status:'counterexample', phase:'saved-replay', index, command:commands[index], cause:{name:asError(error).name, message:errorMessage(error)}, failingPrefix:commands.slice(0, index + 1)}; break; }
           }
         }
         const replay = await observe(join(root, `replay-${i}.sqlite`), commands);
@@ -345,7 +347,7 @@ export async function runGenerated({reportPath, seed = 0x51a7, runs = 6, steps =
         else {
           for (let index = 0; index < commands.length; index++) {
             try { assert.deepEqual(replay.observations[index], observed.observations[index], 'exact fresh DB outcomes, states, pending projections and ordered events'); }
-            catch (error) { item.checks = 'counterexample'; item.counterexample = {status:'counterexample', phase, index, command:commands[index], cause:{name:error.name, message:error.message}, failingPrefix:commands.slice(0, index + 1)}; break; }
+            catch (error) { item.checks = 'counterexample'; item.counterexample = {status:'counterexample', phase, index, command:commands[index], cause:{name:asError(error).name, message:errorMessage(error)}, failingPrefix:commands.slice(0, index + 1)}; break; }
           }
           const replayCheck = checkHistory(commands, replay.observations);
           if (replayCheck.status !== 'passed' && !item.counterexample) { item.checks = 'counterexample'; item.counterexample = {...replayCheck, phase}; }
@@ -362,7 +364,7 @@ export async function runGenerated({reportPath, seed = 0x51a7, runs = 6, steps =
           if (first.length) { assert.equal(await run(acknowledgeOutbox(db, first[0].sequence)), true); assert.ok(!(await run(pullOutbox(db, {limit:2}))).some(x => x.sequence === first[0].sequence)); }
         });
       } catch (error) {
-        item.checks = 'counterexample'; item.counterexample = {status:'counterexample', phase, cause:{name:error.name, message:error.message}, failingPrefix:commands};
+        item.checks = 'counterexample'; item.counterexample = {status:'counterexample', phase, cause:{name:asError(error).name, message:errorMessage(error)}, failingPrefix:commands};
       }
     }
     for (const {result} of observed.observations) { const key = `${result.status}${result.code ? ':' + result.code : ''}`; coverage[key] = (coverage[key] ?? 0) + 1; }

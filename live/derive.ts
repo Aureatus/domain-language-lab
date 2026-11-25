@@ -1,3 +1,4 @@
+import {errorMessage} from '../errors.ts';
 import {createApp, forkApp} from './core.ts';
 import type {LiveModel, Rule} from './core.ts';
 
@@ -129,7 +130,7 @@ export function runDerivedChecks(workspace) {
     document = typeof workspace?.exportWorkspace === 'function' ? workspace.exportWorkspace() : workspace;
     source = createApp({workspace: document, clock: () => 0});
   } catch (error) {
-    add('workspace-reconstruction', null, null, {reconstructed: true}, null, 'unknown', String(error.message ?? error));
+    add('workspace-reconstruction', null, null, {reconstructed: true}, null, 'unknown', String(errorMessage(error) ?? error));
     return {result: 'unknown', revision: null, cases, scope: derivationScope};
   }
   const revision = source.model.revision;

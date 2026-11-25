@@ -1,3 +1,4 @@
+import {errorMessage,httpErrorStatus} from '../errors.ts';
 import {createServer} from 'node:http';
 import type {ServerResponse} from 'node:http';
 import {mkdir,readFile} from 'node:fs/promises';
@@ -123,11 +124,11 @@ export async function createApplicationServer(declaration,{directory,port=0,data
           if(req.headers['content-type']?.split(';')[0]!=='application/json')throw fail('Expected JSON.',415);
           let bytes=0;const chunks: Buffer[]=[];for await(const chunk of req){bytes+=chunk.length;if(bytes>16384)throw fail('Request too large.',413);chunks.push(chunk);}
           const kind=url.pathname.slice(url.pathname.lastIndexOf('/')+1);let body,result,invocation,key,replayed=false;
-          try{body=decodeStrictJson(requestSchemas[kind],Buffer.concat(chunks).toString());}catch(e){throw fail(e.message||'Invalid JSON.');}
+          try{body=decodeStrictJson(requestSchemas[kind],Buffer.concat(chunks).toString());}catch(e){throw fail(errorMessage(e)||'Invalid JSON.');}
           try{
             if(!contract.actors.some(a=>a.id===body.actor))throw Error('Choose a known person.');
             if(Object.hasOwn(body,'submissionId'))key=submissionKey(body.submissionId);
-          }catch(e){throw fail(e.message);}
+          }catch(e){throw fail(errorMessage(e));}
            if(Object.hasOwn(body,'expectedContractId')&&body.expectedContractId!==contractId)throw fail('Application contract changed. Reload before continuing.',409);
            if(key){
             const stored=lookup(key,body,kind==='execute');
@@ -137,8 +138,8 @@ export async function createApplicationServer(declaration,{directory,port=0,data
           if(kind==='execute'||kind==='preview'){
             if(!replayed){
                try{invocation=buildInvocation(contract,{...body,id:key??operationId(),clock:Date.now()});}catch(e){
-                 if(key)return json(400,{error:e.message,disposition:'not-submitted',contractId,submissionId:body.submissionId});
-                 throw fail(e.message);
+                 if(key)return json(400,{error:errorMessage(e),disposition:'not-submitted',contractId,submissionId:body.submissionId});
+                 throw fail(errorMessage(e));
                }
               if(kind==='preview')result=runtime.prepare(state(),invocation);
               else{
@@ -178,7 +179,7 @@ export async function createApplicationServer(declaration,{directory,port=0,data
         if(req.method!=='GET'||!Object.hasOwn(staticFiles,url.pathname))throw fail('Not found.',404);
         const file=staticFiles[url.pathname],data=await readFile(file);
         res.writeHead(200,{'content-type':file.pathname.endsWith('.html')?'text/html; charset=utf-8':file.pathname.endsWith('.css')?'text/css':'text/javascript','x-content-type-options':'nosniff','cache-control':'no-store'});res.end(data);
-      }catch(e){if(res.headersSent)res.destroy();else json(e.httpStatus??500,{error:e.httpStatus?e.message:'Storage failed. The operation may have been recorded; reconnect before retrying.'});}
+      }catch(e){const status=httpErrorStatus(e);if(res.headersSent)res.destroy();else json(status??500,{error:status?errorMessage(e):'Storage failed. The operation may have been recorded; reconnect before retrying.'});}
     });
     await new Promise((yes,no)=>{server.once('error',no);server.listen(port,'127.0.0.1',yes);});
     return {url:`http://127.0.0.1:${server.address().port}`,async close(){if(closed)return;closed=true;for(const res of streams)res.end();streams.clear();await new Promise<void>((yes,no)=>{server.close(e=>e?no(e):yes());server.closeAllConnections();});run(closeDurableStore(db));}};

@@ -1,4 +1,4 @@
-import {submissionStep,submissionControls,submissionWireBody} from './submission.ts';
+import {submissionStep,submissionControls,submissionWireBody,isNotSubmittedError} from './submission.ts';
 import type {SubmissionEvent,SubmissionState} from '../../application/submission.ts';
 import type {State} from '../../semantic/v2/types.ts';
 // Each generated actor/action form owns one driver for the mounted app.
@@ -23,7 +23,7 @@ export function submissionDriver(client,actor,action){
         await client.request('actions/execute',{...state.body,submissionId:state.id});
       step(type==='check'&&result.status==='not-found'?{type:'missing'}:{type:'found',result});
     }catch(e){
-      if(type!=='check'&&e.notSubmitted){
+      if(type!=='check'&&isNotSubmittedError(e)){
         step({type:'invalid',message:e.message});
         return {phase:state.phase,message:e.message};
       }
@@ -73,7 +73,7 @@ export function createClient({contract,contractId},base,fetcher=fetch){
   }
   async function command(path,body){
     try{const r=await request(path,body);return {ok:r.status!=='rejected',message:path==='approvals/resume'&&r.status==='rejected'?`Approval is saved, but completion failed. ${r.message}`:r.message};}
-    catch(e){return {ok:false,message:`${path==='approvals/resume'?'Approval may be saved, but completion failed. ':''}${e.message} Reconnect and inspect saved state before retrying; an HTTP failure can have an ambiguous outcome.`};}
+    catch(e){return {ok:false,message:`${path==='approvals/resume'?'Approval may be saved, but completion failed. ':''}${(e instanceof Error?e.message:String(e))} Reconnect and inspect saved state before retrying; an HTTP failure can have an ambiguous outcome.`};}
   }
   return {request,snapshot,project,command};
 }

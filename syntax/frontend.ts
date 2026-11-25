@@ -1,4 +1,5 @@
 // Experimental closed text frontend. Module resolution lives in load.ts.
+import {errorMessage} from '../errors.ts';
 import {deriveApplication,loadingModes} from '../application/derive.ts';
 import {createInterpreter,validateState} from '../semantic/v2/core.ts';
 import type {Action,Expr,Model,Scalar,State} from '../semantic/v2/types.ts';
@@ -282,7 +283,7 @@ export function parseSource(source: string,{filename='<source>',allowMissingAppl
   try{if(application)deriveApplication(declaration);else{createInterpreter(domain);validateState(domain,initialState);}}catch(error){
     // Core type/shape validation remains authoritative. A source context is
     // supplied even where the core diagnostic has no structured semantic path.
-    const diagnostic=new SourceError(filename,root,`Model/application validation: ${error.message}`);
+    const diagnostic=new SourceError(filename,root,`Model/application validation: ${errorMessage(error)}`);
     diagnostic.ruleId='domain/model-validation';throw diagnostic;
   }
   return {declaration,sourceMap,sections,inputLocations,bindingOrigins};

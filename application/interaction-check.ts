@@ -1,3 +1,4 @@
+import {errorMessage} from '../errors.ts';
 import {isDeepStrictEqual as equal} from 'node:util';
 import {actionReview} from './action-review.ts';
 import {walkthrough} from './action-walkthrough.ts';
@@ -88,7 +89,7 @@ export async function checkInteractions(declaration,contract,command,options={})
     for(const [i,event] of schedule.events.entries()){
       observations++;
       let rule,step: Observation | undefined;
-      try{step=fold(event);rule=check(event,step);}catch(e){rule=`projection.error: ${e.message}`;}
+      try{step=fold(event);rule=check(event,step);}catch(e){rule=`projection.error: ${errorMessage(e)}`;}
       if(rule){
         if(!shortest||i+1<shortest.events.length)shortest={rule,family:schedule.name,events:schedule.events.slice(0,i+1),observed:step};
         break;

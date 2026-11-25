@@ -1,3 +1,4 @@
+import {errorMessage} from '../../errors.ts';
 import {mkdirSync, readFileSync, writeFileSync} from 'node:fs';
 import {resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
@@ -30,7 +31,7 @@ function ids(source: Model) {
 }
 
 export function projectInventory(source: Model = inventoryModel) {
-  try { validateModel(source); } catch (error) { fail(`Invalid inventory source: ${error.message}`); }
+  try { validateModel(source); } catch (error) { fail(`Invalid inventory source: ${errorMessage(error)}`); }
   const original = source.actions[ACTION];
   const retainedGuard = original?.preconditions.find(x => x.id === GUARD);
   const retainedUpdate = original?.updates.find(x => x.id === UPDATE);

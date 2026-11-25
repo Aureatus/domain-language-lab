@@ -1,3 +1,5 @@
+import {errorMessage} from '../errors.ts';
+import {isNotSubmittedError} from './submission.ts';
 import {createApplicationClient,inboxFor} from './client.ts';
 import {pathToFileURL} from 'node:url';
 import {createHash,randomUUID} from 'node:crypto';
@@ -58,7 +60,7 @@ export async function runCLI(argv: string[],{stdout=console.log}={}){
     else{
       const submissionId=options['submission-id']??randomUUID();
       try{result={...await client.execute({actor:options.actor,action:id,args,submissionId}),submissionId};}
-      catch(e){if(e.notSubmitted)throw e;throw Error(`${e.message} Check submission ${submissionId} with reconcile before retrying.`);}
+      catch(e){if(isNotSubmittedError(e))throw e;throw Error(`${errorMessage(e)} Check submission ${submissionId} with reconcile before retrying.`);}
     }
   }else if(command==='reconcile'){
     result=await client.reconcile({actor:options.actor,submissionId:id});
@@ -71,5 +73,5 @@ export async function runCLI(argv: string[],{stdout=console.log}={}){
   return result;
 }
 if(process.argv[1]&&pathToFileURL(process.argv[1]).href===import.meta.url){
-  try{await runCLI(process.argv.slice(2));}catch(error){console.error(error.message);process.exitCode=1;}
+  try{await runCLI(process.argv.slice(2));}catch(error){console.error(errorMessage(error));process.exitCode=1;}
 }

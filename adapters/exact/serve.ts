@@ -1,4 +1,5 @@
 // Isolated experimental adapter host. Never changes the shared server's guards.
+import {errorMessage} from '../../errors.ts';
 import {createServer} from 'node:http';
 import {once} from 'node:events';
 import {readFile,mkdir} from 'node:fs/promises';
@@ -28,7 +29,7 @@ export async function startGateway(declaration,{root,directory,port=0}){
       if(!file.startsWith(resolve(root)+'/'))throw Error('Invalid path');
       const types={'.html':'text/html','.js':'text/javascript','.mjs':'text/javascript','.css':'text/css','.json':'application/json','.wasm':'application/wasm'};
       const data=await readFile(file);res.writeHead(200,{'content-type':types[extname(file)]??'application/octet-stream'});res.end(data);
-    }catch(e){if(!res.headersSent)res.writeHead(500,{'content-type':'application/json'});res.end(encodeJson({error:e.message}));}
+    }catch(e){if(!res.headersSent)res.writeHead(500,{'content-type':'application/json'});res.end(encodeJson({error:errorMessage(e)}));}
   });
   try{
     await once(server.listen(port,'127.0.0.1'),'listening');

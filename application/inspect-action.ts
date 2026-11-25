@@ -1,3 +1,4 @@
+import {errorMessage} from '../errors.ts';
 import {parseArgs} from 'node:util';
 import {readFile,writeFile} from 'node:fs/promises';
 import {createHash} from 'node:crypto';
@@ -37,7 +38,7 @@ for await(const event of trace?.events??walkthrough(declaration,{actor,action,ar
   if(snap&&(typeof snap!=='object'||!('contractId' in snap)||snap.contractId!==contractId))throw Error('Snapshot contract mismatch.');
   let rule: string | null=null;
   try{const step=fold(event);steps.push(step);if(trace?.['failure'])rule=check(event,step);}
-  catch(e){if(!trace?.['failure'])throw e;rule=`projection.error: ${e.message}`;}
+  catch(e){if(!trace?.['failure'])throw e;rule=`projection.error: ${errorMessage(e)}`;}
   events.push(event);
   if(rule){firstFailure={rule,eventCount:events.length};break;}
 }

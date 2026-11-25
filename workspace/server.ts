@@ -1,3 +1,4 @@
+import {asError,errorMessage,httpErrorStatus} from '../errors.ts';
 import {createServer} from 'node:http';
 import type {IncomingMessage,Server,ServerResponse} from 'node:http';
 import type {DatabaseSync} from 'node:sqlite';
@@ -188,12 +189,12 @@ export async function createWorkspaceServer({directory = resolve('artifacts/work
         const file = files[url.pathname];
         if (!file) throw failure(404, 'Not found.');
         let content;
-        try { content = await readFile(resolve(here, file[0])); } catch (e) { if (e.code === 'ENOENT') throw failure(404, 'Frontend file not available.'); throw e; }
+        try { content = await readFile(resolve(here, file[0])); } catch (e) { if (e instanceof Error&&'code' in e&&e.code==='ENOENT') throw failure(404, 'Frontend file not available.'); throw e; }
         res.writeHead(200, {'content-type': `${file[1]}; charset=utf-8`, 'cache-control': 'no-store', 'x-content-type-options': 'nosniff'});
         res.end(req.method === 'HEAD' ? undefined : content);
       } catch (error) {
-        if (res.headersSent) res.destroy(error);
-        else json(error.httpStatus ?? 500, {error: error.message || 'Storage or transport failure.'});
+        if (res.headersSent) res.destroy(asError(error));
+        else json(httpErrorStatus(error) ?? 500, {error: errorMessage(error) || 'Storage or transport failure.'});
       }
     });
     server.requestTimeout = 10000; server.headersTimeout = 10000;

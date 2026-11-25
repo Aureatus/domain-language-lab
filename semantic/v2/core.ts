@@ -1,4 +1,5 @@
 /** semantic-core/v2. Explicit independent lifecycle profile; v1 is unchanged. */
+import {errorMessage} from '../../errors.ts';
 import {jsonSnapshot} from '../core.ts';
 import type {Event, Interpreter, Model, State} from './types.ts';
 export type * from './types.ts';
@@ -246,7 +247,10 @@ export function createInterpreter(source: unknown): Readonly<Interpreter> {
       const p = request.requirements.find(p => p.policyId === g.policyId);
       assert(p && p.approvers.includes(g.approver), 'Approver not eligible', 'unauthorized-approval');
       return Object.freeze({status: 'approved', receipt: jsonSnapshot({format: 'semantic-approval-receipt/v2', request, ...g})});
-    } catch (error) { return Object.freeze({status: 'rejected', code: error.code ?? 'invalid', reason: error.message}); }
+    } catch (error) {
+      const code=error instanceof Error&&'code' in error&&typeof error.code==='string' ? error.code : 'invalid';
+      return Object.freeze({status: 'rejected', code, reason: errorMessage(error)});
+    }
   }
   function prepareResume(state, invocation, source, receipts, options) {
     try {

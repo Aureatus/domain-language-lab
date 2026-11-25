@@ -1,3 +1,4 @@
+import {errorMessage} from '../errors.ts';
 import {resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {parseSource,SourceError} from './frontend.ts';
@@ -55,7 +56,7 @@ export function lintCLI(args:string[]){
     const parsed=loadSource(paths[0]);
     diagnostics=parsed.modules.flatMap(m=>lintSource(m.source,{filename:m.filename,parsed}));
   }
-  catch(error){diagnostics=[{filename:paths[0],line:1,column:1,severity:'error',ruleId:'io/read-source',message:error.message}];}
+  catch(error){diagnostics=[{filename:paths[0],line:1,column:1,severity:'error',ruleId:'io/read-source',message:errorMessage(error)}];}
   const errors=diagnostics.filter(d=>d.severity==='error').length,warnings=diagnostics.length-errors;
   if(json)console.log(encodeJsonPretty({diagnostics,errors,warnings}));
   else {

@@ -1,3 +1,4 @@
+import {isNotSubmittedError} from './submission.ts';
 import {randomUUID} from 'node:crypto';
 import {mkdtemp, rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
@@ -25,7 +26,7 @@ export async function* walkthrough(declaration, {action, actor, args, submission
     yield {type: 'draft', body: structuredClone(body), id: submissionId};
     yield {type: 'submit'};
     try{await client.execute({...body, submissionId});}catch(e){
-      if(!e.notSubmitted)throw e;
+      if(!isNotSubmittedError(e))throw e;
       yield {type:'invalid',message:e.message};return;
     } // Discard a successful reply; never submit twice.
      // A separate delivery path may update the view before the writer even

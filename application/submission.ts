@@ -1,5 +1,8 @@
 // Pure JSON transition model. Identity allocation, transport and storage are effects.
 export interface SubmissionBody {actor:string;action:string;args:Record<string,unknown>}
+export function isNotSubmittedError(value:unknown):value is Error&{notSubmitted:true}{
+  return value instanceof Error&&'notSubmitted' in value&&value.notSubmitted===true;
+}
 export interface SubmissionReceipt {status:string;message?:string}
 export type SubmissionPhase='editing'|'submitting'|'unknown'|'checking'|'retryable'|'known';
 export type SubmissionState<R extends SubmissionReceipt=SubmissionReceipt> = {

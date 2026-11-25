@@ -1,3 +1,4 @@
+import {errorMessage} from '../errors.ts';
 import { createApp } from './core.ts';
 import { describeChange } from './derive.ts';
 import type { runDerivedChecks } from './derive.ts';
@@ -21,7 +22,7 @@ try {
   }
 } catch (error) {
   storageBlocked = savedRaw !== null;
-  saveStatus = storageBlocked ? `Saved document could not be recovered: ${error.message}. Original retained; export it, import a valid workspace, or explicitly reset. Automatic saving paused.` : `Storage unavailable: ${error.message}. Changes remain in memory; export before leaving.`;
+  saveStatus = storageBlocked ? `Saved document could not be recovered: ${errorMessage(error)}. Original retained; export it, import a valid workspace, or explicitly reset. Automatic saving paused.` : `Storage unavailable: ${errorMessage(error)}. Changes remain in memory; export before leaving.`;
 }
 function persist() {
   if (storageBlocked) return;
@@ -29,7 +30,7 @@ function persist() {
     localStorage.setItem(storageKey, JSON.stringify(core.exportWorkspace()));
     saveStatus = 'Saved in this browser · not synced or backed up.';
   } catch (error) {
-    saveStatus = `Not saved: ${error.message}. Changes remain in memory; export before leaving.`;
+    saveStatus = `Not saved: ${errorMessage(error)}. Changes remain in memory; export before leaving.`;
   }
 }
 const commentDrafts = new Map();
@@ -88,7 +89,7 @@ function startDerived() {
     worker.postMessage({id,workspace:core.exportWorkspace()});
   } catch(error) {
     stopDerived(); worker?.terminate(); if(url)URL.revokeObjectURL(url);
-    derivedOutput=derivedUnknown(String(error.message ?? error));
+    derivedOutput=derivedUnknown(String(errorMessage(error) ?? error));
   }
   render();
 }
@@ -286,7 +287,7 @@ function bind() {
       if (!result.ok) throw new Error(result.reason);
       storageBlocked=false;savedRaw=null;selected=core.state.issues[0]?.id;invalidateChecks();ruleDrafts.clear();
       persist();feedback='Imported workspace after core validation.';failed=false;
-    } catch(error) {feedback=`Import rejected; workspace unchanged: ${error.message}`;failed=true}
+    } catch(error) {feedback=`Import rejected; workspace unchanged: ${errorMessage(error)}`;failed=true}
     render();
   };
   const history = requiredElement('#history', HTMLDetailsElement, root);
@@ -336,7 +337,7 @@ function bind() {
    const toolSelect = requiredElement('#tool-name', HTMLSelectElement, root);
    toolArgs.oninput=()=>{toolDrafts.set(toolName,toolArgs.value);updateToolAvailability()};
    toolSelect.onchange=()=>{toolName=toolSelect.value;toolArgs.value=toolDrafts.get(toolName) ?? JSON.stringify(defaultArgs(toolName),null,2);updateToolAvailability()};
-  requiredElement('#tool-form', HTMLFormElement, root).onsubmit=e=>{e.preventDefault();try{const args=JSON.parse(requiredElement('#tool-args', HTMLTextAreaElement, root).value);toolOutput=JSON.stringify(commit(toolName,args),null,2)}catch(error){failed=true;feedback='Invalid JSON: '+error.message;toolOutput=feedback}labOpen=true;render()};
+  requiredElement('#tool-form', HTMLFormElement, root).onsubmit=e=>{e.preventDefault();try{const args=JSON.parse(requiredElement('#tool-args', HTMLTextAreaElement, root).value);toolOutput=JSON.stringify(commit(toolName,args),null,2)}catch(error){failed=true;feedback='Invalid JSON: '+errorMessage(error);toolOutput=feedback}labOpen=true;render()};
   requiredElement('#run-checks', HTMLButtonElement, root).onclick=()=>{checkOutput=core.check();labOpen=true;render()};
    requiredElement('#run-derived-checks', HTMLButtonElement, root).disabled=!!derivedJob;
    requiredElement('#run-derived-checks', HTMLButtonElement, root).onclick=startDerived;

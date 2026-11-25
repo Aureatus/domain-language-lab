@@ -1,3 +1,4 @@
+import {errorMessage} from '../../errors.ts';
 import {createHash} from 'node:crypto';
 import {validateModel} from '../../semantic/core.ts';
 import {render} from './template.ts';
@@ -14,7 +15,7 @@ const and = xs => xs.length ? xs.map(x => `(${x})`).join(' ∧ ') : 'True';
 const integer = x => Number.isSafeInteger(x) && !Object.is(x, -0) ? `(${x} : Int)` : fail('Unsafe integer');
 
 export function generate(source, law) {
-  try { validateModel(source); } catch (e) { fail(`Invalid shared IR: ${e.message}`); }
+  try { validateModel(source); } catch (e) { fail(`Invalid shared IR: ${errorMessage(e)}`); }
   if (law.format !== 'numeric-law/v1') fail('Unsupported law format');
   const action = source.actions[law.action];
   if (!action || action.bindings.length !== 1) fail('Exactly one static binding required');

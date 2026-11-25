@@ -1,10 +1,11 @@
+import {errorMessage} from '../../errors.ts';
 import {Effect,Layer,Schema} from 'effect';
 import {Command,UiSchema} from '@effect/ui';
 import {BrowserHost,Html} from '@effect/ui/html';
 import {createApplicationClient} from '../../application/client.ts';
 import type {ApplicationAction,ApplicationContract,ApplicationField} from '../../application/derive.ts';
 import {acceptsSnapshot} from '../../application/snapshot.ts';
-import {submissionControls,submissionStep} from '../../application/submission.ts';
+import {isNotSubmittedError,submissionControls,submissionStep} from '../../application/submission.ts';
 
 const StorageKeyCodec=Schema.fromJsonString(Schema.Tuple([Schema.Literal('effect-ui/spike'),Schema.String,Schema.String,Schema.String]));
 const SavedSubmissionCodec=Schema.fromJsonString(Schema.NullOr(Schema.Struct({
@@ -68,7 +69,7 @@ function actionForm({actor,action,fields,contractId,snapshot,client,storage}:{
     try{
       return observeReceipt(await client.execute({...body,submissionId:id}));
     }catch(error){
-      if(error.notSubmitted){clearSaved();return observe({type:'invalid',message:error.message});}
+      if(isNotSubmittedError(error)){clearSaved();return observe({type:'invalid',message:error.message});}
       return observe({type:'lost'});
     }
   }));
@@ -178,5 +179,5 @@ try{
   const form=actionForm({actor,action,fields,contractId,snapshot,client,storage:sessionStorage});
   Layer.launch(BrowserHost.mount(form,{},host)).pipe(Effect.runFork);
 }catch(error){
-  root.replaceChildren(Object.assign(document.createElement('p'),{textContent:`Could not load the spike: ${error.message}`}));
+  root.replaceChildren(Object.assign(document.createElement('p'),{textContent:`Could not load the spike: ${errorMessage(error)}`}));
 }

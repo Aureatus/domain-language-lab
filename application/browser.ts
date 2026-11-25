@@ -1,7 +1,8 @@
 // All application content comes from /api/contract. This module has no domain IDs.
+import {errorMessage} from '../errors.ts';
 import {acceptsSnapshot} from './snapshot.ts';
 import {viewRecords} from './view-records.ts';
-import {submissionStep,submissionControls} from './submission.ts';
+import {isNotSubmittedError,submissionStep,submissionControls} from './submission.ts';
 import {loadingPlan,loadingPresentation} from './loading.ts';
 import {createApplicationClient,inboxFor} from './client.ts';
 import type {State} from '../semantic/v2/types.ts';
@@ -128,7 +129,7 @@ async function preview(action){
     const names=r.requirements?.flatMap(r=>r.approvers).map(person);
     required(form,'[data-preview]',HTMLElement).textContent=r.status==='pending'?`Needs ${[...new Set(names)].join(', ')}’s approval. No changes yet.`:r.message;
     form.dataset['invalid']=String(r.status==='rejected');required(form,'button[type=submit]',HTMLButtonElement).disabled=busy||submissions.has(k)||r.status==='rejected';currentEvidence=r.evidence;if(!showSaved)showEvidence();
-  }catch(e){if(previews.get(k)===token&&key(action)===k){required(form,'[data-preview]',HTMLElement).textContent=e.message;required(form,'button[type=submit]',HTMLButtonElement).disabled=true;}}
+  }catch(e){if(previews.get(k)===token&&key(action)===k){required(form,'[data-preview]',HTMLElement).textContent=errorMessage(e);required(form,'button[type=submit]',HTMLButtonElement).disabled=true;}}
 }
 async function command(path,body){
   if(path==='actions/execute'){
@@ -137,7 +138,7 @@ async function command(path,body){
   }
   if(busy)return;busy=true;updateLocks();
   try{const r=await api(path,body);if(r.evidence){lastEvidence=r.evidence;showSaved=true;showEvidence();}if(r.snapshot)accept(r.snapshot);notice(path==='approvals/resume'&&r.status==='rejected'?`Approval is saved, but completion failed. ${r.message}`:r.message,r.status==='rejected');}
-  catch(e){notice(e.message,true);}finally{busy=false;updateLocks();for(const f of $('forms').querySelectorAll('form'))preview(f.dataset['action']);}
+  catch(e){notice(errorMessage(e),true);}finally{busy=false;updateLocks();for(const f of $('forms').querySelectorAll('form'))preview(f.dataset['action']);}
 }
 async function sendSubmission(k,previous,event:SubmissionEvent){
   if(busy)return;
@@ -149,13 +150,13 @@ async function sendSubmission(k,previous,event:SubmissionEvent){
     if(r.evidence){lastEvidence=r.evidence;showSaved=true;showEvidence();}
     if(r.snapshot)accept(r.snapshot);notice(r.message,r.status==='rejected');
   }catch(e){
-    if(submissions.has(k))track(k,submissionStep(s,e.notSubmitted?{type:'invalid',message:e.message}:{type:'lost'}));
-    notice(e.message,true);
+    if(submissions.has(k))track(k,submissionStep(s,isNotSubmittedError(e)?{type:'invalid',message:e.message}:{type:'lost'}));
+    notice(errorMessage(e),true);
   }finally{busy=false;updateLocks();for(const f of $('forms').querySelectorAll('form'))preview(f.dataset['action']);}
 }
 $('inbox').addEventListener('click',e=>{if(!(e.target instanceof Element))return;const grant=e.target.closest<HTMLButtonElement>('[data-grant]'),resume=e.target.closest<HTMLButtonElement>('[data-resume]');if(grant)command('approvals/grant',{actor,requestId:grant.dataset['grant'],policyId:grant.dataset['policy']});if(resume)command('approvals/resume',{actor,requestId:resume.dataset['resume']});});
 function accept(next){if(next.contractId!==contractId){notice('The declaration changed. Reload before continuing.',true);return;}if(!acceptsSnapshot(snapshot,next,contractId))return;snapshot=next;renderViews();const visible=Object.values(contract.actions).filter(a=>snapshot.availability[actor][a.id]).map(a=>a.id);if(JSON.stringify([...$('forms').querySelectorAll('form')].map(f=>f.dataset['action']))!==JSON.stringify(visible))renderForms();updateLocks();for(const f of $('forms').querySelectorAll('form'))preview(f.dataset['action']);}
 actorControl.addEventListener('change',()=>{actor=actorControl.value;$('notice').hidden=true;renderForms();renderViews();updateLocks();for(const f of $('forms').querySelectorAll('form'))preview(f.dataset['action']);});
 actorControl.disabled=true;showInitialViews();
-try{accept(await client.snapshot());}catch(e){initialLoadError=true;$('summaries').replaceChildren();$('lists').replaceChildren();notice(`Could not load records. ${e.message}`,true);}
+try{accept(await client.snapshot());}catch(e){initialLoadError=true;$('summaries').replaceChildren();$('lists').replaceChildren();notice(`Could not load records. ${errorMessage(e)}`,true);}
 const stream=new EventSource('/api/events');stream.addEventListener('open',()=>{$('connection').textContent='Live';});stream.addEventListener('error',()=>{$('connection').textContent='Reconnecting…';});stream.addEventListener('update',e=>{accept(JSON.parse(e.data));if(initialLoadError&&snapshot){initialLoadError=false;$('notice').hidden=true;}});addEventListener('pagehide',()=>stream.close());

@@ -1,3 +1,4 @@
+import {errorMessage} from '../errors.ts';
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
@@ -51,7 +52,7 @@ try {
   report.trusted_assumptions = report.axioms_reported.map(axiom => `Lean core axiom: ${axiom}`);
   report.status = 'proof_checked';
   report.detail = 'Pinned Lean checked declarations; complete printed theorem axiom sets passed the propext-only allowlist.';
-} catch (error) { report.detail = error.message; }
+} catch (error) { report.detail = errorMessage(error); }
 writeFileSync(resolve(artifact, 'lean-proof.log'), log || report.detail + '\n');
 writeFileSync(resolve(artifact, 'lean-report.json'), JSON.stringify(report, null, 2) + '\n');
 console.log(JSON.stringify(report, null, 2));

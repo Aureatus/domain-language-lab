@@ -1,3 +1,4 @@
+import {errorMessage} from '../../errors.ts';
 import {spawnSync} from 'node:child_process';
 import {readFileSync, writeFileSync, mkdirSync} from 'node:fs';
 import {resolve} from 'node:path';
@@ -47,7 +48,7 @@ export function check(source, law, directory, lean = process.env['LEAN'] || PINN
     report.detail = 'Pinned Lean checked generated invariant and concrete successful witness.';
   } catch (e) {
     if (e instanceof Unsupported) report.status = 'unsupported';
-    report.detail = e.message;
+    report.detail = errorMessage(e);
   }
   writeFileSync(resolve(directory, 'check.log'), log || report.detail + '\n');
   writeFileSync(resolve(directory, 'report.json'), encodeJsonPretty(report) + '\n');

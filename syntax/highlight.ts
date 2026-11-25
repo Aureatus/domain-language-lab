@@ -1,3 +1,4 @@
+import {errorMessage} from '../errors.ts';
 import {writeFile} from 'node:fs/promises';
 import {resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
@@ -55,7 +56,7 @@ export function sourcePage(source:string,title='Domain source',{inline=false,ful
 }={}){
   let sections:Parsed['sections'],diagnostic='',rendered:string;
    try{sections=parsedSections??parseSource(source,{filename:title}).sections;rendered=highlight(source);}
-  catch(error){diagnostic=error.message;sections=[{kind:'raw',name:'Original source',line:1}];rendered=escape(source);}
+  catch(error){diagnostic=errorMessage(error);sections=[{kind:'raw',name:'Original source',line:1}];rendered=escape(source);}
   const lines=rendered.split('\n');if(lines.at(-1)==='')lines.pop();
   const groups:Record<string|number,string>={domain:'Resources',resource:'Resources',relationship:'Resources',relationships:'Resources',action:'Actions',initial:'Initial data',application:'Interface',raw:'Source'};
   const group=(s:Parsed['sections'][number])=>groups[s.kind];
