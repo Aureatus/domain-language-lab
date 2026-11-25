@@ -45,6 +45,6 @@ test('spawned CLI advances the same durable HTTP backend; grant/resume, duplicat
   }finally{await server.close();}
 });
 test('shared client fails closed on contract mismatch',async()=>{
-  let calls=0;const client=createApplicationClient('http://127.0.0.1:1',{fetch:async()=>({ok:true,json:async()=>({contractId:++calls===1?'a':'b',contract:{}})})});
+  let calls=0;const client=createApplicationClient('http://127.0.0.1:1',{fetch:async()=>Response.json({contractId:++calls===1?'a':'b',contract:{}})});
   await client.contract();await assert.rejects(client.snapshot(),/contract changed/);
 });

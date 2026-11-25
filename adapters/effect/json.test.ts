@@ -18,7 +18,14 @@ import {
   WorkspaceExecuteRequestSchema,
   WorkspaceApproveRequestSchema,
   WorkspaceResumeRequestSchema,
+  ApplicationSavedSubmissionsSchema,
+  ApplicationSnapshotSchema,
+  WorkspaceChangeSchema,
+  LiveWorkspaceDocumentSchema,
+  InventoryReplaySchema,
 } from './json.ts';
+import { createApp } from '../../live/core.ts';
+import { createHost, competition, replay } from '../../inventory/host.ts';
 
 test('encodeCanonicalJson sorts keys lexicographically and rejects non-JSON values', () => {
   assert.equal(
@@ -38,6 +45,53 @@ test('decodeJsonObject and encodeJson/encodeJsonPretty round-trip JSON cleanly',
   assert.equal(encodeJson({ a: 1, b: undefined }), '{"a":1}');
   assert.equal(encodeJsonPretty({ a: 1 }), '{\n  "a": 1\n}');
   assert.deepEqual(decodeJsonValue('[1,true,null,"ok"]'), [1, true, null, 'ok']);
+});
+
+test('browser submission storage round-trips unresolved commands and rejects corrupt entries', () => {
+  const saved = [{ phase: 'checking', id: 'request-1', body: { actor: 'maya', action: 'leave.request', args: { days: 3 } } }];
+  const decode = text => decodeStrictJson(ApplicationSavedSubmissionsSchema, text);
+  assert.deepEqual(decode(encodeJson(saved, ApplicationSavedSubmissionsSchema)), saved);
+  assert.deepEqual(decode('[]'), []);
+  for (const raw of ['', '{}', '[null]', '[{"phase":"known","id":"request-1","body":{"actor":"maya","action":"leave.request","args":{}}}]'])
+    assert.throws(() => decode(raw));
+});
+
+test('browser SSE codecs require snapshot and change envelopes without discarding JSON payloads', () => {
+  const snapshot = { contractId: 'contract', snapshotVersion: 0, state: { revision: 0, records: {} }, pending: [], defaults: {}, availability: {} };
+  const change = { sequence: 0, invalidations: [{ view: 'snapshot' }], recipients: [], reason: 'resync' };
+  for (const [schema, value] of [[ApplicationSnapshotSchema, snapshot], [WorkspaceChangeSchema, change]]) {
+    assert.deepEqual(decodeJson(schema, encodeJson(value)), value);
+    for (const raw of ['', '{}', '{broken']) assert.throws(() => decodeJson(schema, raw));
+  }
+  assert.deepEqual(decodeJson(WorkspaceChangeSchema, encodeJson({ ...change, sequence: 1, invalidations: [], reason: 'outcome' })).invalidations, []);
+});
+
+test('browser Live workspace codec round-trips empty and populated journals without bypassing replay', () => {
+  const app = createApp({ clock: () => 0 });
+  const decode = text => decodeStrictJson(LiveWorkspaceDocumentSchema, text);
+  const empty = app.exportWorkspace();
+  assert.deepEqual(decode(encodeJson(empty, LiveWorkspaceDocumentSchema)), empty);
+  assert.equal(app.dispatch('comment', { issueId: 'i1', body: 'Saved draft' }, 'u1').ok, true);
+  const document = app.exportWorkspace();
+  const loaded = decode(encodeJsonPretty(document, LiveWorkspaceDocumentSchema));
+  assert.deepEqual(loaded, document);
+  assert.deepEqual(createApp().restoreWorkspace(loaded), { ok: true });
+  for (const raw of ['', '{"format":"live-issue-workspace/v1","seedVersion":1,"journal":[],"extra":true}'])
+    assert.throws(() => decode(raw));
+  assert.equal(app.restoreWorkspace(decode(encodeJson({ ...document, journal: [{ kind: 'unsupported' }] }))).ok, false);
+  assert.deepEqual(app.exportWorkspace(), document);
+});
+
+test('browser Inventory replay codec preserves exact observation and final-state verification', () => {
+  const decode = text => decodeJson(InventoryReplaySchema, text);
+  for (const host of [createHost(), competition(true)]) {
+    const bundle = host.export();
+    assert.deepEqual(replay(decode(encodeJsonPretty(bundle, InventoryReplaySchema))).export(), bundle);
+  }
+  const bundle = competition(false).export();
+  assert.throws(() => decode(''));
+  assert.throws(() => decode(encodeJson({ ...bundle, steps: null })));
+  assert.throws(() => replay(decode(encodeJson({ ...bundle, final: { ...bundle.final, revision: 0 } }))), /Replay final mismatch/);
 });
 
 test('DurableOutcomeSchema and DurableOperationOutcomeSchema validate discriminated unions and preserve extra fields', () => {

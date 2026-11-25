@@ -1,5 +1,6 @@
 import {createHost,competition,replay} from './host.ts';
 import {invocation} from './model.ts';
+import {decodeJson,encodeJsonPretty,InventoryReplaySchema} from '../adapters/effect/json.ts';
 let host=createHost(), sequence=0, selected=-1;
 const $=id=>document.getElementById(id);
 const escape=value=>String(value).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -48,7 +49,7 @@ $('reset').onclick=()=>{host=createHost();selected=-1;render();};
 $('live').onclick=()=>{selected=-1;render();};
 $('steps').onclick=event=>{const button=event.target.closest('[data-step]');if(button){selected=Number(button.dataset.step);render();}};
 $('replay').onclick=()=>{try {host=replay(JSON.parse(JSON.stringify(host.export())));selected=-1;render();$('replay-result').textContent='Exact replay matched every observation, event and final record.';}catch(error){$('replay-result').textContent=error.message;}};
-$('export').onclick=()=>{const url=URL.createObjectURL(new Blob([JSON.stringify(host.export(),null,2)],{type:'application/json'}));const a=document.createElement('a');a.href=url;a.download='inventory-replay.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);};
-$('import').onchange=async event=>{try {host=replay(JSON.parse(await event.target.files[0].text()));selected=-1;render();$('replay-result').textContent='Imported replay verified.';}catch(error){$('replay-result').textContent=`Import rejected: ${error.message}`;}};
+$('export').onclick=()=>{const url=URL.createObjectURL(new Blob([encodeJsonPretty(host.export(),InventoryReplaySchema)],{type:'application/json'}));const a=document.createElement('a');a.href=url;a.download='inventory-replay.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);};
+$('import').onchange=async event=>{try {host=replay(decodeJson(InventoryReplaySchema,await event.target.files[0].text()));selected=-1;render();$('replay-result').textContent='Imported replay verified.';}catch(error){$('replay-result').textContent=`Import rejected: ${error.message}`;}};
 render();
 window.inventoryApp={get host(){return host;}};

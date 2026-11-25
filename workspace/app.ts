@@ -1,3 +1,5 @@
+import {decodeJson,decodeJsonObject,decodeJsonValue,encodeJson,WorkspaceChangeSchema} from '../adapters/effect/json.ts';
+
 const $ = id => document.getElementById(id);
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const json = value => JSON.stringify(value, null, 2);
@@ -59,7 +61,7 @@ async function refresh(gen = generation) {
   const serial = ++requestSerial; const {profile,actor} = context();
   try {
     const response = await fetch(`/api/snapshot?${new URLSearchParams({profile,actor})}`);
-    const value = await response.json(); if (!response.ok) throw Error(value.error);
+    const value = decodeJsonObject(await response.text()); if (!response.ok) throw Error(value.error);
     if (gen !== generation || serial !== requestSerial) return;
     const first = !snapshot; snapshot = value;
     if (first) { $('action').innerHTML = snapshot.tools.map(t => `<option>${esc(t.name)}</option>`).join(''); buildForm(); }
@@ -74,14 +76,14 @@ function connect() {
   stream = new EventSource(`/api/events?${new URLSearchParams(context())}`);
   stream.onopen = () => { if(gen === generation) $('connection').textContent = 'Connected · snapshot resync'; };
   stream.onerror = () => { if(gen === generation) $('connection').textContent = 'Reconnecting · waiting for server'; };
-  stream.addEventListener('change', event => { if (gen !== generation) return; try { $('relationship').textContent = json(JSON.parse(event.data)); } catch { $('relationship').textContent = event.data; } refresh(gen); });
+  stream.addEventListener('change', event => { if (gen !== generation) return; try { $('relationship').textContent = json(decodeJson(WorkspaceChangeSchema,event.data)); } catch { $('relationship').textContent = event.data; } refresh(gen); });
 }
 const help = {stale:'The captured state changed. Submit a fresh action; old grants cannot authorize a new request.',consumed:'This request already resumed. Inspect durable history; use a new invocation for new work.',precondition:'Check capacity, lifecycle status and expiry. At expiry, resume is no longer valid.',denied:'This simulated actor is not permitted by the declared policy.',approval:'Required grants are missing. Switch to an approver listed in Request Why.'};
 async function command(endpoint, body) {
   if (busy) return; busy = true; const gen = generation;
   try {
-    const response = await fetch(`/api/${endpoint}`, {method:'POST',headers:{'Content-Type':'application/json'},body:json(body)});
-    const value = await response.json(); if (!response.ok) throw Error(value.error);
+    const response = await fetch(`/api/${endpoint}`, {method:'POST',headers:{'Content-Type':'application/json'},body:encodeJson(body)});
+    const value = decodeJsonObject(await response.text()); if (!response.ok) throw Error(value.error);
     if (gen !== generation) return;
     const outcome = value.status === 'duplicate' ? value.result : value;
     $('result').dataset.status = outcome.status;
@@ -95,6 +97,6 @@ $('fields').addEventListener('input',syncJSON); $('clock').addEventListener('inp
 $('action').addEventListener('change', buildForm);
 for (const name of ['profile','actor']) $(name).addEventListener('change', () => { $('result').replaceChildren(); connect(); });
 $('reconnect').addEventListener('click', () => {saveDraft(); connect();});
-$('execute-json').addEventListener('click', () => {try {command('execute',{profile:context().profile,invocation:JSON.parse($('tool-json').value)});}catch(error){$('result').dataset.status='error';$('result').textContent=`Invalid JSON: ${error.message}`;}});
+$('execute-json').addEventListener('click', () => {try {command('execute',{profile:context().profile,invocation:decodeJsonValue($('tool-json').value)});}catch(error){$('result').dataset.status='error';$('result').textContent=`Invalid JSON: ${error.message}`;}});
 $('pending').addEventListener('click', event => {const button = event.target.closest('button'); if (!button) return; const {profile,actor} = context(); if(button.dataset.grant) command('approve',{profile,actor,command:{id:id(),invocationId:button.dataset.grant,policyId:button.dataset.policy}}); else if(button.dataset.resume) { if(!$('resume-clock').reportValidity()) return; command('resume',{profile,command:{id:id(),invocationId:button.dataset.resume,clock:Number($('resume-clock').value)}}); }});
 connect();
