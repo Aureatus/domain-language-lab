@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import * as Effect from 'effect/Effect';
 import { issueModel, issueState } from '../../semantic/issues.ts';
-import { inventoryModel, initialState } from '../../inventory/model.ts';
+import { inventoryModel } from '../../inventory/model.ts';
 import { makeDurableRuntime, makeDurableStore, initializeDurableState, durableExecute, durableState, pullOutbox, acknowledgeOutbox, closeDurableStore, DurableStore, durableStoreLayer } from './durable.ts';
 
 const invoke = (id, args = { issueId: 'i1' }) => ({ id, action: 'issue.resolve', args, actor: 'maya', clock: 1730000000000 });

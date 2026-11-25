@@ -1,4 +1,4 @@
-import {readFile,writeFile} from 'node:fs/promises';
+import {writeFile} from 'node:fs/promises';
 import {resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {tokenize,parseSource} from './frontend.ts';
@@ -98,7 +98,7 @@ body{margin:0;color:var(--foreground,#e1e9f3);font:14px/1.5 var(--font-sans,syst
 </style><main><p>Exact excerpts from <code>${escape(filename)}</code> · <a href="${escape(fullHref)}">Open full source reader</a></p>${excerpts}<p>Full reader shows every line and ID continuously, with an outline and exact original source. Highlighting is not verification.</p></main></html>`;
 }
 if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url)){
-  const [input,output,mode]=process.argv.slice(2);
+  const [input,output]=process.argv.slice(2);
   if(!input||!output)throw Error('Usage: node syntax/highlight.ts source.domain output.html');
   await writeFile(output,moduleSourcePage(input));
   console.log(resolve(output));

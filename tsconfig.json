@@ -8,6 +8,13 @@
     "noEmit": true,
     "strict": true,
     "noImplicitAny": false,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+    "noImplicitReturns": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "allowUnreachableCode": false,
+    "allowUnusedLabels": false,
     "useUnknownInCatchVariables": false,
     "verbatimModuleSyntax": true,
     "types": ["node"]

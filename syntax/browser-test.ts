@@ -1,6 +1,6 @@
 // Execute text-only edits through the real generic server/browser, no app code.
 import {chromium} from 'playwright';
-import {mkdtemp,readFile} from 'node:fs/promises';
+import {mkdtemp} from 'node:fs/promises';
 import assert from 'node:assert/strict';
 import {parseSource} from './frontend.ts';
 import {createApplicationServer} from '../application/server.ts';

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {readFileSync,mkdtempSync,writeFileSync} from 'node:fs';
+import {mkdtempSync,writeFileSync} from 'node:fs';
 import {spawnSync} from 'node:child_process';
 import {lintSource} from './lint.ts';
 import source from './fixtures/legacy-source.ts';

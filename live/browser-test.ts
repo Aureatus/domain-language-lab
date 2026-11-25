@@ -306,10 +306,10 @@ try {
      window.heldResults=[];window.holdWorkerResults=false;window.workerTerminations=0;
      const NativeWorker=Worker;
      window.Worker=class extends NativeWorker {
-       set onmessage(handler: Worker['onmessage']) {
+       override set onmessage(handler: Worker['onmessage']) {
          super.onmessage=handler && (event=>{if(window.holdWorkerResults)window.heldResults.push(()=>handler.call(this,event));else handler.call(this,event)});
        }
-       terminate(){window.workerTerminations++;super.terminate()}
+       override terminate(){window.workerTerminations++;super.terminate()}
      };
    });
    await workerPage.goto(pathToFileURL(resolve('artifacts/live-issues.html')).href);
