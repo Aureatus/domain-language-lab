@@ -11,7 +11,7 @@ materially redirect the project or require authority not already given.
   domain derivation, not a hosted SaaS deployment.
 - Local browser persistence is useful; account authentication, remote hosting,
   billing and shared multi-user storage remain separate decisions.
-- Keep the domain language unnamed. Example-app titles are not language names.
+- The language is named Premise. Example-app titles are not language names.
 - Preserve the prior experiments and evidence boundaries. New runtime features
   do not inherit the earlier Lean theorem's guarantee.
 - Advance actual declaration/runtime/renderer contracts, not just interface polish.

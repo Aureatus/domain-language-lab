@@ -1,5 +1,5 @@
 {
-  "name": "Domain (experimental)",
+  "name": "Premise (experimental)",
   "scopeName": "source.experimental-domain",
   "patterns": [
     {"name": "comment.line.number-sign.domain", "match": "#.*$"},

@@ -4,7 +4,7 @@ Research memo · 2026-11-11 · design proposals, not implementation claims
 
 ## Conclusion
 
-The strongest foundation for the unnamed Ash-inspired language is a semantic model with several faithful projections: domain declarations, executable Effect programs, Alchemy resource plans, interaction models, maintained queries, and explanations. A rich T3 Code workspace should navigate those projections using shared identities. It should not infer application behavior from component trees or turn every relationship update into a notification side effect.
+The strongest foundation for Premise is a semantic model with several faithful projections: domain declarations, executable Effect programs, Alchemy resource plans, interaction models, maintained queries, and explanations. A rich T3 Code workspace should navigate those projections using shared identities. It should not infer application behavior from component trees or turn every relationship update into a notification side effect.
 
 Three distinctions are essential:
 

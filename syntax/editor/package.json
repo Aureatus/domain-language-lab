@@ -1,13 +1,13 @@
 {
   "name": "experimental-domain-syntax",
-  "displayName": "Experimental Domain Syntax",
-  "description": "Syntax highlighting for the unnamed experimental domain language.",
+  "displayName": "Premise Syntax",
+  "description": "Syntax highlighting for the experimental Premise language.",
   "version": "0.0.1",
   "publisher": "local-research",
   "engines": {"vscode": "^1.80.0"},
   "categories": ["Programming Languages"],
   "contributes": {
-    "languages": [{"id": "experimental-domain", "aliases": ["Domain (experimental)"], "extensions": [".domain"], "configuration": "./language-configuration.json"}],
+    "languages": [{"id": "experimental-domain", "aliases": ["Premise (experimental)"], "extensions": [".domain"], "configuration": "./language-configuration.json"}],
     "grammars": [{"language": "experimental-domain", "scopeName": "source.experimental-domain", "path": "./domain.tmLanguage.json"}]
   }
 }

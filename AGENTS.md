@@ -2,7 +2,7 @@
 
 ## Intent
 
-This is an unnamed language research/design repository with user-authorized implementation of one small example application to test the architecture. Keep implementation scoped to that experimental vertical slice. Preserve the user's priorities: Ash-like derivation; policy-derived approvals; implicit action/change events with optional business facts; grouped updates; relationship-driven one-way/bidirectional propagation; sophisticated T3 Code-like applications; user-defined renderers and verification/output adapters; scoped interop; and tests of our mappings rather than copies of upstream suites.
+This is the research/design repository for Premise, with user-authorized implementation of one small example application to test the architecture. Keep implementation scoped to that experimental vertical slice. Preserve the user's priorities: Ash-like derivation; policy-derived approvals; implicit action/change events with optional business facts; grouped updates; relationship-driven one-way/bidirectional propagation; sophisticated T3 Code-like applications; user-defined renderers and verification/output adapters; scoped interop; and tests of our mappings rather than copies of upstream suites.
 
 Do not name the language Lumen. Do not center it on Lucent-specific proposal terminology. Use general resources/actions/policies and multiple example domains.
 

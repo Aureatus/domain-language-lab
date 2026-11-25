@@ -1,7 +1,7 @@
 # Standalone text frontend (experimental)
 
-Author **[`leave/time-away.domain`](../leave/time-away.domain)**. `.domain` is a
-temporary descriptive suffix for the unnamed language. `leave/model.mjs` is a
+Author **[`leave/time-away.domain`](../leave/time-away.domain)**. `.domain` is the
+current file extension for Premise source. `leave/model.mjs` is a
 compatibility loading bridge, not another authoring language.
 
 The real lexer/parser elaborates text into the unchanged `semantic-core/v2` domain,
