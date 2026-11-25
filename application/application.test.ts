@@ -5,39 +5,40 @@ import {deriveApplication,buildInvocation} from './derive.ts';
 import {createApplicationServer} from './server.ts';
 import {fixture,renamedFixture,extendedFixture} from './fixture.ts';
 import leave from '../leave/model.ts';
+import {present} from '../semantic/test-support.ts';
 
 test('automatic input types, inferred references, added actions/inputs and policy changes alter contract',()=>{
-  const {contract}=deriveApplication(fixture),a=contract.actions['supply.take'];
+  const {contract}=deriveApplication(fixture),a=present(contract.actions['supply.take']);
   assert.deepEqual(a.fields.map(f=>[f.name,f.widget]),[['cabinetKey','select'],['quantity','number'],['reason','select'],['tracked','checkbox']]);
-  assert.equal(a.fields[0].reference?.resource,'cabinet');
+  assert.equal(present(a.fields[0]).reference?.resource,'cabinet');
   const {actions: _actions,...inferredMeta}=fixture.application;
   const inferred={...structuredClone(fixture),application:inferredMeta};
-  assert.deepEqual(deriveApplication(inferred).contract.actions['supply.take'].fields[0].reference,{resource:'cabinet'});
+  assert.deepEqual(present(present(deriveApplication(inferred).contract.actions['supply.take']).fields[0]).reference,{resource:'cabinet'});
   const changed=structuredClone(fixture);
-  changed.domain.actions['supply.take'].inputs['memo']={type:'string'};
-  const review=changed.domain.actions['supply.take'].policies[1];
+  present(changed.domain.actions['supply.take']).inputs['memo']={type:'string'};
+  const review=present(present(changed.domain.actions['supply.take']).policies[1]);
   assert.equal(review.effect,'approval-required');review.approvers={op:'literal',value:'nora'};
   changed.domain.actions['supply.audit']={inputs:{comment:{type:'string'}},bindings:[],policies:[{id:'audit.allow',effect:'allow',when:{op:'literal',value:true}}],preconditions:[],updates:[],inserts:[],deletes:[],observe:[]};
   const derived=deriveApplication(changed);
-  assert.ok(derived.contract.actions['supply.take'].fields.some(f=>f.name==='memo'));
-  assert.equal(derived.contract.actions['supply.audit'].fields[0].label,'Comment');
+  assert.ok(present(derived.contract.actions['supply.take']).fields.some(f=>f.name==='memo'));
+  assert.equal(present(present(derived.contract.actions['supply.audit']).fields[0]).label,'Comment');
   const inv=buildInvocation(derived.contract,{action:'supply.take',actor:'quinn',args:{cabinetKey:'tools',quantity:2,reason:'Repair',tracked:true,memo:'Test'},id:'i',clock:1});
   const result=derived.runtime.prepare(derived.initialState,inv);
-  assert.equal(result.status,'pending');assert.deepEqual(result.request.requirements[0].approvers,['nora']);
+  assert.equal(result.status,'pending');assert.deepEqual(present(result.request.requirements[0]).approvers,['nora']);
 });
 test('hidden actor/id/clock/constant mappings are host-owned, not client defaults or overrides',()=>{
-  const x=structuredClone(fixture),a=x.domain.actions['supply.take'];
+  const x=structuredClone(fixture),a=present(x.domain.actions['supply.take']);
   Object.assign(a.inputs,{operator:{type:'string'},nonce:{type:'string'},stamp:{type:'integer',min:0},origin:{type:'string',enum:['host']}});
   Object.assign(x.application.actions['supply.take'].fields,{operator:{binding:{source:'actor'}},nonce:{binding:{source:'operation-id'}},stamp:{binding:{source:'clock'}},origin:{binding:{source:'constant',value:'host'}}});
   const {contract}=deriveApplication(x),args={cabinetKey:'tools',quantity:1,reason:'Repair',tracked:true};
   const i=buildInvocation(contract,{action:'supply.take',actor:'nora',id:'command-one',clock:42,args});
   assert.deepEqual(i.args,{...args,operator:'nora',nonce:'command-one',stamp:42,origin:'host'});
-  assert.ok(contract.actions['supply.take'].fields.filter(f=>['operator','nonce','stamp','origin'].includes(f.name)).every(f=>f.hidden));
+  assert.ok(present(contract.actions['supply.take']).fields.filter(f=>['operator','nonce','stamp','origin'].includes(f.name)).every(f=>f.hidden));
   assert.throws(()=>buildInvocation(contract,{action:'supply.take',actor:'nora',id:'command-two',clock:42,args:{...args,stamp:0}}));
 });
 test('all matching approval policies must be granted; inbox records actual requirements and grants',async()=>{
   const x=extendedFixture();
-  x.domain.actions['supply.take'].policies.push({id:'supply.second-review',effect:'approval-required',when:{op:'literal',value:true},approvers:{op:'literal',value:'quinn'}});
+  present(x.domain.actions['supply.take']).policies.push({id:'supply.second-review',effect:'approval-required',when:{op:'literal',value:true},approvers:{op:'literal',value:'quinn'}});
   const server=await createApplicationServer(x,{directory:await mkdtemp('/tmp/opencode/multiple-approvals-')});
   const post=async(path,body)=>{const r=await fetch(`${server.url}/api/${path}`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});assert.equal(r.status,200);return r.json();};
   try{

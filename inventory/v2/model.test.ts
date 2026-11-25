@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createInterpreter} from '../../semantic/v2/core.ts';
 import {inventoryV2Model, initialState, invocation} from './model.ts';
+import {present} from '../../semantic/test-support.ts';
 
 const copy = value => JSON.parse(JSON.stringify(value));
 const stock = state => state.records.stock.camera.values.available;
@@ -40,7 +41,7 @@ test('actual inserts, stock decrement, approval, cancellation, expiry and termin
   const large = invocation('reserve-large', 'reserve', {reservationId: 'res-large', actor: 'bob', quantity: 3, expiresAt: 40});
   const pending = rt.execute(state, large);
   assert.equal(pending.status, 'pending'); assert.deepEqual(pending.policyIds, ['reserve.warehouse-approval']);
-  assert.equal(stock(pending.state), 6); assert.equal(pending.state.records['reservation']['res-large'], undefined);
+  assert.equal(stock(pending.state), 6); assert.equal(present(pending.state.records['reservation'])['res-large'], undefined);
   const grant = rt.approve(pending.request, {policyId: 'reserve.warehouse-approval', approver: 'warehouse'});
   assert.equal(grant.status, 'approved');
   result = rt.resume(state, large, pending.request, [grant.receipt], {clock: 11});

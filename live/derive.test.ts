@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createApp} from './core.ts';
 import {describeChange, runDerivedChecks} from './derive.ts';
+import {present} from '../semantic/test-support.ts';
 
 const make = () => createApp({clock: () => 123});
 const capture = app => JSON.stringify({state: app.state, model: app.model, workspace: app.exportWorkspace()});
@@ -58,7 +59,7 @@ test('generated current-declaration checks exercise both entry points and leave 
   for (const action of Object.keys(model.actions)) {
     for (const actor of state.users) {
       for (const entry of ['invokeTool', 'dispatch']) {
-        assert.equal(policy(report, action, actor.id, entry).expected.ok, model.actions[action].allowedRoles.includes(actor.role));
+        assert.equal(policy(report, action, actor.id, entry).expected.ok, present(model.actions[action]).allowedRoles.includes(actor.role));
       }
     }
   }
@@ -148,8 +149,8 @@ test('invalid reconstruction is reported explicitly as unknown', () => {
   const report = runDerivedChecks({format: 'unrecognized'});
   assert.equal(report.result, 'unknown');
   assert.equal(report.revision, null);
-  assert.equal(report.cases[0].status, 'unknown');
-  const reason = report.cases[0].reason;
+  assert.equal(present(report.cases[0]).status, 'unknown');
+  const reason = present(report.cases[0]).reason;
   assert.ok(reason);
   assert.match(reason, /schema/);
 });

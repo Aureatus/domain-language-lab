@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {withStatus, observedEvents} from "../semantic/test-support.ts";
+import {present,withStatus, observedEvents} from "../semantic/test-support.ts";
 import {explainEvaluation} from './explain.ts';
 import {initialState,runtime} from './model.ts';
 import {requestInvocation} from './test-support.ts';
@@ -29,12 +29,12 @@ test('diagnostic guards use interpreter semantics; evidence preserves actual out
     assert.equal(e.outcome.status,result.status);assert.deepEqual(e.outcome.events,observedEvents(result)??[]);
     assert.deepEqual(e.checks.map(c=>c.value),[false,days<3,3<=days,days<=5]);
     assert.match(e.method,/not a live/);assert.equal(JSON.stringify(initialState),before);
-    for(const c of e.checks){assert.ok(c.source.startsWith('leave/time-away.domain:'));assert.ok(c.excerpt.includes(c.id));const declaration=runtime.model.actions['leave.request'][c.kind==='precondition'?'preconditions':'policies'].find(p=>p.id===c.id);assert.ok(declaration);assert.deepEqual(c.ast.when,declaration.when);}
+    for(const c of e.checks){assert.ok(c.source.startsWith('leave/time-away.domain:'));assert.ok(c.excerpt.includes(c.id));const declaration=present(runtime.model.actions['leave.request'])[c.kind==='precondition'?'preconditions':'policies'].find(p=>p.id===c.id);assert.ok(declaration);assert.deepEqual(c.ast.when,declaration.when);}
   }
   const inv={...requestInvocation({id:'deny',actor:'maya',start:'2026-11-20',end:'2026-11-20',clock:1}),actor:'leo'};
   const r=runtime.execute(initialState,inv);assert.equal(withStatus(r, "rejected").code,'denied');
-  assert.equal(explainEvaluation(initialState,inv,r).checks[0].value,true);
-  const settings=initialState.records['settings']['leave-rule'],maya=initialState.records['employee']['maya'];
+  assert.equal(present(explainEvaluation(initialState,inv,r).checks[0]).value,true);
+  const settings=present(present(initialState.records['settings'])['leave-rule']),maya=present(present(initialState.records['employee'])['maya']);
   const changed={...initialState,records:{...initialState.records,
     settings:{...initialState.records['settings'],'leave-rule':{...settings,values:{...settings.values,threshold:2}}},
     employee:{...initialState.records['employee'],maya:{...maya,values:{...maya.values,manager:'leo'}}}}};

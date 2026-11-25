@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createApp, forkApp} from './core.ts';
+import {present} from '../semantic/test-support.ts';
 
 const app = () => createApp({clock: () => 1794391200000});
 const accepted = result => { assert.equal(result.ok, true, result.reason); return result; };
@@ -33,13 +34,13 @@ test('trusted forks isolate siblings, prepared snapshots, restores, rule edits a
   accepted(parent.setRule('comment',{notify:[]}));
   const afterRestore=forkApp(parent,{clock:()=>500});
   assert.equal(afterRestore.state.events.length,0);
-  assert.deepEqual(afterRestore.model.actions['comment'].notify,[]);
+  assert.deepEqual(present(afterRestore.model.actions['comment']).notify,[]);
   assert.deepEqual(child.state.events[0],state.events[0]);
   accepted(child.restoreWorkspace(document));
   assert.equal(accepted(child.dispatch('comment',{issueId:'i1',body:'After child restore'},'u1')).event.createdAt,202);
   assert.equal(forkCalls,2);assert.equal(calls,2);
   assert.equal(afterRestore.state.events.length,0);
-  assert.throws(()=>{afterRestore.model.actions['comment'].notify.push('opener')},TypeError);
+  assert.throws(()=>{present(afterRestore.model.actions['comment']).notify.push('opener')},TypeError);
   for(const fake of [{},parent.exportWorkspace(),Object.freeze({state,model}),Object.create(parent)]) {
     assert.throws(()=>forkApp(fake),/trusted runtime/);
   }
@@ -219,7 +220,7 @@ test('historical why retains rule, actor, relationship and change snapshots', ()
   const patch: {notify: string[]; allowedRoles: string[]} = {notify: [], allowedRoles: ['lead']};
   accepted(runtime.setRule('comment', patch));
   patch.notify.push('watchers');
-  assert.deepEqual(runtime.model.actions['comment'].notify, []);
+  assert.deepEqual(present(runtime.model.actions['comment']).notify, []);
   assert.equal(JSON.stringify(runtime.explain(result.event.id)), encoded);
   assert.equal(historical.revision, 1);
   assert.equal(historical.relationshipSnapshot.assignee, 'u3');
@@ -228,7 +229,7 @@ test('historical why retains rule, actor, relationship and change snapshots', ()
   assert.throws(() => { historical.actor.role = 'lead'; }, TypeError);
   assert.throws(() => { historical.changes[0].after[0].body = 'tampered'; }, TypeError);
   assert.throws(() => { runtime.state.users[0].role = 'member'; }, TypeError);
-  assert.throws(() => { Object.assign(runtime.model.actions['comment'].inputs, {type: 'unknown'}); }, TypeError);
+  assert.throws(() => { Object.assign(present(runtime.model.actions['comment']).inputs, {type: 'unknown'}); }, TypeError);
   const future = accepted(runtime.dispatch('comment', {issueId: 'i1', body: 'Future rule'}, 'u1'));
   assert.deepEqual(future.event.recipients, []);
   audit(runtime);
@@ -275,8 +276,8 @@ test('tool schemas derive from declarations and tool/direct invocation have exac
   const tool = app();
   assert.equal(direct.tools().length, 6);
   for (const descriptor of direct.tools()) {
-    assert.deepEqual(descriptor.parameters, direct.model.actions[descriptor.name].inputs);
-    assert.equal(descriptor.label, direct.model.actions[descriptor.name].label);
+    assert.deepEqual(descriptor.parameters, present(direct.model.actions[descriptor.name]).inputs);
+    assert.equal(descriptor.label, present(direct.model.actions[descriptor.name]).label);
     assert.equal(descriptor.parameters.additionalProperties, false);
   }
   for (const [name, args, actor] of [
@@ -401,8 +402,8 @@ test('every replay prefix is read-only, exact, and never changes the live journa
   const journal = runtime.exportWorkspace();
   for (let index = prefixes.length - 1; index >= 0; index--) {
     const preview = accepted(runtime.previewWorkspace(index));
-    assert.deepEqual(preview.state, prefixes[index].state);
-    assert.deepEqual(preview.model, prefixes[index].model);
+    assert.deepEqual(preview.state, present(prefixes[index]).state);
+    assert.deepEqual(preview.model, present(prefixes[index]).model);
     assert.throws(() => { preview.state.issues[0].title = 'Changed'; }, TypeError);
     assert.throws(() => { preview.model.actions.create.notify.push('opener'); }, TypeError);
     assert.equal(preview.dispatch, undefined);

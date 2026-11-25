@@ -19,6 +19,7 @@ import {
   WorkspaceApproveRequestSchema,
   WorkspaceResumeRequestSchema,
 } from './json.ts';
+import {present} from '../../semantic/test-support.ts';
 
 test('encodeCanonicalJson sorts keys lexicographically and rejects non-JSON values', () => {
   assert.equal(
@@ -46,7 +47,7 @@ test('DurableOutcomeSchema and DurableOperationOutcomeSchema validate discrimina
     encodeJson({ status: 'committed', state: { revision: 1, records: {} }, events: [{ id: 'e1', kind: 'created' }], extra: 42 }),
   );
   assert.equal(committed.status, 'committed');
-  assert.equal(committed.events[0]['kind'], 'created');
+  assert.equal(present(committed.events[0])['kind'], 'created');
   assert.equal(committed['extra'], 42);
 
   assert.throws(() => decodeJson(DurableOutcomeSchema, '{"status":"committed","state":{},"events":[{"id":123}]}'));

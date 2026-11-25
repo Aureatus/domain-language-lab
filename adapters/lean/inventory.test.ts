@@ -8,6 +8,7 @@ import {createInterpreter} from '../../semantic/core.ts';
 import {generate, hash, Unsupported} from './generate.ts';
 import {PINNED_LEAN} from './check.ts';
 import {projectInventory, generateInventory, checkInventory, obligation} from './inventory.ts';
+import {present} from '../../semantic/test-support.ts';
 
 const out = '/tmp/opencode/inventory-evidence';
 const action = m => m.actions['reservation.reserve'];
@@ -17,18 +18,18 @@ const record = (available, revision = 0, version = 0) => `{ capacity := 5, avail
 function crossCheck(name, source, cases) {
   mkdirSync(out, {recursive: true});
   const {code} = generateInventory(source);
-  let lean = code.split('-- Independent source obligation:')[0];
+  let lean = present(code.split('-- Independent source obligation:')[0]);
   for (const [index, c] of cases.entries()) {
     const pre = structuredClone(initialState);
-    pre.records['stock']['camera'].values['available'] = c.available ?? 5;
+    present(present(pre.records['stock'])['camera']).values['available'] = c.available ?? 5;
     const call = invocation(`cross${index}`, 'reserve', 'slotA', 'alice', 10, c.quantity ?? 3);
     const actual = createInterpreter(source).execute(pre, call);
     assert.ok(actual.status === 'committed' || actual.status === 'rejected');
     assert.equal(actual.status === 'committed' ? 'committed' : actual.code, c.expected);
     const expected = actual.status === 'committed'
-      ? `.committed ${record(actual.state.records['stock']['camera'].values['available'], actual.state.revision, actual.state.records['stock']['camera'].version)}`
+      ? `.committed ${record(present(present(actual.state.records['stock'])['camera']).values['available'], actual.state.revision, present(present(actual.state.records['stock'])['camera']).version)}`
       : `.${actual.code}`;
-    if (c.post !== undefined) assert.equal(actual.state.records['stock']['camera'].values['available'], c.post);
+    if (c.post !== undefined) assert.equal(present(present(actual.state.records['stock'])['camera']).values['available'], c.post);
     lean += `example : step ${record(c.available ?? 5)} { quantity := ${c.quantity ?? 3}, clock := 10 } = ${expected} := by decide\n`;
   }
   lean += 'end Generated\n';
@@ -44,7 +45,7 @@ test('extracts actual numeric schemas and ASTs with complete original content bi
   const original = action(inventoryModel), projected = action(model);
   assert.deepEqual(projected.updates, [update(inventoryModel)]);
   assert.deepEqual(projected.preconditions, original.preconditions.filter(p => p.id === 'reservation.reserve.capacity'));
-  assert.deepEqual(model.resources['stock'].fields, {capacity: inventoryModel.resources.stock.fields.capacity, available: inventoryModel.resources.stock.fields.available});
+  assert.deepEqual(present(model.resources['stock']).fields, {capacity: inventoryModel.resources.stock.fields.capacity, available: inventoryModel.resources.stock.fields.available});
   assert.deepEqual(projected.inputs, {quantity: original.inputs.quantity});
   assert.deepEqual(projected.bindings[0].key, {op: 'literal', value: 'camera'});
   assert.deepEqual(metadata.source, inventoryModel);

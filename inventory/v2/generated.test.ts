@@ -4,6 +4,7 @@ import {mkdtemp, readFile} from 'node:fs/promises';
 import {join} from 'node:path';
 import {spawnSync} from 'node:child_process';
 import {runGenerated, generatedHistory, checkHistory, mutationChecks} from './generated.ts';
+import {present} from '../../semantic/test-support.ts';
 
 test('six seeded 30-step SQLite histories predict outcomes and replay exact observations', async () => {
   const report = await runGenerated();
@@ -17,7 +18,7 @@ test('six seeded 30-step SQLite histories predict outcomes and replay exact obse
     assert.equal(item.replay?.status, 'passed');
     for (const code of ['unauthorized-approval', 'stale', 'precondition', 'invocation-conflict', 'consumed']) assert.ok(item.observations.some(x => x.result.code === code), `seed ${item.seed}: missing ${code}`);
     for (const action of ['cancel', 'expire', 'delete-terminal']) assert.ok(item.observations.some((x,i) => {
-      const command = item.commands[i];
+      const command = present(item.commands[i]);
       return x.result.status === 'committed' && command.api === 'execute' && command.command.action === `reservation.${action}`;
     }), `seed ${item.seed}: missing successful ${action}`);
     assert.ok(item.observations.some(x => x.result.status === 'duplicate'));
@@ -29,7 +30,7 @@ test('six seeded 30-step SQLite histories predict outcomes and replay exact obse
   }
   // Exercise the public checker on altered returned outcomes/state through the
   // same entire history, rather than an isolated arithmetic invariant.
-  const {commands, observations} = report.cases[0];
+  const {commands, observations} = present(report.cases[0]);
   assert.deepEqual(mutationChecks(commands, observations), report.oracle.mutationChecks);
 });
 
@@ -39,7 +40,7 @@ test('seed zero, configurable runs/steps and meaningful deterministic history va
   assert.notDeepEqual(signature(1), signature(2));
   const report = await runGenerated({seed:0, runs:2, steps:40});
   assert.equal(report.status, 'passed', JSON.stringify(report.cases.flatMap(x => x.counterexample ? [x.counterexample.cause] : [])));
-  assert.equal(report.cases.length, 2); assert.equal(report.cases[0].commands.length, 40);
+  assert.equal(report.cases.length, 2); assert.equal(present(report.cases[0]).commands.length, 40);
   assert.throws(() => generatedHistory(0, 29), /at least 30/);
   await assert.rejects(runGenerated({runs:0}), /positive/);
 });
@@ -49,8 +50,8 @@ test('seed-specific counterexample persists actual cause/full prefix and CLI rep
   // An expected successful reserve has a deliberately missing observation field.
   // First verify checker reports the missing expected commit at its exact prefix.
   const baseline = await runGenerated({seed:7, runs:1});
-  const item = baseline.cases[0], index = item.observations.findIndex(x => x.result.status === 'committed');
-  const altered = structuredClone(item.observations); altered[index].result = {status:'rejected', code:'precondition'};
+  const item = present(baseline.cases[0]), index = item.observations.findIndex(x => x.result.status === 'committed');
+  const altered = structuredClone(item.observations); present(altered[index]).result = {status:'rejected', code:'precondition'};
   const failure = checkHistory(item.commands, altered);
   assert.equal(failure.status, 'counterexample'); assert.equal(failure.index, index);
   assert.match(failure.cause.message, /expected committed/);

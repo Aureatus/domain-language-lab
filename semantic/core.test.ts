@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {withStatus, observedEvents} from "./test-support.ts";
+import {present,withStatus, observedEvents} from "./test-support.ts";
 import {createInterpreter, validateModel, validateState, jsonSnapshot} from './core.ts';
 import {issueModel, issueState} from './issues.ts';
 
@@ -15,22 +15,22 @@ test('issue declarations execute across resources with implicit provenance/routi
   const state = copy(issueState), original = copy(state);
   const r = createInterpreter(issueModel).execute(state, invocation());
   assert.equal(r.status, 'committed');
-  assert.equal(r.state.records['issues']['i1'].values['status'], 'resolved');
-  assert.equal(r.state.records['issues']['i1'].values['updatedAt'], 42);
-  assert.equal(r.state.records['counters']['global'].values['resolved'], 1);
-  assert.equal(r.state.records['issues']['i1'].version, 1);
+  assert.equal(present(present(r.state.records['issues'])['i1']).values['status'], 'resolved');
+  assert.equal(present(present(r.state.records['issues'])['i1']).values['updatedAt'], 42);
+  assert.equal(present(present(r.state.records['counters'])['global']).values['resolved'], 1);
+  assert.equal(present(present(r.state.records['issues'])['i1']).version, 1);
   assert.deepEqual(r.events.map(e => e.kind), ['action', 'change', 'change', 'change']);
-  assert.equal(r.events[1].semanticId, 'resolve.status');
-  assert.equal(r.events[0].id, 'event:inv1:action');
-  assert.deepEqual(r.events[0].recipients, [{recipient: 'jon', paths: [{relationship: 'issue.watchers', resource: 'issues', key: 'i1'}]}]);
+  assert.equal(present(r.events[1]).semanticId, 'resolve.status');
+  assert.equal(present(r.events[0]).id, 'event:inv1:action');
+  assert.deepEqual(present(r.events[0]).recipients, [{recipient: 'jon', paths: [{relationship: 'issue.watchers', resource: 'issues', key: 'i1'}]}]);
   assert.deepEqual(state, original);
   assert.equal(Object.isFrozen(state), false);
-  assert.equal(Object.isFrozen(r.state.records['issues']['i1'].values), true);
+  assert.equal(Object.isFrozen(present(present(r.state.records['issues'])['i1']).values), true);
 });
 
 test('editing declaration changes actual execution, not just metadata', () => {
   const runtime = createInterpreter(edit(a => { a.updates[2].value.right.value = 3; }));
-  assert.equal(runtime.execute(issueState, invocation()).state.records['counters']['global'].values['resolved'], 3);
+  assert.equal(present(present(runtime.execute(issueState, invocation()).state.records['counters'])['global']).values['resolved'], 3);
 });
 
 test('grouped prestate swap, even across records; unmentioned fields preserved', () => {
@@ -43,9 +43,9 @@ test('grouped prestate swap, even across records; unmentioned fields preserved',
   const state = copy(issueState); state.records.issues.i1.values.updatedAt = 9; state.records.counters.global.values.resolved = 4;
   const r = createInterpreter(model).execute(state, invocation());
   assert.equal(r.status, 'committed');
-  assert.equal(r.state.records['issues']['i1'].values['updatedAt'], 4);
-  assert.equal(r.state.records['counters']['global'].values['resolved'], 9);
-  assert.equal(r.state.records['issues']['i1'].values['status'], 'open');
+  assert.equal(present(present(r.state.records['issues'])['i1']).values['updatedAt'], 4);
+  assert.equal(present(present(r.state.records['counters'])['global']).values['resolved'], 9);
+  assert.equal(present(present(r.state.records['issues'])['i1']).values['status'], 'open');
 });
 
 test('pending is non-mutating and denial wins over both approval and allow', () => {
@@ -83,9 +83,9 @@ test('competing numeric reservations: stale commit rejected; deliberate stale-re
   // Test-only bad host: commit against the OLD snapshot, then replace current state.
   const mutant = runtime.commit(state, q.prepared);
   assert.equal(mutant.status, 'committed');
-  assert.equal(first.state.records['counters']['global'].values['resolved'], 1);
-  assert.equal(mutant.state.records['counters']['global'].values['resolved'], 1);
-  assert.equal(first.events[0].invocationId, 'r1'); assert.equal(mutant.events[0].invocationId, 'r2');
+  assert.equal(present(present(first.state.records['counters'])['global']).values['resolved'], 1);
+  assert.equal(present(present(mutant.state.records['counters'])['global']).values['resolved'], 1);
+  assert.equal(present(first.events[0]).invocationId, 'r1'); assert.equal(present(mutant.events[0]).invocationId, 'r2');
   // Two accepted reservations of four against five: the mutant loses a write.
   assert.ok(4 + 4 > state.records.counters.global.values.resolved);
 });
@@ -93,7 +93,7 @@ test('competing numeric reservations: stale commit rejected; deliberate stale-re
 test('tokens bound to interpreter, prestate content, authorization reads and frozen invocation', () => {
   const rt = createInterpreter(issueModel), state = copy(issueState), inv = invocation();
   const p = rt.prepare(state, inv); inv.clock = 99; inv.args.issueId = 'wrong';
-  assert.equal(withStatus(rt.commit(state, withStatus(p, "prepared").prepared), "committed").events[0].clock, 42);
+  assert.equal(present(withStatus(rt.commit(state, withStatus(p, "prepared").prepared), "committed").events[0]).clock, 42);
   const changed = copy(state); changed.records.issues.i1.values.assignee = 'jon';
   assert.equal(withStatus(rt.commit(changed, withStatus(p, "prepared").prepared), "rejected").code, 'stale');
   assert.equal(withStatus(createInterpreter(issueModel).commit(state, withStatus(p, "prepared").prepared), "rejected").code, 'invalid-token');
@@ -103,7 +103,7 @@ test('tokens bound to interpreter, prestate content, authorization reads and fro
 test('safe integer boundaries, exact intermediate arithmetic and atomic failure', () => {
   const state = copy(issueState); state.records.counters.global.values.resolved = Number.MAX_SAFE_INTEGER - 1;
   const rt = createInterpreter(issueModel);
-  assert.equal(rt.execute(state, invocation()).state.records['counters']['global'].values['resolved'], Number.MAX_SAFE_INTEGER);
+  assert.equal(present(present(rt.execute(state, invocation()).state.records['counters'])['global']).values['resolved'], Number.MAX_SAFE_INTEGER);
   state.records.counters.global.values.resolved = Number.MAX_SAFE_INTEGER;
   const before = copy(state), bad = rt.execute(state, invocation());
   assert.equal(withStatus(bad, "rejected").code, 'overflow'); assert.deepEqual(state, before); assert.equal(bad.state, state); assert.equal(Object.isFrozen(state), false);
@@ -163,9 +163,9 @@ test('routing uses poststate and retains multiple support paths, deterministic i
     a.updates.push({id: 'resolve.reassign', target: 'resolve.issue', field: 'assignee', value: lit('jon')});
   });
   const rt = createInterpreter(model), r = rt.execute(issueState, invocation());
-  const recipients = withStatus(r, "committed").events[0].recipients;
-  assert.equal(recipients.length, 1); assert.equal(recipients[0].recipient, 'jon');
-  assert.deepEqual(recipients[0].paths.map(p => p.relationship), ['issue.assignee', 'issue.watchers']);
+  const recipients = present(withStatus(r, "committed").events[0]).recipients;
+  assert.equal(recipients.length, 1); assert.equal(present(recipients[0]).recipient, 'jon');
+  assert.deepEqual(present(recipients[0]).paths.map(p => p.relationship), ['issue.assignee', 'issue.watchers']);
   assert.deepEqual(r, rt.execute(issueState, invocation()));
 });
 
@@ -182,7 +182,7 @@ test('version boundaries and no-op writes have explicit revision semantics', () 
   const model = edit(a => { a.updates = [{id: 'same.status', target: 'resolve.issue', field: 'status', value: field('resolve.issue', 'status')}]; });
   const rt = createInterpreter(model), r = rt.execute(issueState, invocation());
   assert.equal(r.status, 'committed'); assert.equal(r.state.revision, 1);
-  assert.equal(r.state.records['issues']['i1'].version, 1); assert.equal(r.events.length, 1);
+  assert.equal(present(present(r.state.records['issues'])['i1']).version, 1); assert.equal(r.events.length, 1);
   for (const target of ['revision', 'version']) {
     const state = copy(issueState);
     if (target === 'revision') state.revision = Number.MAX_SAFE_INTEGER;
@@ -214,7 +214,7 @@ test('bounded arithmetic cross-check: add/subtract versus exact mathematical int
       const actual = createInterpreter(model).execute(issueState, invocation());
       const exact = op === 'add' ? BigInt(left) + BigInt(right) : BigInt(left) - BigInt(right);
       if (exact < -9007199254740991n || exact > 9007199254740991n) assert.equal(withStatus(actual, "rejected").code, 'overflow');
-      else { assert.equal(actual.status, 'committed'); const value=actual.state.records['counters']['global'].values['resolved'];assert.ok(typeof value==='number');assert.equal(BigInt(value), exact); }
+      else { assert.equal(actual.status, 'committed'); const value=present(present(actual.state.records['counters'])['global']).values['resolved'];assert.ok(typeof value==='number');assert.equal(BigInt(value), exact); }
     }
   }
 });

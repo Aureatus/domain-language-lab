@@ -6,6 +6,7 @@ import {parseSource} from './frontend.ts';
 import {deriveApplication,buildInvocation} from '../application/derive.ts';
 import prior from './fixtures/prior-leave.ts';
 import {moduleSourcePage} from './highlight.ts';
+import {present} from '../semantic/test-support.ts';
 
 const loaded=loadSource('leave/browser.domain');
 const flattened=loaded.modules.map(m=>m.source.split('\n').filter(l=>!/^(module|import|use)\b/.test(l)).join('\n')).join('\n');
@@ -57,16 +58,17 @@ test('references lower lazily, fail closed, retain policy authorization and reco
   const inv=buildInvocation(d.contract,{action:'leave.request',actor:'maya',args:{start:'2026-11-20',end:'2026-11-20'},id:'test',clock:1});
   const denied=d.runtime.execute(d.initialState,{...inv,actor:'leo'});
   assert.equal(denied.status,'rejected');assert.equal(denied.code,'denied');
-  const settings={...d.initialState.records['settings'],alternate:d.initialState.records['settings']['leave-rule']};delete settings['leave-rule'];
+  const originalSettings=present(d.initialState.records['settings']);
+  const settings={...originalSettings,alternate:present(originalSettings['leave-rule'])};delete settings['leave-rule'];
   const missing=d.runtime.execute({...d.initialState,records:{...d.initialState.records,settings}},inv);
   assert.equal(missing.status,'rejected');assert.equal(missing.code,'missing-record');
   const employee={...d.initialState.records['employee']};delete employee['maya'];
   const noEmployee=d.runtime.execute({...d.initialState,records:{...d.initialState.records,employee}},inv);
   assert.equal(noEmployee.status,'rejected');assert.equal(noEmployee.code,'missing-record');
   const unused=parse(flattened.replace('leaveId string','leaveId string\n    optional reference employee as unused')).declaration;
-  assert.deepEqual(unused.domain.actions['leave.request'].bindings,prior.domain.actions['leave.request'].bindings);
+  assert.deepEqual(present(unused.domain.actions['leave.request']).bindings,prior.domain.actions['leave.request'].bindings);
   const renamed=parse(flattened.replaceAll('employee','person').replaceAll('settings','configuration')).declaration;
-  assert.deepEqual(renamed.domain.actions['leave.request'].bindings.map(b=>b.resource),['person','configuration']);
+  assert.deepEqual(present(renamed.domain.actions['leave.request']).bindings.map(b=>b.resource),['person','configuration']);
   const r=deriveApplication(renamed).runtime.execute(renamed.initialState,{...inv,args:{...inv.args,personId:'maya'}});
   // The old employeeId is intentionally not accepted after renaming the schema.
   assert.equal(r.status,'rejected');assert.equal(r.code,'invalid');

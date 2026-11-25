@@ -8,6 +8,7 @@ import {createInterpreter} from '../../semantic/core.ts';
 import {generate, MAX, Unsupported} from './generate.ts';
 import {check, PINNED_LEAN} from './check.ts';
 import {model, obligation} from './fixture.ts';
+import {present} from '../../semantic/test-support.ts';
 
 const out = fileURLToPath(new URL('./test-output', import.meta.url));
 mkdirSync(out, {recursive: true});
@@ -24,7 +25,7 @@ const record = s => `{ remaining := (${s.remaining} : Int), previous := (${s.pre
 function differential(name, m, cases) {
   const runtime = createInterpreter(m);
   const {code} = generate(m, obligation);
-  let lean = code.split('-- Independent source obligation:')[0];
+  let lean = present(code.split('-- Independent source obligation:')[0]);
   for (const [n, c] of cases.entries()) {
     const pre = {remaining: 10, previous: 0, revision: 0, version: 0, ...c.pre};
     const amount = c.amount ?? 3;
@@ -34,7 +35,7 @@ function differential(name, m, cases) {
     if (c.expected) assert.equal(result.status === 'committed' ? 'committed' : result.code, c.expected);
     let expected;
     if (result.status === 'committed') {
-      const r = result.state.records['capacity']['main'];
+      const r = present(present(result.state.records['capacity'])['main']);
       expected = `.committed ${record({...r.values, revision: result.state.revision, version: r.version})}`;
       if (c.previous !== undefined) assert.equal(r.values['previous'], c.previous);
     } else {

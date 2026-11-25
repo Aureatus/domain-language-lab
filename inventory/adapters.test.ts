@@ -5,10 +5,11 @@ import * as SynchronizedRef from '../adapters/effect/node_modules/effect/dist/Sy
 import {Effect, execute, makeStore} from '../adapters/effect/index.ts';
 import type {Event, State} from '../semantic/types.ts';
 import {runtime, initialState, invocation} from './model.ts';
+import {present} from '../semantic/test-support.ts';
 
 const run = Effect.runPromise;
 const stock = (state: State) => {
-  const available = state.records['stock']['camera'].values['available'];
+  const available = present(present(state.records['stock'])['camera']).values['available'];
   assert.ok(typeof available === 'number');
   return available;
 };
@@ -32,8 +33,8 @@ test('actual inventory reserve/cancel/expire match interpreter state and routed 
     assert.equal(actual.status, i === 3 ? 'rejected' : 'committed');
     if (i === 3) { assert.equal(actual.status, 'rejected'); assert.equal(actual.code, 'precondition'); }
   }
-  assert.equal(state.records['reservation']['slotA'].values['status'], 'cancelled');
-  assert.equal(state.records['reservation']['slotB'].values['status'], 'expired');
+  assert.equal(present(present(state.records['reservation'])['slotA']).values['status'], 'cancelled');
+  assert.equal(present(present(state.records['reservation'])['slotB']).values['status'], 'expired');
   assert.equal(state.revision, 4);
   assert.ok(events.some(e => e.recipients.some(r => r.recipient === 'warehouse')));
 });
@@ -48,27 +49,27 @@ test('competing reservation fibers satisfy independent capacity oracle in either
     assert.equal(outcomes.filter(r => r.status === 'rejected' && r.code === 'precondition').length, 1);
     const published = await run(SynchronizedRef.get(store));
     const winner = outcomes.findIndex(r => r.status === 'committed');
-    const slot = calls[winner].args.slotId, loser = calls[1 - winner].args.slotId;
+    const slot = present(calls[winner]).args.slotId, loser = present(calls[1 - winner]).args.slotId;
     // Independent domain oracle: 5 units cannot satisfy two requests of 3.
     assert.equal(stock(published.state), 2);
     assert.equal(published.state.revision, 1);
-    assert.equal(published.state.records['stock']['camera'].version, 1);
-    assert.equal(published.state.records['reservation'][slot].values['status'], 'active');
-    assert.equal(published.state.records['reservation'][slot].values['quantity'], 3);
-    assert.equal(published.state.records['reservation'][loser].values['status'], 'free');
-    assert.equal(published.state.records['reservation'][loser].version, 0);
-    const allocated = Object.values(published.state.records['reservation'])
+    assert.equal(present(present(published.state.records['stock'])['camera']).version, 1);
+    assert.equal(present(present(published.state.records['reservation'])[slot]).values['status'], 'active');
+    assert.equal(present(present(published.state.records['reservation'])[slot]).values['quantity'], 3);
+    assert.equal(present(present(published.state.records['reservation'])[loser]).values['status'], 'free');
+    assert.equal(present(present(published.state.records['reservation'])[loser]).version, 0);
+    const allocated = Object.values(present(published.state.records['reservation']))
       .filter(r => r.values['status'] === 'active').reduce((sum, r) => {
         assert.ok(typeof r.values['quantity'] === 'number');
         return sum + r.values['quantity'];
       }, 0);
     assert.equal(stock(published.state) + allocated, 5);
-    const committed = outcomes[winner];
+    const committed = present(outcomes[winner]);
     assert.equal(committed.status, 'committed');
     assert.deepEqual(published.events, committed.events);
-    assert.ok(published.events.every(e => e.invocationId === calls[winner].id));
+    assert.ok(published.events.every(e => e.invocationId === present(calls[winner]).id));
     const before = published;
-    assert.equal((await run(execute(runtime, store, calls[winner]))).status, 'duplicate');
+    assert.equal((await run(execute(runtime, store, present(calls[winner])))).status, 'duplicate');
     assert.equal(await run(SynchronizedRef.get(store)), before);
   }
 });

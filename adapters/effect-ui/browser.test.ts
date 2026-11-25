@@ -3,14 +3,15 @@ import {test} from 'node:test';
 import {chromium} from 'playwright';
 import declaration from '../../leave/model.ts';
 import {start} from './serve.ts';
+import {present} from '../../semantic/test-support.ts';
 
 const execute='**/api/actions/execute',reconcile='**/api/actions/reconcile';
 
 test('Effect UI keeps Submit locked until the original receipt is recovered',{timeout:30000},async t=>{
   const model=structuredClone(declaration);
-  const presentation=model.application.actions['leave.request'];
+  const presentation=present(model.application.actions['leave.request']);
   presentation.label='Request leave';
-  presentation.fields['start'].label='From';
+  present(presentation.fields['start']).label='From';
   const app=await start({model});
   t.after(()=>app.close());
   const browser=await chromium.launch();
@@ -45,7 +46,7 @@ test('Effect UI keeps Submit locked until the original receipt is recovered',{ti
   await check.waitFor();
   assert.equal(original.status,'pending');
   assert.equal(original.snapshot.pending.length,1);
-  assert.deepEqual(executes[0].args,{start:'2026-11-23',end:'2026-11-25'});
+  assert.deepEqual(present(executes[0]).args,{start:'2026-11-23',end:'2026-11-25'});
   assert.equal(await submit.isDisabled(),true);
 
   await page.getByRole('button',{name:'Refresh records'}).click();
@@ -73,7 +74,7 @@ test('Effect UI keeps Submit locked until the original receipt is recovered',{ti
   };
   const [response]=await Promise.all([page.waitForResponse(reconcile),assertChecking()]);
   assert.deepEqual(response.request().postDataJSON(),{
-    actor:executes[0].actor,submissionId:executes[0].submissionId,expectedContractId:executes[0].expectedContractId
+    actor:present(executes[0]).actor,submissionId:present(executes[0]).submissionId,expectedContractId:present(executes[0]).expectedContractId
   });
   const recovered=await response.json();
   assert.equal(recovered.status,original.status);
