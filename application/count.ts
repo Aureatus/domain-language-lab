@@ -8,7 +8,7 @@ const reportPath=reportIndex<0?null:argv.splice(reportIndex,2)[1];
 const [directory,...entries]=argv;
 if(!directory||!entries.length)throw Error('Usage: count.ts APP_DIR ENTRY [LAUNCHER] [--report OUTPUT]');
 const root=resolve(directory),authored=new Map(),external=new Set();
-async function visit(path){
+async function visit(path:string){
   if(authored.has(path))return;
   const source=await readFile(path,'utf8'),rel=relative(root,path);
   authored.set(path,{path:relative(process.cwd(),path),lines:source.split('\n').length-(source.endsWith('\n')?1:0),nonblankLines:source.split('\n').filter(l=>l.trim()).length,bytes:Buffer.byteLength(source)});

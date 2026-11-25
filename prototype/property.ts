@@ -366,10 +366,11 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
   for (let i = 0; i < args.length; i++) {
     const flag = args[i];
     if (flag === '--mutant') { options.staleApprovalMutant = true; continue; }
-    const names = { '--seed': 'seed', '--samples': 'samples', '--max-steps': 'maxSteps', '--shrink-budget': 'shrinkBudget' } as const;
+    const names:Readonly<Record<string,keyof Omit<PropertyOptions,'staleApprovalMutant'>>> = { '--seed': 'seed', '--samples': 'samples', '--max-steps': 'maxSteps', '--shrink-budget': 'shrinkBudget' };
     const value=args[i+1];
-    if (flag===undefined || !Object.hasOwn(names, flag) || value===undefined || value.trim() === '') throw new Error(`Invalid argument: ${flag}`);
-    options[names[flag as keyof typeof names]] = Number(value);
+    const option=flag!==undefined&&Object.hasOwn(names,flag)?names[flag]:undefined;
+    if (!option || value===undefined || value.trim() === '') throw new Error(`Invalid argument: ${flag}`);
+    options[option] = Number(value);
     i++;
   }
   const report = runProperties(options);

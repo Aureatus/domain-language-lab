@@ -10,7 +10,7 @@ function $(id: string, constructor: new () => HTMLElement = HTMLElement) {
   return element;
 }
 const escapes: Record<string, string>={'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'};
-const escape=value=>String(value).replace(/[&<>"']/g,c=>escapes[c]??c);
+const escape=(value:unknown)=>String(value).replace(/[&<>"']/g,c=>escapes[c]??c);
 type Step = ReturnType<typeof createHost>['steps'][number];
 const isMutant = (operation: Step['operation'])=>operation.type==='commit'&&operation.mutant;
 function render() {
@@ -37,7 +37,7 @@ function render() {
   $('actions', HTMLFieldSetElement).disabled=selected>=0;
   $('mutant-label').hidden=!host.steps.some(s=>isMutant(s.operation));
 }
-function stateAt(index) {
+function stateAt(index:number) {
   const bundle=host.export(), h=createHost(bundle.model,bundle.initial);
   for(const {operation} of host.steps.slice(0,index+1)) h.step(operation);
   return h.state;

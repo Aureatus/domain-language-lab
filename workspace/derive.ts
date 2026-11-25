@@ -3,10 +3,13 @@ import type {Model as V1Model} from '../semantic/types.ts';
 import type {Event,FieldSchema,Model as V2Model,Recipient} from '../semantic/v2/types.ts';
 
 type Model = V1Model|V2Model;
+function actionEntries(model:Model):[string,V1Model['actions'][string]|V2Model['actions'][string]][] {
+  return Object.entries<V1Model['actions'][string]|V2Model['actions'][string]>(model.actions);
+}
 type Invalidation = {view:'history'|'pending'|'snapshot'|'resource'|'relationship';resource?:string;relationship?:string;key?:string};
 export type WorkspaceChange = {sequence?:number;invalidations:Invalidation[];recipients:Recipient[];reason:string};
 export function deriveTools(model:Model):{name:string;inputs:Readonly<Record<string,FieldSchema>>;policyIds:string[];preconditionIds:string[]}[] {
-  return Object.entries(model.actions).map(([name, action]) => ({
+  return actionEntries(model).map(([name, action]) => ({
     name, inputs: structuredClone(action.inputs),
     policyIds: action.policies.map(x => x.id),
     preconditionIds: action.preconditions.map(x => x.id),
@@ -14,7 +17,7 @@ export function deriveTools(model:Model):{name:string;inputs:Readonly<Record<str
 }
 
 export function deriveDependencies(model:Model) {
-  return Object.entries(model.actions).map(([actionId, action]) => {
+  return actionEntries(model).map(([actionId, action]) => {
     const inserts = 'inserts' in action ? action.inserts : [];
     const deletes = 'deletes' in action ? action.deletes : [];
     const bindings = new Map([...action.bindings, ...inserts].map(x => [x.id, x.resource]));
@@ -40,7 +43,10 @@ export function deriveChange(model:Model, events:readonly Event[], {sequence, pe
     const dependency = dependencies.find(x => x.actionId === event.actionId);
     if (!dependency) throw new TypeError('Unknown event action dependency.');
     // No-op assignments still advance record versions even without change facts.
-    if (event.kind === 'action') for (const write of dependency.writes) add({view: 'resource', resource: write.resource});
+    if (event.kind === 'action') for (const write of dependency.writes) {
+      if (write.resource===undefined) throw new TypeError('Unknown event write dependency.');
+      add({view: 'resource', resource: write.resource});
+    }
     if (event.kind !== 'action') {
       // Facts determine the changed entity; declarations determine its consumers.
       const write = dependency.writes.find(x => x.semanticId === event.semanticId);

@@ -61,7 +61,7 @@ export function sourcePage(source:string,title='Domain source',{inline=false,ful
   const lines=rendered.split('\n');if(lines.at(-1)==='')lines.pop();
   const groups:Record<string|number,string>={domain:'Resources',resource:'Resources',relationship:'Resources',relationships:'Resources',action:'Actions',initial:'Initial data',application:'Interface',raw:'Source'};
   const group=(s:Parsed['sections'][number]|undefined)=>s&&groups[s.kind];
-  const code=(start,end)=>`<pre><code>${lines.slice(start-1,end).map((s,j)=>`<span class="line" id="L${start+j}"><a class="ln" href="#L${start+j}" aria-label="Line ${start+j}">${start+j}</a><span class="text">${s}</span></span>`).join('')}</code></pre>`;
+  const code=(start:number,end:number)=>`<pre><code>${lines.slice(start-1,end).map((s,j)=>`<span class="line" id="L${start+j}"><a class="ln" href="#L${start+j}" aria-label="Line ${start+j}">${start+j}</a><span class="text">${s}</span></span>`).join('')}</code></pre>`;
   const nav=sections.map((s,i)=>`${i===0||group(s)!==group(sections[i-1])?`<h2>${group(s)}</h2>`:''}<a href="#L${s.line}">${escape(String(s.name))}</a>`).join('');
   // One uninterrupted code region: no source lines are folded or filtered.
   const chunks=`<div class="source-section">${code(1,lines.length)}</div>`;

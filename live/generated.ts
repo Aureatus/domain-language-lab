@@ -114,7 +114,8 @@ export function runGenerated({seed=0x51eed,runs=40,maxSteps=80,wrapper}: Options
       aggregate.actions[a]=(aggregate.actions[a]??0)+(run.coverage.actions[a]??0);
       aggregate.acceptedActions[a]=(aggregate.acceptedActions[a]??0)+(run.coverage.acceptedActions[a]??0);
     }
-    for(const k of ['denials','rejections','ruleEdits','invalidReferences'] as const)aggregate[k]+=run.coverage[k];
+    const counters:('denials'|'rejections'|'ruleEdits'|'invalidReferences')[]=['denials','rejections','ruleEdits','invalidReferences'];
+    for(const k of counters)aggregate[k]+=run.coverage[k];
     for(const p of PATHS)aggregate.notificationPaths[p]=(aggregate.notificationPaths[p]??0)+(run.coverage.notificationPaths[p]??0);
   }
   return {status:'sampled_pass' as const,seed,runs,maxSteps,actionsExecuted:Object.values(aggregate.actions).reduce((a,b)=>a+b,0),coverage:aggregate};

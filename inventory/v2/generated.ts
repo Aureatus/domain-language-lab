@@ -7,16 +7,16 @@ import {createRequire} from 'node:module';
 import {makeDurableRuntime, makeDurableStore, initializeDurableState, durableExecute, durableApprove, durableResume, durablePending, durableState, pullOutbox, acknowledgeOutbox, closeDurableStore} from '../../adapters/effect/durable.ts';
 import {decodeJsonObject, decodeJsonValue, encodeJson, encodeJsonPretty, encodeCanonicalJson as canonical} from '../../adapters/effect/json.ts';
 import {inventoryV2Model, initialState, invocation} from './model.ts';
-import type {Grant, Value} from '../../semantic/v2/types.ts';
+import type {ApprovalReceipt, ApprovalRequest, Grant, Value} from '../../semantic/v2/types.ts';
 
 const require = createRequire(new URL('../../adapters/effect/package.json', import.meta.url));
 const Effect: typeof import('../../adapters/effect/node_modules/effect/dist/Effect.js') = await import(require.resolve('effect/Effect'));
 const run = Effect.runPromise;
 const copy = <T extends object>(x: T): T => decodeJsonValue(encodeJson(x)) as T;
 const policyId = 'reserve.warehouse-approval';
-const rng = seed => { let x = seed >>> 0; return () => { x = (x + 0x6d2b79f5) | 0; let t = Math.imul(x ^ x >>> 15, 1 | x); t ^= t + Math.imul(t ^ t >>> 7, 61 | t); return ((t ^ t >>> 14) >>> 0) / 0x100000000; }; };
-const positiveInteger = (n, name) => { if (!Number.isSafeInteger(n) || n < 1) throw new TypeError(`${name} must be a positive safe integer`); return n; };
-const validSeed = n => { if (!Number.isInteger(n) || n < 0 || n > 0xffffffff) throw new TypeError('seed must be a uint32'); return n; };
+const rng = (seed:number) => { let x = seed >>> 0; return () => { x = (x + 0x6d2b79f5) | 0; let t = Math.imul(x ^ x >>> 15, 1 | x); t ^= t + Math.imul(t ^ t >>> 7, 61 | t); return ((t ^ t >>> 14) >>> 0) / 0x100000000; }; };
+const positiveInteger = (n:number, name:string) => { if (!Number.isSafeInteger(n) || n < 1) throw new TypeError(`${name} must be a positive safe integer`); return n; };
+const validSeed = (n:number) => { if (!Number.isInteger(n) || n < 0 || n > 0xffffffff) throw new TypeError('seed must be a uint32'); return n; };
 type Execute = {api: 'execute'; command: ReturnType<typeof invocation>};
 type Approve = {api: 'approve'; command: {id: string; invocationId: string; policyId: string}; host: {authenticatedApprover: string}};
 type Resume = {api: 'resume'; command: {id: string; invocationId: string; clock: number}};
@@ -34,6 +34,9 @@ type ObservedResult = {
   status: string; code?: string;
   state?: OracleState; events?: readonly (typeof import('../../adapters/effect/json.ts').DurableEventSchema)['Type'][];
   result?: ObservedResult;
+  policyIds?: readonly string[];
+  request?: ApprovalRequest;
+  receipt?: ApprovalReceipt;
 };
 type Snapshot = Awaited<ReturnType<typeof snapshot>>;
 type Observation = {result: ObservedResult; snapshot: Snapshot};
@@ -79,7 +82,7 @@ export function generatedHistory(seed: number, steps = 30) {
   }
   const owner = () => pick(['alice', 'bob', 'carol']);
   const prefix = `s${seed.toString(16)}`, blocks: Operation[][] = []; let serial = 0;
-  const id = label => `${prefix}-${label}-${serial++}`;
+  const id = (label:string) => `${prefix}-${label}-${serial++}`;
   const action = (kind: string, reservationId: string, actor: string, clock: number, quantity = 1, expiresAt = clock + 20): Execute =>
     ({api:'execute', command:invocation(id(kind), kind, {reservationId, actor, clock, quantity, expiresAt})});
   const reserve = (label: string, actor: string, clock: number, quantity = 1, expiresAt = clock + 20) => {
@@ -199,12 +202,12 @@ function predict(o: Oracle, op: Operation): Prediction {
   return expected;
 }
 
-function checkOutcome(actual, expected: Prediction, o: Oracle, op: Operation) {
+function checkOutcome(actual:ObservedResult, expected: Prediction, o: Oracle, op: Operation):void {
   assert.equal(actual.status, expected.status, `expected ${expected.status}, received ${actual.status} for ${op.api} ${op.command.id}`);
   if (expected.code) assert.equal(actual.code, expected.code, 'rejection cause');
   if (expected.status === 'duplicate') {
     const entry = o.ledger.get(op.command.id);
-    assert.ok(entry);
+    assert.ok(entry&&actual.result);
     return checkOutcome(actual.result, expected.result, o, entry.op);
   }
   if (expected.state) assert.deepEqual(actual.state, expected.state, 'returned domain state');
@@ -213,12 +216,13 @@ function checkOutcome(actual, expected: Prediction, o: Oracle, op: Operation) {
     checkRequest(actual.request, o.pending[op.command.id]);
   }
   if (expected.status === 'approved') {
-    assert.ok(op.api === 'approve');
+    assert.ok(op.api === 'approve'&&actual.receipt);
     assert.equal(actual.receipt.policyId, policyId); assert.equal(actual.receipt.approver, 'warehouse');
     checkRequest(actual.receipt.request, o.pending[op.command.invocationId]);
   }
 }
-function checkRequest(actual, p) {
+function checkRequest(actual:ApprovalRequest|undefined,p:Pending|undefined) {
+  assert.ok(actual&&p);
   assert.equal(actual.format, 'semantic-approval-request/v2');
   assert.deepEqual(actual.model, inventoryV2Model, 'request model binding');
   assert.deepEqual(actual.invocation, p.invocation); assert.deepEqual(actual.prestate, p.prestate);
@@ -229,16 +233,19 @@ function checkEvents(events: NonNullable<ObservedResult['events']>, before: Orac
   // returned by the interpreter. Routing contents are additionally covered by replay.
   const changes: {kind: string; resource: string; key: string; field?: string; before?: unknown; after?: unknown}[] = [];
   for (const resource of ['stock', 'reservation'] as const) {
-    const a = before.records[resource], b = after.records[resource];
+    const collections=(s:OracleState):Readonly<Record<string,{values:Readonly<Record<string,Value>>}>>=>s.records[resource];
+    const a=collections(before),b=collections(after);
     for (const key of new Set([...Object.keys(a), ...Object.keys(b)])) {
-      if (!a[key]) changes.push({kind:'create', resource, key, after:b[key]});
-      else if (!b[key]) changes.push({kind:'delete', resource, key, before:a[key]});
-      else for (const field of Object.keys(a[key].values)) if (canonical(a[key].values[field]) !== canonical(b[key].values[field])) changes.push({kind:'change', resource, key, field, before:a[key].values[field], after:b[key].values[field]});
+      const prior=a[key],next=b[key];
+      if (!prior) changes.push({kind:'create', resource, key, after:next});
+      else if (!next) changes.push({kind:'delete', resource, key, before:prior});
+      else for (const field of Object.keys(prior.values)) if (canonical(prior.values[field]) !== canonical(next.values[field])) changes.push({kind:'change', resource, key, field, before:prior.values[field], after:next.values[field]});
     }
   }
   assert.equal(events.length, changes.length + 1, 'one action and exactly the predicted record changes');
   assert.equal(events[0]?.['kind'], 'action');
-  const projection = e => Object.fromEntries(['kind', 'resource', 'key', 'field', 'before', 'after'].filter(k => Object.hasOwn(e, k)).map(k => [k, e[k]]));
+  const fields=new Set(['kind','resource','key','field','before','after']);
+  const projection=(e:NonNullable<ObservedResult['events']>[number])=>Object.fromEntries(Object.entries(e).filter(([key])=>fields.has(key)));
   assert.deepEqual(events.slice(1).map(projection).sort((a,b) => canonical(a).localeCompare(canonical(b))), changes.sort((a,b) => canonical(a).localeCompare(canonical(b))));
   for (const event of events) {
     assert.equal(event['invocationId'], inv.id); assert.equal(event['actionId'], inv.action); assert.equal(event['actor'], inv.actor); assert.equal(event['clock'], inv.clock); assert.equal(event['revision'], after.revision);

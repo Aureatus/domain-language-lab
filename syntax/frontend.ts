@@ -233,7 +233,7 @@ export function parseSource(source: string,{filename='<source>',allowMissingAppl
     block(()=>row());closeSpan(id);nl();
   }
   function presentation(){
-    const loading=target=>{expect('loading');if(!loadingModes.some(is))fail(`Expected loading mode: ${loadingModes.join(', ')}.`);unique(target,'loading',take().value);nl();};
+    const loading=(target:object)=>{expect('loading');if(!loadingModes.some(is))fail(`Expected loading mode: ${loadingModes.join(', ')}.`);unique(target,'loading',take().value);nl();};
     const t=expect('application');if(application)fail('Duplicate application.',t);
     const config:Application={version:'model-application/v1',actors:[],actions:{},views:[]};application=config;const actorIds=new Set();
     block(()=>{

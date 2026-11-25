@@ -12,7 +12,7 @@ type Report = {format:string;status:'tool_error'|'not_checked'|'proof_checked'|'
   theorem_axioms:Record<string,string[]>;tool:{executable:string;version:string|null};scope:string;
   metadata?:ReturnType<typeof generate>['metadata'];generator_sha256?:string;template_sha256?:string;
   runner_sha256?:string;semantic_core_sha256?:string;detail?:string};
-export function check(source, law, directory, lean = process.env['LEAN'] || PINNED_LEAN) {
+export function check(source:unknown, law:unknown, directory:string, lean = process.env['LEAN'] || PINNED_LEAN) {
   mkdirSync(directory, {recursive: true});
   const report: Report = {format: 'generated-lean-evidence/1', status: 'tool_error', theorem_axioms: {}, tool: {executable: lean, version: null}, scope: 'Generated numeric kernel only; no runtime correspondence or full-action theorem.'};
   let log = '';

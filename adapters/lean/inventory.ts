@@ -87,7 +87,7 @@ export function generateInventory(source: Model = inventoryModel, law = obligati
   return {...generate(projected.model, law), inventory: projected.metadata};
 }
 
-export function checkInventory(directory, source: Model = inventoryModel, law = obligation) {
+export function checkInventory(directory:string, source: Model = inventoryModel, law = obligation) {
   const {model, metadata} = projectInventory(source);
   mkdirSync(directory, {recursive: true});
   const report = {...check(model, law, directory), inventory: metadata,
