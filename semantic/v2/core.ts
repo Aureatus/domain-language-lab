@@ -1,6 +1,6 @@
 /** semantic-core/v2. Explicit independent lifecycle profile; v1 is unchanged. */
 import {errorMessage} from '../../errors.ts';
-import {jsonSnapshot} from '../core.ts';
+import {jsonSnapshot,ownValue} from '../core.ts';
 import type {Event, Interpreter, Model, State} from './types.ts';
 export type * from './types.ts';
 type Patch<K extends 'change'|'create'|'delete'> = Omit<Extract<Event,{kind:K}>,'kind'|'id'|'modelId'|'actionId'|'invocationId'|'actor'|'clock'|'revision'|'recipients'>;
@@ -8,7 +8,7 @@ export {jsonSnapshot};
 const own = (o, k) => Object.hasOwn(o, k);
 const obj = x => x !== null && typeof x === 'object' && !Array.isArray(x);
 const fail = (code, message) => { throw Object.assign(new Error(message), {code}); };
-const assert = (p, message, code = 'invalid') => { if (!p) fail(code, message); };
+function assert(p:unknown,message:string|undefined,code='invalid'):asserts p { if(!p)fail(code,message); }
 const safeKey = k => typeof k === 'string' && /^[A-Za-z][A-Za-z0-9_.:-]*$/.test(k) && !['constructor', 'prototype', '__proto__'].includes(k);
 const keys = (x, names) => assert(obj(x) && Object.keys(x).length === names.length && names.every(k => own(x, k)), `Expected exactly ${names.join(', ')}`);
 const canonical = x => Array.isArray(x) ? `[${x.map(canonical).join(',')}]` : obj(x)
@@ -44,7 +44,8 @@ export function validateModel(source: unknown): Model {
   for (const [rid, r] of Object.entries(m.resources)) { id(rid); keys(r, ['fields']); fields(r.fields); }
   for (const r of m.relationships) {
     keys(r, ['id', 'resource', 'field']); id(r.id);
-    assert(own(m.resources, r.resource) && ['string', 'ids'].includes(m.resources[r.resource].fields[r.field]?.type), 'Invalid relationship');
+    const spec=ownValue(ownValue(m.resources,r.resource)?.fields,r.field);
+    assert(spec&&(spec.type==='string'||spec.type==='ids'),'Invalid relationship');
     relationships.set(r.id, r);
   }
   for (const [aid, a] of Object.entries(m.actions)) {
@@ -54,9 +55,9 @@ export function validateModel(source: unknown): Model {
     function type(e, allowFields = true) {
       assert(obj(e) && typeof e.op === 'string', 'Invalid expression');
       if (e.op === 'literal') { keys(e, ['op', 'value']); const t = typeof e.value; assert(['string', 'number', 'boolean'].includes(t), 'Unsupported literal'); return t === 'number' ? 'integer' : t; }
-      if (e.op === 'input') { keys(e, ['op', 'name']); assert(own(a.inputs, e.name), 'Unknown input'); return a.inputs[e.name].type; }
+      if (e.op === 'input') { keys(e, ['op', 'name']); const spec=ownValue(a.inputs,e.name);assert(spec,'Unknown input');return spec.type; }
       if (e.op === 'actor' || e.op === 'clock') { keys(e, ['op']); return e.op === 'actor' ? 'string' : 'integer'; }
-      if (e.op === 'field') { keys(e, ['op', 'binding', 'field']); const r = bindings.get(e.binding); assert(allowFields && r && own(m.resources[r].fields, e.field), 'Unknown field binding'); return m.resources[r].fields[e.field].type; }
+      if (e.op === 'field') { keys(e, ['op', 'binding', 'field']); const spec=ownValue(ownValue(m.resources,bindings.get(e.binding))?.fields,e.field);assert(allowFields&&spec,'Unknown field binding');return spec.type; }
       if (e.op === 'not') { keys(e, ['op', 'value']); assert(type(e.value, allowFields) === 'boolean', 'Unary type mismatch'); return 'boolean'; }
       keys(e, ['op', 'left', 'right']);
       if (e.op === 'eq') { const t = type(e.left, allowFields); assert(t !== 'ids' && t === type(e.right, allowFields), 'Equality type mismatch'); return 'boolean'; }
@@ -80,13 +81,15 @@ export function validateModel(source: unknown): Model {
     }
     for (const u of a.updates) {
       keys(u, ['id', 'target', 'field', 'value']); id(u.id);
-      const r = bindings.get(u.target); assert(r && own(m.resources[r].fields, u.field) && type(u.value) === m.resources[r].fields[u.field].type, 'Update type mismatch');
+      const spec=ownValue(ownValue(m.resources,bindings.get(u.target))?.fields,u.field);
+      assert(spec&&type(u.value)===spec.type,'Update type mismatch');
     }
     for (const i of a.inserts) {
       keys(i, ['id', 'resource', 'key', 'values']); id(i.id);
-      assert(own(m.resources, i.resource) && type(i.key, false) === 'string', 'Invalid insert');
-      keys(i.values, Object.keys(m.resources[i.resource].fields));
-      for (const [f, s] of Object.entries(m.resources[i.resource].fields)) assert(type(i.values[f]) === s.type, 'Insert type mismatch');
+      const resource=ownValue(m.resources,i.resource);
+      assert(resource&&type(i.key,false)==='string','Invalid insert');
+      keys(i.values,Object.keys(resource.fields));
+      for (const [f,s] of Object.entries(resource.fields)) assert(type(i.values[f])===s.type,'Insert type mismatch');
       observable.set(i.id, i.resource);
     }
     for (const d of a.deletes) { keys(d, ['id', 'target']); id(d.id); assert(bindings.has(d.target), 'Unknown delete binding'); }
@@ -99,8 +102,9 @@ function checkState(model: Model, source: unknown): State {
   keys(s, ['revision', 'records']); assert(Number.isSafeInteger(s.revision) && s.revision >= 0, 'Invalid revision');
   keys(s.records, Object.keys(model.resources));
   for (const [rid, r] of Object.entries(model.resources)) {
-    assert(obj(s.records[rid]), 'Invalid resource collection');
-    for (const record of Object.values(s.records[rid])) {
+    const collection=ownValue(s.records,rid);
+    assert(collection&&obj(collection),'Invalid resource collection');
+    for (const record of Object.values(collection)) {
       keys(record, ['version', 'values']); assert(Number.isSafeInteger(record.version) && record.version >= 0, 'Invalid record version');
       keys(record.values, Object.keys(r.fields));
       for (const [f, spec] of Object.entries(r.fields)) value(spec, record.values[f]);
@@ -139,14 +143,15 @@ export function createInterpreter(source: unknown): Readonly<Interpreter> {
     const before = checkState(model, state), inv = jsonSnapshot(invocation);
     keys(inv, ['id', 'action', 'args', 'actor', 'clock']);
     assert(safeKey(inv.id) && safeKey(inv.actor) && Number.isSafeInteger(inv.clock) && inv.clock >= 0, 'Invalid invocation');
-    assert(own(model.actions, inv.action), 'Unknown action');
-    const a = model.actions[inv.action]; keys(inv.args, Object.keys(a.inputs));
+    const a=ownValue(model.actions,inv.action);
+    assert(a,'Unknown action');keys(inv.args,Object.keys(a.inputs));
     for (const [k, s] of Object.entries(a.inputs)) value(s, inv.args[k]);
     const bound = new Map(), ctx = {inv, bound};
     for (const b of a.bindings) {
       const key = evaluate(b.key, ctx); assert(safeKey(key), 'Invalid record key');
-      assert(own(before.records[b.resource], key), 'Missing bound record', 'missing-record');
-      bound.set(b.id, {resource: b.resource, key, record: before.records[b.resource][key]});
+      const record=ownValue(ownValue(before.records,b.resource),key);
+      assert(record,'Missing bound record','missing-record');
+      bound.set(b.id,{resource:b.resource,key,record});
     }
     const matches = a.policies.filter(p => evaluate(p.when, ctx));
     assert(!matches.some(p => p.effect === 'deny') && matches.some(p => p.effect === 'allow' || p.effect === 'approval-required'), 'Policy denied', 'denied');
@@ -176,7 +181,9 @@ export function createInterpreter(source: unknown): Readonly<Interpreter> {
     for (const u of a.updates) {
       const b = bound.get(u.target), field = canonical([b.resource, b.key, u.field]);
       assert(!fieldsWritten.has(field), 'Aliased grouped field write', 'conflicting-update'); fieldsWritten.add(field); recordsUpdated.add(address(b));
-      const next = evaluate(u.value, ctx); value(model.resources[b.resource].fields[u.field], next);
+      const spec=ownValue(ownValue(model.resources,b.resource)?.fields,u.field);
+      assert(spec,'Unknown update field');
+      const next = evaluate(u.value, ctx);value(spec,next);
       patches.push({semanticId: u.id, resource: b.resource, key: b.key, field: u.field, before: b.record.values[u.field], after: next});
     }
     for (const d of a.deletes) {
@@ -188,9 +195,15 @@ export function createInterpreter(source: unknown): Readonly<Interpreter> {
       const key = evaluate(i.key, ctx), b = {resource: i.resource, key}, addr = address(b);
       assert(safeKey(key), 'Invalid insert key');
       assert(!exclusive.has(addr) && !recordsUpdated.has(addr), 'Conflicting record insertion', 'conflicting-update'); exclusive.add(addr);
-      assert(!own(before.records[i.resource], key), 'Insert target exists', 'existing-record');
+      const resource=ownValue(model.resources,i.resource),collection=ownValue(before.records,i.resource);
+      assert(resource&&collection,'Unknown insert resource');
+      assert(!own(collection,key),'Insert target exists','existing-record');
       const values = {};
-      for (const [f, e] of Object.entries(i.values)) { values[f] = evaluate(e, ctx); value(model.resources[i.resource].fields[f], values[f]); }
+      for (const [f,e] of Object.entries(i.values)) {
+        const spec=ownValue(resource.fields,f);
+        assert(spec,'Unknown insert field');
+        values[f]=evaluate(e,ctx);value(spec,values[f]);
+      }
       const record = {version: 0, values}; inserts.push({semanticId: i.id, ...b, after: record});
       // Observation only: expressions cannot reference inserted records.
       bound.set(i.id, {...b, record});
@@ -207,8 +220,7 @@ export function createInterpreter(source: unknown): Readonly<Interpreter> {
     for (const o of a.observe) {
       const b = bound.get(o.binding), r = relations.get(o.relationship)!;
       // Deleted observations deliberately retain prestate recipients. Others use poststate.
-      const collection = nextState.records[b.resource];
-      const record = own(collection, b.key) ? collection[b.key] : b.record, raw = record.values[r.field];
+      const record=ownValue(ownValue(nextState.records,b.resource),b.key)??b.record,raw=record.values[r.field];
       for (const recipient of Array.isArray(raw) ? raw : [raw]) {
         assert(safeKey(recipient), 'Invalid relationship recipient', 'routing');
         if (recipient === inv.actor) continue;

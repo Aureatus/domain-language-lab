@@ -43,20 +43,21 @@ export function tokenize(source: string, filename='<source>') {
   const out:Token[]=[];let i=0,line=1,column=1;
   const push=(token:Pick<Token,'start'|'line'|'column'> & ({kind:'number';value:number}|{kind:Exclude<Token['kind'],'number'>;value:string}))=>out.push({...token,end:i});
   while(i<source.length){
-    const start=i,l=line,c=column,ch=source[i];
+    const start=i,l=line,c=column,ch=source.charAt(i);
     if(ch===' '||ch==='\t'||ch==='\r'){i++;column++;continue;}
     if(ch==='#'){while(i<source.length&&source[i]!=='\n'){i++;column++;}continue;}
     if(ch==='\n'){i++;push({kind:'newline',value:'\n',start,line:l,column:c});line++;column=1;continue;}
     if(ch==='"'){
       i++;column++;let value='',closed=false;
       while(i<source.length&&source[i]!=='\n'){
-        let v=source[i++];column++;
+        let v=source.charAt(i++);column++;
         if(v==='"'){closed=true;break;}
         if(v==='\\'){
-          const escape=source[i++];column++;
+          const escape=source.charAt(i++);column++;
           const escapes:Record<string,string>={'n':'\n','r':'\r','t':'\t','"':'"','\\':'\\'};
-          if(!Object.hasOwn(escapes,escape))throw new SourceError(filename,{line:l,column:c},'Unsupported string escape.');
-          v=escapes[escape];
+          const escaped=escapes[escape];
+          if(escaped===undefined)throw new SourceError(filename,{line:l,column:c},'Unsupported string escape.');
+          v=escaped;
         }
         value+=v;
       }
@@ -78,7 +79,7 @@ export function tokenize(source: string, filename='<source>') {
 export function parseSource(source:string,options?:{filename?:string;allowMissingApplication?:false}):Parsed<Application>;
 export function parseSource(source:string,options:{filename?:string;allowMissingApplication:boolean}):Parsed;
 export function parseSource(source: string,{filename='<source>',allowMissingApplication=false}={}):Parsed {
-  const tokens=tokenize(source,filename);let pos=0,last=tokens[0];
+  const tokens=tokenize(source,filename);let pos=0,last=peek();
   const sourceMap:Parsed['sourceMap']=Object.create(null);
   const inputLocations:Record<string,Record<string,Point>>=Object.create(null),ids=new Set<string>(),bindings=new Map<string,Binding>();
   const sections:Section[]=[];
@@ -87,9 +88,13 @@ export function parseSource(source: string,{filename='<source>',allowMissingAppl
   const initialState:Mutable<State>={revision:0,records:{}};
   let application:Application|undefined,identity:string;
   const selectors=new Map<string,Candidate>(),references=new Map<string,Candidate[]>(),bindingOrigins:BindingOrigin[]=[];
-  const peek=()=>tokens[pos];
+  function peek(offset=0):Token{
+    const token=tokens[pos+offset];
+    if(!token)throw new SourceError(filename,tokens.at(-1)??{line:1,column:1},'Unexpected end of source.');
+    return token;
+  }
   const is=(v:string)=>peek().value===v&&peek().kind!=='string';
-  const take=()=>last=tokens[pos++];
+  const take=()=>{last=peek();pos++;return last;};
   function fail(message:string,t=peek()):never{throw new SourceError(filename,t,message);}
   const expect=(v:string)=>{if(!is(v))fail(`Expected '${v}', found ${JSON.stringify(peek().value)}.`);return take();};
   const accept=(v:string)=>is(v)?take():null;
@@ -103,13 +108,19 @@ export function parseSource(source: string,{filename='<source>',allowMissingAppl
     sourceMap[id]={filename,start:{offset:start.start,line:start.line,column:start.column},end:{offset:last.end,line:last.line,column:last.column+last.end-last.start}};
     return id;
   };
+  const closeSpan=(id:string)=>{
+    const span=sourceMap[id];
+    if(!span)fail(`Missing source span for '${id}'.`,last);
+    span.end={offset:last.end,line:last.line,column:last.column+3};
+  };
   const annotation=()=>{expect('id');return name();};
   function binding(alias:string,t:Token){
     const existing=bindings.get(alias);if(existing)return existing;
     const selector=selectors.get(alias);
     const candidates=[...(references.get(alias)??[]),...(selector?[selector]:[])];
-    if(candidates.length!==1)fail(`${candidates.length?'Ambiguous':'Unknown'} reference '${alias}'.`,t);
-    const candidate=candidates[0],id=`${identity}.${alias}`;
+    const [candidate]=candidates;
+    if(!candidate||candidates.length!==1)fail(`${candidates.length?'Ambiguous':'Unknown'} reference '${alias}'.`,t);
+    const id=`${identity}.${alias}`;
     mark(id,candidate.token);const b={id,resource:candidate.resource};bindings.set(alias,b);
     bindingOrigins.push({id,alias,identity,resource:b.resource,kind:candidate.key.op==='input'?'typed-reference':'singleton-selector',key:structuredClone(candidate.key)});
     currentAction.bindings.push({...b,key:candidate.key});return b;
@@ -119,7 +130,7 @@ export function parseSource(source: string,{filename='<source>',allowMissingAppl
   function schema(allowReference=false):Mutable<Model>['resources'][string]['fields'][string]{
     if(accept('like')){
       const resource=name();expect('.');const field=name();
-      const fields=Object.hasOwn(domain.resources,resource)?domain.resources[resource].fields:{};
+      const fields=Object.hasOwn(domain.resources,resource)?domain.resources[resource]?.fields??{}:{};
       const original=Object.hasOwn(fields,field)?fields[field]:undefined;
       if(!original)fail(`Unknown schema source '${resource}.${field}'.`,last);
       return structuredClone(original);
@@ -170,8 +181,11 @@ export function parseSource(source: string,{filename='<source>',allowMissingAppl
       else if(Object.hasOwn(inputs,n))left={op:'input',name:n};
       else fail(`Unknown expression name '${n}'.`,t);
     }
-    while(peek().kind!=='string'&&Object.hasOwn(operators,peek().value)&&operators[peek().value][0]>=min){
-      const [precedence,op]=operators[take().value],right=expression(precedence+1);
+    for(let token=peek();token.kind!=='string';token=peek()){
+      const operator=Object.hasOwn(operators,token.value)?operators[token.value]:undefined;
+      if(!operator||operator[0]<min)break;
+      take();
+      const [precedence,op]=operator,right=expression(precedence+1);
       // v2 has le/lt/eq/not, not ge/gt/neq. Canonicalize surface operators.
       left=op==='ge'?{op:'le',left:right,right:left}:op==='gt'?{op:'lt',left:right,right:left}:op==='neq'?{op:'not',value:{op:'eq',left,right}}:{op,left,right};
     }
@@ -182,12 +196,13 @@ export function parseSource(source: string,{filename='<source>',allowMissingAppl
     const start=expect('action'),id=name();mark(id,start);
     const a=unique<MutableAction>(domain.actions,id,{inputs:{},bindings:[],preconditions:[],policies:[],updates:[],inserts:[],deletes:[],observe:[]});
     currentAction=a;identity=accept('identity')?name():id;
-    inputs=a.inputs;inputLocations[id]=Object.create(null);bindings.clear();references.clear();const observed=new Map<string,string>();let sawUpdate=false;
+    const locations:Record<string,Point>=Object.create(null);
+    inputs=a.inputs;inputLocations[id]=locations;bindings.clear();references.clear();const observed=new Map<string,string>();let sawUpdate=false;
     function row(group?:string|number){
       const t=peek();
       if(group==='changes'&&!is('update')&&!is('create'))fail('Expected update or create in changes.');
       if(group==='policies'&&!['allow','deny','approve'].some(is))fail('Expected allow, deny or approve in policies.');
-      if(group==='inputs'||(!group&&accept('input'))){const nt=peek(),n=name();currentInput=n;unique(inputs,n,schema(true));inputLocations[id][n]={line:nt.line,column:nt.column};nl();}
+      if(group==='inputs'||(!group&&accept('input'))){const nt=peek(),n=name();currentInput=n;unique(inputs,n,schema(true));locations[n]={line:nt.line,column:nt.column};nl();}
       else if(group==='bindings'||(!group&&accept('bind'))){
         const alias=name();expect('from');const resource=name();expect('key');const key=expression();const bid=is('id')?annotation():`${id}.${alias}`;
         if(observed.has(alias)||bindings.has(alias)||references.has(alias)||selectors.has(alias))fail(`Duplicate binding alias '${alias}'.`,t);
@@ -215,7 +230,7 @@ export function parseSource(source: string,{filename='<source>',allowMissingAppl
         const group=take().value;block(()=>row(group));nl();
       } else fail('Expected input, bind, require, policy, approve, update, create or observe.');
     }
-    block(()=>row());sourceMap[id].end={offset:last.end,line:last.line,column:last.column+3};nl();
+    block(()=>row());closeSpan(id);nl();
   }
   function presentation(){
     const loading=target=>{expect('loading');if(!loadingModes.some(is))fail(`Expected loading mode: ${loadingModes.join(', ')}.`);unique(target,'loading',take().value);nl();};
@@ -257,12 +272,12 @@ export function parseSource(source: string,{filename='<source>',allowMissingAppl
   sections.push({kind:'domain',name:domain.id,line:root.line});
   while(peek().kind!=='eof'){
     const t=peek();
-    const section={kind:t.value,name:typeof t.value==='string'&&['resource','relationship','action'].includes(t.value)?tokens[pos+1].value:t.value,line:t.line};
+    const section={kind:t.value,name:typeof t.value==='string'&&['resource','relationship','action'].includes(t.value)?peek(1).value:t.value,line:t.line};
     if(accept('resource')){
       const id=name(),r=unique(domain.resources,id,{fields:{}});mark(id,t);initialState.records[id]={};
       if(accept('singleton')){expect('key');const key=text();selectors.set(id,{resource:id,key:{op:'literal',value:key},token:t});}
       const field=()=>{const f=name();unique(r.fields,f,schema());nl();};
-      block(()=>{if(accept('fields')){block(field);nl();}else{expect('field');field();}});sourceMap[id].end={offset:last.end,line:last.line,column:last.column+3};nl();
+      block(()=>{if(accept('fields')){block(field);nl();}else{expect('field');field();}});closeSpan(id);nl();
     } else if(accept('relationships')){
       block(()=>{const start=peek(),resource=name();expect('.');const field=name(),id=is('id')?annotation():`${resource}.${field}`;mark(id,start);domain.relationships.push({id,resource,field});nl();});nl();
     } else if(accept('relationship')){
@@ -270,8 +285,9 @@ export function parseSource(source: string,{filename='<source>',allowMissingAppl
     } else if(is('action'))action();
     else if(accept('initial')){
       if(Object.hasOwn(sourceMap,'$initial'))fail('Duplicate initial block.',t);expect('revision');initialState.revision=number();
-      block(()=>{expect('records');const resource=name();if(!Object.hasOwn(domain.resources,resource))fail(`Unknown resource '${resource}'.`);
-        const records=initialState.records[resource];if(Object.hasOwn(sourceMap,`$records.${resource}`))fail(`Duplicate records '${resource}'.`);mark(`$records.${resource}`,last);
+      block(()=>{expect('records');const resource=name(),records=Object.hasOwn(initialState.records,resource)?initialState.records[resource]:undefined;
+        if(!records)fail(`Unknown resource '${resource}'.`);
+        if(Object.hasOwn(sourceMap,`$records.${resource}`))fail(`Duplicate records '${resource}'.`);mark(`$records.${resource}`,last);
         block(()=>{const rt=expect('record'),key=name();expect('version');const version=number(),values={};block(()=>{const f=name();expect('=');unique(values,f,scalar());nl();});unique(records,key,{version,values});mark(`$record.${resource}.${key}`,rt);nl();});nl();
       });mark('$initial',t);nl();
     } else if(is('application'))presentation();
