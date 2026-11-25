@@ -29,23 +29,70 @@ Pinned SDK and read depth: [research memo](research/exact.md).
   This is not a rich workspace renderer, offline writer, authentication layer or
   mobile-web replacement for a native build.
 
-## Reproduce without root-package edits
+## Chromium/Exact conformance
+
+This is separate from the [bounded checker and offline replay](check-interactions.md).
+Use the same Node/npm and run `npm run adapters:install` in this repository.
+Install [Bun 1.4.2](https://github.com/oven-sh/bun/releases/tag/bun-v1.4.2),
+[rustup](https://rustup.rs/) and a Linux C toolchain (e.g. `build-essential` on
+Ubuntu). On Linux x86-64, use glibc 2.36 or newer (e.g. Ubuntu 24.04);
+the pinned Hermes compiler does not start on Ubuntu 22.04's glibc 2.35.
+Exact's setup uses its locked dependencies, including Rust 1.97.0, web Rust
+nightly-2026-08-21, wasm-bindgen 0.2.127, Binaryen 132, the Hermes
+`hermes-vanilla-d412d3bd8512-v6` host bundle and Playwright Core 1.64.1 with
+its matching Chromium.
+Keep the Exact checkout and template outside this repository.
+
+```sh
+tools_dir=$(mktemp -d "$HOME/maya-exact.XXXXXX")
+export EXACT_ROOT="$tools_dir/exact"
+export EXACT_TEMPLATE="$tools_dir/template"
+export BUN="$(command -v bun)" # Or the absolute path to the Bun 1.4.2 binary.
+export EXACT_FEEDBACK=0
+"$BUN" --version
+git clone https://github.com/expo/exact "$EXACT_ROOT"
+git -C "$EXACT_ROOT" checkout --detach d8863f736172954b605c3bff22f51337c6983170
+"$BUN" "$EXACT_ROOT/scripts/exact.mjs" setup
+"$BUN" "$EXACT_ROOT/scripts/exact.mjs" setup --check --platform web
+node "$EXACT_ROOT/node_modules/playwright-core/cli.js" install chromium
+"$BUN" "$EXACT_ROOT/scripts/exact.mjs" new "$EXACT_TEMPLATE" \
+  --name Derived --bundle-id research.derived.exact
+
+npm run application:review:test
+# Or replay the lost-then-snapshot prefix using the trace from check-interactions.md:
+# npm run application:review:test -- "$trace"
+```
+
+If Chromium reports missing Linux libraries, install them using the same
+Playwright CLI's `install-deps chromium` command (requires system package
+access). The conformance runner loads Playwright from `EXACT_ROOT`, copies
+only the template launcher and package manifest, and builds in a fresh OS
+temporary directory. It does not need a prebuilt app or any Android or iOS build.
+
+On an older Linux host, you can run this setup in an Ubuntu 24.04 container
+(e.g. `docker run --rm -it --shm-size=1g ubuntu:24.04 bash`). Inside a fresh
+container, install `build-essential ca-certificates curl git pkg-config xz-utils`
+with apt, then install Node, Bun, and rustup and use a fresh clone. Replace
+`install chromium` above with `install --with-deps chromium` to install
+Chromium and its system libraries together.
+
+## Standalone gateway and optional native demo
+
+Reuse the pinned Exact checkout and Bun above. Set the same `tools_dir` in
+both terminals. Run the gateway from the repository root with a fresh data
+directory outside this repository.
 
 ```sh
 # Shared backend in fresh isolated data; gateway serves compiled web at its origin.
-node adapters/exact/serve.mjs leave/model.mjs /tmp/opencode/exact-generated/dist \
-  4186 /tmp/opencode/exact-my-fresh-data
+node adapters/exact/serve.mjs leave/model.mjs "$tools_dir/android-demo/dist" \
+  4186 "$tools_dir/android-data"
 
-# Another terminal: pin Exact and install its declared tools once.
-git clone https://github.com/expo/exact /tmp/opencode/exact-source
-git -C /tmp/opencode/exact-source checkout d8863f736172954b605c3bff22f51337c6983170
-export EXACT_FEEDBACK=0
-export BUN=/tmp/opencode/exact-bun/bun-linux-x64/bun # Bun 1.4.2
-"$BUN" /tmp/opencode/exact-source/scripts/exact.mjs setup
-"$BUN" /tmp/opencode/exact-source/scripts/exact.mjs new \
-  /tmp/opencode/exact-generated --name Derived --bundle-id research.derived.exact --with android
-node adapters/exact/generate.mjs http://127.0.0.1:4186 /tmp/opencode/exact-generated
-cd /tmp/opencode/exact-generated
+# In another terminal, from the repository root:
+export EXACT="$EXACT_ROOT" # The generated launcher's checkout override.
+"$BUN" "$EXACT_ROOT/scripts/exact.mjs" new "$tools_dir/android-demo" \
+  --name Derived --bundle-id research.derived.exact --with android
+node adapters/exact/generate.mjs http://127.0.0.1:4186 "$tools_dir/android-demo"
+cd "$tools_dir/android-demo"
 "$BUN" exact.mjs contract build app.contract --json --errors-only
 "$BUN" exact.mjs web-build --out dist
 ```
@@ -54,20 +101,64 @@ Web is served at `http://127.0.0.1:4186`, **not** a separate-origin Exact dev
 server. The scoped adapter gateway forwards to an ephemeral shared backend.
 Do not weaken global origin checks to make a cross-origin web loop work.
 
-Android build/install only (never upstream `--run`, `agent android`, or
-`verify android`, which drive the device outside the permitted device tools):
+### Android
+
+Install a JDK (17 or newer) and the Android SDK command-line tools. Set
+`ANDROID_HOME` to your SDK and, if necessary, `JAVA_HOME` to your JDK.
+The APK is arm64-only: use an arm64 device or an emulator image that lists
+`arm64-v8a` in `adb shell getprop ro.product.cpu.abilist`.
 
 ```sh
-export ANDROID_SERIAL=emulator-5554
-"$BUN" exact.mjs android
-adb -s emulator-5554 reverse tcp:4186 tcp:4186
+sdkmanager "platform-tools" "platforms;android-37.2" "build-tools;37.0.0" "ndk;27.1.12297006"
+export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/27.1.12297006"
+"$BUN" "$EXACT_ROOT/scripts/exact.mjs" setup
+"$BUN" "$EXACT_ROOT/scripts/exact.mjs" setup --check --platform android
 ```
+
+Exact setup needs to see the Android SDK to install the pinned Rust Android
+target and Hermes bundle. From `"$tools_dir/android-demo"`, build and install
+without using upstream `--run`, `agent android` or `verify android`:
+
+```sh
+export ANDROID_SERIAL=emulator-5554 # Set this to the serial from adb devices.
+"$BUN" exact.mjs android
+adb -s "$ANDROID_SERIAL" reverse tcp:4186 tcp:4186
+```
+
+If building in a container separate from the emulator, use
+`"$BUN" exact.mjs android --no-install --json` and install its reported APK
+with `adb -s "$ANDROID_SERIAL" install "$apk"` on the emulator host.
 
 Open `hostId=local`, `deviceId=emulator-5554` with the device tool; use only its
 returned bound `agent-device` command for app launches, taps, typing and captures.
-Package: `research.derived.exact`. iOS execution requires a usable macOS simulator;
-none was available locally for this task. No remote publication or feedback was
+Package: `research.derived.exact`. No remote publication or feedback was
 authorized or performed.
+
+### iOS Simulator
+
+The pinned Exact Swift host needs **Xcode 27.1 or later** with the iOS Simulator
+27.1+ SDK. A bootable simulator alone does not meet the build requirement. Set
+`DEVELOPER_DIR` if the supported Xcode is not selected. Use the pinned checkout
+and Bun above. Start the loopback gateway as shown above, replacing the
+Android paths with `"$tools_dir/ios-demo/dist"` and `"$tools_dir/ios-data"`.
+
+```sh
+export EXACT="$EXACT_ROOT"
+"$BUN" "$EXACT_ROOT/scripts/exact.mjs" setup --check --platform ios
+"$BUN" "$EXACT_ROOT/scripts/exact.mjs" new "$tools_dir/ios-demo" \
+  --name Derived --bundle-id research.derived.exact --with ios
+node adapters/exact/generate.mjs http://127.0.0.1:4186 "$tools_dir/ios-demo"
+cd "$tools_dir/ios-demo"
+"$BUN" exact.mjs ios --no-install
+# With a usable iOS Simulator, build and launch:
+# "$BUN" exact.mjs ios --run
+```
+
+Exact supports `"$BUN" exact.mjs verify ios --json`, but its scaffold tests
+do not exercise this app.
+The adapter's approval and lost-then-snapshot renderer replay tests are Chromium
+tests; a build or scaffold verification is not evidence that either scenario
+passed on iOS.
 
 Mapping tests:
 
@@ -86,6 +177,18 @@ instead of `leave/model.mjs`. Its declared input bindings/defaults/views then
 drive the generated client; the adapter does not supply leave-specific metadata.
 
 ## Executed evidence
+
+### Portability follow-up (2026-11-24)
+
+- **Android:** The pinned Exact build produced an arm64 APK on Ubuntu 24.04.
+  Maven Central returned HTTP 429 on the first attempt; retrying with its Google
+  mirror for Maven Central dependencies succeeded without changing dependency
+  versions. The APK installed as `research.derived.exact` on an Android 14
+  emulator, and ADB reverse was configured for the isolated gateway. The bound
+  device tool was unavailable, so native interaction and visual checks were not rerun.
+- **iOS:** On macOS, Exact refused to compile or run simulator verification
+  with Xcode 27.0 RC and Simulator SDK 27.0. An installed simulator did not
+  satisfy the SDK 27.1 requirement.
 
 ### Background refresh layout check (2026-11-21)
 

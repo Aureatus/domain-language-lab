@@ -6,7 +6,7 @@ A research and design repository for an Ash-inspired domain language with Effect
 
 ## Start here
 
-**Fresh clone:** use Node 22.18+ with npm. Run `npm run adapters:install` to install the locked Effect dependencies, then `npm run check:interactions -- leave/browser.domain leave.request --actor maya`. The browser conformance commands currently need separately provisioned Chromium and pinned Exact tooling. `artifacts/` is local generated output; the historical media and report links below are not part of the public source checkout.
+**Fresh clone:** use Node 22.18+ with npm (CI pins Node 24.22.3). Run `npm run adapters:install` to install the locked Effect dependencies, then `npm run check:interactions -- leave/browser.domain leave.request --actor maya`. The checker and offline replay need no browser or native builds. See [Chromium/Exact setup](docs/exact-adapter.md#chromiumexact-conformance) for separate renderer conformance. `artifacts/` is local generated output; the historical media and report links below are not part of the public source checkout.
 
 - **[Check interactions](docs/check-interactions.md):** explore alternative orders of snapshot delivery, reconciliation, refresh and viewer switching; replay the shortest failing prefix in the action inspector.
 

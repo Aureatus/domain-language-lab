@@ -1,7 +1,9 @@
 import {test} from 'node:test';
 import './submission.test.mjs';
 import assert from 'node:assert/strict';
-import {mkdtemp,writeFile} from 'node:fs/promises';
+import {mkdtemp,rm,writeFile} from 'node:fs/promises';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
 import {createApplicationServer} from '../../application/server.mjs';
 import declaration from '../../leave/model.mjs';
 import {generate,writeAdapter} from './generate.mjs';
@@ -9,6 +11,12 @@ import {createClient} from './client.mjs';
 import {renamedFixture} from '../../application/fixture.mjs';
 import {deriveApplication} from '../../application/derive.mjs';
 import loadingFixture from './loading-fixture.mjs';
+
+async function scratch(t,prefix){
+  const directory=await mkdtemp(join(tmpdir(),prefix));
+  t.after(()=>rm(directory,{recursive:true,force:true}));
+  return directory;
+}
 
 test('each Exact placeholder follows its view; waiting never suppresses another view',()=>{
   const contract=structuredClone(deriveApplication(loadingFixture).contract),render=()=>generate({contract,contractId:'fixture'}).contract;
@@ -22,8 +30,8 @@ test('each Exact placeholder follows its view; waiting never suppresses another 
   assert.match(render(),/testId="screen-failed"/);
 });
 
-test('generated Exact mapping uses real durable HTTP pending, grants, resume and balance',async()=>{
-  const directory=await mkdtemp('/tmp/opencode/exact-mapping-');
+test('generated Exact mapping uses real durable HTTP pending, grants, resume and balance',async t=>{
+  const directory=await scratch(t,'exact-mapping-');
   const server=await createApplicationServer(declaration,{directory});
   try{
     const envelope=await(await fetch(server.url+'/api/contract')).json();
@@ -62,8 +70,8 @@ test('generated Exact mapping uses real durable HTTP pending, grants, resume and
   }finally{await server.close();}
 });
 
-test('renamed non-leave schemas generate references, enums, integers and booleans',async()=>{
-  const server=await createApplicationServer(renamedFixture(),{directory:await mkdtemp('/tmp/opencode/exact-fixture-')});
+test('renamed non-leave schemas generate references, enums, integers and booleans',async t=>{
+  const server=await createApplicationServer(renamedFixture(),{directory:await scratch(t,'exact-fixture-')});
   try{
     const envelope=await(await fetch(server.url+'/api/contract')).json(),c=createClient(envelope,server.url);
     const generated=await writeAdapter(envelope,'artifacts/exact-fixture',{api:'http://127.0.0.1:4186'});
@@ -78,10 +86,10 @@ test('renamed non-leave schemas generate references, enums, integers and boolean
   }finally{await server.close();}
 });
 
-test('inbox coverage follows every captured server requirement, not a single manager assumption',async()=>{
+test('inbox coverage follows every captured server requirement, not a single manager assumption',async t=>{
   const model=renamedFixture(),policy=structuredClone(model.domain.actions['kit.issue'].policies[1]);
   policy.id='kit.second-review';policy.approvers={op:'literal',value:'ari'};policy.allowSelfApproval=true;model.domain.actions['kit.issue'].policies.push(policy);
-  const server=await createApplicationServer(model,{directory:await mkdtemp('/tmp/opencode/exact-multi-')});
+  const server=await createApplicationServer(model,{directory:await scratch(t,'exact-multi-')});
   try{
     const envelope=await(await fetch(server.url+'/api/contract')).json(),c=createClient(envelope,server.url),s=await c.snapshot();
     await c.request('actions/execute',{actor:'ari',action:'kit.issue',args:{...s.defaults.ari['kit.issue'],units:2}});
