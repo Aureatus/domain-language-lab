@@ -46,7 +46,7 @@ Every report includes SHA-256 of engine/model/adapter source bytes, Node version
 node prototype/property.ts --seed 24301 --samples 200 --max-steps 32 --shrink-budget 2000
 node prototype/property.ts --seed 24301 --samples 40 --mutant
 node --test prototype/property.test.ts
-npm test
+pnpm test
 ```
 
 The CLI writes `artifacts/property-report.json` relative to the working directory. Exit status is 0 for `sampled_pass`, 1 for counterexamples (including expected deliberate mutant failures); argument/setup errors also fail visibly. Save reports before rerunning, since this output path is overwritten. No package-script changes are required; a parent integration may optionally add a script that invokes this CLI.

@@ -43,7 +43,7 @@ There are no project axioms or `sorry` in the current proof.
 On this session's machine, Lean was installed in isolated tooling storage. Run:
 
 ```sh
-LEAN=/tmp/opencode/elan/toolchains/leanprover--lean4---v4.19.0/bin/lean npm run proof
+LEAN=/tmp/opencode/elan/toolchains/leanprover--lean4---v4.19.0/bin/lean pnpm run proof
 ```
 
 That temporary path is environment-specific. On another machine install the

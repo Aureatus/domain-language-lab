@@ -4,7 +4,7 @@ Latest continuous demo: `artifacts/live-issues-demo-v4.mp4`, including current-a
 explanation, declaration preview, worker checks, reload recovery and read-only
 history. Rebuild/re-record with the commands below; earlier MP4s are retained.
 
-This experimental browser-local issue tracker executes the shared `live/core.mjs`
+This experimental browser-local issue tracker executes the shared `live/core.ts`
 at interaction time. Unlike the earlier workbench, it has no precomputed action
 histories. Open `artifacts/live-issues.html` directly; no server or dependencies are
 required to use the built artifact. Successful actions and rule edits are saved as
@@ -54,7 +54,7 @@ runtime correspondence, authentication, storage durability, external delivery, c
 clients, or general language implementation is claimed.
 
 **Run declaration checks** sends the exported workspace to an offline Blob Web
-Worker running `runDerivedChecks` from the shared bundled `live/derive.mjs`,
+Worker running `runDerivedChecks` from the shared bundled `live/derive.ts`,
 separately from the current-state audit and historic Lean
 artifacts. It derives cases from the applied declarations and current workspace,
 then validates/reconstructs once and runs actual tool dispatch in isolated trusted
@@ -116,20 +116,17 @@ search retains focus and caret while filtering.
 ## Reproduce
 
 ```sh
-node live/build.mjs
-node live/browser-test.mjs
-node live/record-demo.mjs
+node live/build.ts
+node live/browser-test.ts
+node live/record-demo.ts
 ffprobe -v error -show_entries format=duration:stream=codec_name,width,height,r_frame_rate -of json artifacts/live-issues-demo-v3.mp4
 ```
 
-Build uses only Node built-ins and inlines core, derive, generated worker source,
-then UI into the HTML,
-with isolated module-local scopes and explicit core-import alias handling. It rejects
-unsupported module syntax instead of silently omitting it. The worker source is
-generated from shared modules, not a copied interpreter or fetched file. Browser automation
-uses the existing Playwright and axe packages in
-`/tmp/opencode/workbench-tooling/node_modules`; recording additionally needs
-`ffmpeg` with H.264 support. No package changes or dependency installation are needed.
+Vite+ bundles the browser and worker entry points from the shared modules, then
+the build inlines them into the HTML. Neither bundle is fetched at runtime.
+Browser automation uses the workspace Playwright and axe dependencies. Install
+Chromium with `pnpm exec playwright install chromium`; recording additionally
+needs `ffmpeg` with H.264 support.
 
 Tests interact with actual controls and read the shared core for assertions. They
 cover create/assign/comment/resolve/reopen/watch, related inbox and notification
@@ -162,15 +159,15 @@ renderer/browser-test source, and selected core persistence API implementation.
 Independent execution: live build and Chromium browser suite. No external research
 or proof audit was performed for this renderer.
 
-Earlier current-availability slice scope: only `live/core.mjs`, `live/core.test.mjs`,
-`live/app.mjs`, `live/template.html`, `live/browser-test.mjs`, and the two live
+Earlier current-availability slice scope: only `live/core.ts`, `live/core.test.ts`,
+`live/app.ts`, `live/template.html`, `live/browser-test.ts`, and the two live
 guides. No action/journal semantics, derive/build/recording/package sources changed.
 Existing actor/issue drafts, per-tool JSON drafts, persistence and derived-check
 invalidation remain in place. Browser coverage adds keyboard-opened availability
 dialog/Escape/focus restoration, rule-change updates, partial/schema tool reasons,
 query nonmutation, unchanged/null assignment, and explicit history suppression.
-Executed checks: `npm test` (49 passing), `npm run live:build`, and
-`npm run live:test` (Chromium flows and seven axe scans). This is finite local
+Executed checks: `pnpm test` (49 passing), `pnpm run live:build`, and
+`pnpm run live:test` (Chromium flows and seven axe scans). This is finite local
 integration evidence, not a general policy-system or accessibility proof.
 
 The subsequent fork/worker performance slice also updates core/derive/build and

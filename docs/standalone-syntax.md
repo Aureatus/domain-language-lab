@@ -1,7 +1,7 @@
 # Standalone text frontend (experimental)
 
 Author **[`leave/time-away.domain`](../leave/time-away.domain)**. `.domain` is the
-current file extension for Premise source. `leave/model.mjs` is a
+current file extension for Premise source. `leave/model.ts` is a
 compatibility loading bridge, not another authoring language.
 
 The real lexer/parser elaborates text into the unchanged `semantic-core/v2` domain,
@@ -12,17 +12,17 @@ See [syntax ergonomics](syntax-ergonomics.md) for the grouping and checking deci
 ## Run
 
 ```sh
-npm run syntax:check -- leave/time-away.domain
-npm run syntax:lint -- leave/time-away.domain --strict
-npm run syntax:test
-npm run syntax:reader:test
-npm run syntax:browser
-npm run leave
+pnpm run syntax:check leave/time-away.domain
+pnpm run syntax:lint leave/time-away.domain --strict
+pnpm run syntax:test
+pnpm run syntax:reader:test
+pnpm run syntax:browser
+pnpm run leave
 ```
 
-The generic `npm run syntax:serve -- leave/time-away.domain` defaults to port 4174
+The generic `pnpm run syntax:serve leave/time-away.domain` defaults to port 4174
 and `artifacts/syntax-data/application.sqlite`; `PORT` and `APPLICATION_DIR` override
-these. `npm run leave` retains `LEAVE_DIR` and its existing database name. Restart
+these. `pnpm run leave` retains `LEAVE_DIR` and its existing database name. Restart
 after edits; no hot reload or model migration is implied. Never reset a user database
 to hide a changed model binding.
 
@@ -126,8 +126,8 @@ clipboard denial exposes a text fallback. Long lines scroll locally on mobile.
 Invalid source is escaped and accompanied by a diagnostic, not styled as verified.
 
 ```sh
-node syntax/highlight.mjs leave/time-away.domain artifacts/time-away-highlighted.html
-node syntax/highlight.mjs leave/time-away.domain artifacts/time-away-highlighted-inline.html --inline
+node syntax/highlight.ts leave/time-away.domain artifacts/time-away-highlighted.html
+node syntax/highlight.ts leave/time-away.domain artifacts/time-away-highlighted-inline.html --inline
 ```
 
 The self-contained inline variant is at most 728px wide and uses theme variables.
@@ -141,8 +141,8 @@ Parser and authoritative model/application errors are errors. Trailing whitespac
 tab indentation and genuinely unused AST inputs are advisory warnings. Adapter
 mappings and hidden host bindings count as intentional input use. `--json` outputs
 structured diagnostics; `--strict` exits 1 for warnings too. No repairs, suppression,
-unused-binding inference or safety proof. Use `node syntax/lint.mjs PATH --json`
-for JSON without npm's banner.
+unused-binding inference or safety proof. Use `node syntax/lint.ts PATH --json`
+for JSON without pnpm's banner.
 
 `syntax/editor/` is a local VS Code-compatible `.domain` grammar, not an installed
 language server. It includes grouped keywords and contextual schema-row names.
@@ -151,7 +151,7 @@ JSON/regex tests do not establish editor-host rendering. Try with
 
 ## Evidence and limits
 
-`syntax/fixtures/prior-leave.mjs` is independently retained test-only pre-migration
+`syntax/fixtures/prior-leave.ts` is independently retained test-only pre-migration
 data. Full deep equality compares the entire domain, state and application
 metadata—not a regenerated output snapshot. The SQLite test creates an old-model
 pending request, reopens with migrated text and successfully grants/resumes. This
@@ -174,8 +174,8 @@ No external research, delegation, new proof audit or video recording.
 
 ### Executed checkpoint — November 14, 2026
 
-- `npm test`: **225 passed, 0 failed** (existing Lean checks retain their v1 scope).
-- `npm run syntax:test`: **56 passed, 0 failed**.
+- `pnpm test`: **225 passed, 0 failed** (existing Lean checks retain their v1 scope).
+- `pnpm run syntax:test`: **56 passed, 0 failed**.
 - Strict actual-source lint: **0 errors, 0 warnings**.
 - Source-reader browser, syntax source-edit mapping browser and full time-off
   browser: passed. Desktop/action/mobile source screenshots were inspected.

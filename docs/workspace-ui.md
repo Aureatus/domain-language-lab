@@ -6,18 +6,18 @@ profiles, not a marketing dashboard or a new semantic implementation.
 ## Run
 
 ```sh
-node workspace/server.mjs
+node workspace/server.ts
 # Open http://127.0.0.1:4173
-node workspace/browser-test.mjs
-node workspace/video.mjs
+node workspace/browser-test.ts
+node workspace/video.ts
 ```
 
 The server defaults to `artifacts/workspace-data`; `WORKSPACE_DIR` and `PORT` can
 override it. Startup never resets databases. Browser tests and video each create
 an exclusive temporary directory under `/tmp/opencode` and use an ephemeral port.
-They use the already-installed Playwright/axe tooling in
-`/tmp/opencode/workbench-tooling/node_modules`; recording additionally needs
-`ffmpeg` and `ffprobe`. No dependency installation or global configuration occurs.
+They use the workspace Playwright and axe dependencies. Install Chromium with
+`pnpm exec playwright install chromium`; recording additionally needs
+`ffmpeg` and `ffprobe`.
 
 ## Interaction contract
 
@@ -55,7 +55,7 @@ They use the already-installed Playwright/axe tooling in
 
 ## Executed acceptance evidence
 
-`node workspace/browser-test.mjs` exercises the real exported server, Effect adapter,
+`node workspace/browser-test.ts` exercises the real exported server, Effect adapter,
 SQLite and Chromium. It writes `artifacts/workspace-browser-test.json` and desktop/
 mobile screenshots. Covered workflows:
 
@@ -76,7 +76,7 @@ mobile screenshots. Covered workflows:
 7. 390px mobile layout, focusable horizontally scrollable tables, keyboard actor
    navigation, no page exceptions, and automated axe WCAG A/AA checks.
 
-`node workspace/video.mjs` records an actual continuous, paced browser session to
+`node workspace/video.ts` records an actual continuous, paced browser session to
 `artifacts/workspace-v1-v2-demo.mp4`, with visible mouse movement, click pulses and
 captions. `artifacts/workspace-video.json` records duration and chapter timings.
 The recording shows both profiles, a persisted grant and actual backend close/

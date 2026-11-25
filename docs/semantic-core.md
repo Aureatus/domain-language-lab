@@ -1,7 +1,7 @@
 # Shared executable semantic core — first milestone
 
 Implemented experimental profile: `semantic-core/v1`. The source of execution is
-a typed JSON action IR, interpreted by [`semantic/core.mjs`](../semantic/core.mjs).
+a typed JSON action IR, interpreted by [`semantic/core.ts`](../semantic/core.ts).
 The same declaration contains resource schemas, explicit input schemas, record
 bindings, separate policy/precondition guards, grouped updates and relationship
 observations. No action-name switch or domain-specific opcode implements updates.
@@ -10,7 +10,7 @@ The authoritative integration guide is
 [`semantic/CONTRACT.md`](../semantic/CONTRACT.md), with the exact expression grammar,
 numeric/error semantics, API, optimistic transaction obligations and instructions
 for inventory, Effect and Lean consumers. Type declarations are
-[`semantic/core.d.mts`](../semantic/core.d.mts).
+[`semantic/types.ts`](../semantic/types.ts).
 
 ## Implemented decisions
 
@@ -35,7 +35,7 @@ for inventory, Effect and Lean consumers. Type declarations are
   and recipient deduplication. This is full recomputation, not incremental query
   maintenance or notification delivery.
 
-[`semantic/issues.mjs`](../semantic/issues.mjs) is the second-domain declaration:
+[`semantic/issues.ts`](../semantic/issues.ts) is the second-domain declaration:
 resolving an issue changes status/time and increments a separate counter record.
 It is illustrative data **executed by the tests**, not a replacement or integration
 for the existing `live/` issue workspace. Existing live files are untouched.
@@ -43,11 +43,11 @@ for the existing `live/` issue workspace. Existing live files are untouched.
 ## Evidence and scope
 
 Read depth: README and design brief/laws read in full; source inspection of
-`live/core.mjs` in full (410 lines). No additional upstream research or proof
+`live/core.ts` in full (410 lines). No additional upstream research or proof
 audit was performed. Implementation decisions above specialize the proposed
 design laws, rather than claiming all laws are implemented.
 
-Independent execution command: `node --test semantic/*.test.mjs`. Tests exercise
+Independent execution command: `node --test semantic/*.test.ts`. Tests exercise
 declaration edits changing real execution, multi-record prestate swaps, implicit
 facts/routing, policy denial and pending, precondition failure, stale commit with a
 separate deliberately bad stale-read host, immutable snapshots/no caller mutation,

@@ -3,8 +3,8 @@
 Run with Node 22.18+ (native TypeScript stripping):
 
 ```sh
-npm test
-npm run demo
+pnpm test
+pnpm run demo
 ```
 
 No dependencies or installation step. Node strips types; these commands do not run a TypeScript static type checker.
@@ -17,7 +17,7 @@ The demonstration changes support/high-priority resolution from approval-require
 
 ## Artifacts
 
-`npm run demo` writes five JSON files to `artifacts/`: policy diff, correct and mutant schedule explorations, safe replay and counterexample replay. These are actual interpreter outputs, unlike the earlier hand-authored fixture in `examples/`. Storyboard timing is editorial; no video is rendered.
+`pnpm run demo` writes five JSON files to `artifacts/`: policy diff, correct and mutant schedule explorations, safe replay and counterexample replay. These are actual interpreter outputs, unlike the earlier hand-authored fixture in `examples/`. Storyboard timing is editorial; no video is rendered.
 
 ## Semantics and boundaries
 

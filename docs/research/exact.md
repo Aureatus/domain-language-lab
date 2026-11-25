@@ -7,12 +7,12 @@ This is a daily-changing pre-1.0 SDK, not a stable public compatibility promise.
 ## Read depth
 
 - Local README and model-derived application memo; source inspection of
-  `application/derive.mjs`, `server.mjs`, `browser.mjs`, and the source loader.
+  `application/derive.ts`, `server.ts`, `browser.ts`, and the source loader.
 - Full Exact README and `docs/start-here.md`,
   `docs/card.md`, REST starter Contract and TS,
   `recipes/rest-backend.md`, `after-a-write.md`, and `phone-manifest.md`.
 - Selected implementation: `scripts/exact.mjs` compiler invocation/type checking,
-  Android target selection in `scripts/agent-android.mjs`, SDK setup/toolchain pins.
+  Android target selection in `scripts/agent-android.ts`, SDK setup/toolchain pins.
 - No upstream suite copied or run as our conformance evidence. No proof audit.
 - Independent execution: real Contract/TS compiler checks, compiled web UI and
   installed Android native UI against the shared HTTP/Effect/SQLite host. Native

@@ -1,7 +1,7 @@
 # Generated tests for the live runtime
 
-Run with `node --test live/generated.test.mjs`; run the report-producing CLI with
-`node live/generated.mjs` (optional `SEED`, `RUNS`, `MAX_STEPS` environment
+Run with `node --test live/generated.test.ts`; run the report-producing CLI with
+`node live/generated.ts` (optional `SEED`, `RUNS`, `MAX_STEPS` environment
 variables). The CLI writes `artifacts/live-generated-report.json` and exits
 nonzero on a counterexample.
 
@@ -32,5 +32,5 @@ and snapshot mechanics, and rule declarations. The oracle independently encodes
 the finite actions and current schema constraints, so shared misunderstandings
 of the documented law remain possible. Clock is explicitly deterministic in
 each trial; external I/O, concurrency, storage I/O, authentication, and delivery
-are outside scope. Read depth: complete `live/core.mjs` and selected contract
+are outside scope. Read depth: complete `live/core.ts` and selected contract
 sections in `docs/live-runtime.md` for this implementation.

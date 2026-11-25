@@ -5,18 +5,18 @@ the HTTP handoff in [completion-contract.md](completion-contract.md) over the
 actual Effect/SQLite adapter. No inventory transitions are implemented in HTTP.
 
 ```sh
-node workspace/server.mjs
-# Optional: WORKSPACE_DIR=/path/to/data PORT=4173 node workspace/server.mjs
-node --test workspace/derive.test.mjs workspace/server.test.mjs
+node workspace/server.ts
+# Optional: WORKSPACE_DIR=/path/to/data PORT=4173 node workspace/server.ts
+node --test workspace/derive.test.ts workspace/server.test.ts
 ```
 
-`createWorkspaceServer({directory, port:0})` in `workspace/server.mjs` resolves
+`createWorkspaceServer({directory, port:0})` in `workspace/server.ts` resolves
 `{url, close()}` after binding `127.0.0.1`. `close()` is idempotent, terminates SSE
 and active HTTP connections, closes the listener, then closes both databases.
 The CLI defaults to `artifacts/workspace-data` and port 4173. The import API
 defaults to an ephemeral port. Existing files are never reset. `v1.sqlite` binds
-the complete `inventory/model.mjs` model; `v2.sqlite` independently binds
-`inventory/v2/model.mjs`. Reopen with changed declarations or invalid stored state
+the complete `inventory/model.ts` model; `v2.sqlite` independently binds
+`inventory/v2/model.ts`. Reopen with changed declarations or invalid stored state
 fails, rather than migrating or reinitializing the database. Startup listener
 failure cleans up databases opened by this server.
 
@@ -38,8 +38,8 @@ bounded-JSON failures, SQLite locking/corruption and transport failures use non-
 `{error}`. Input schema/policy/precondition decisions remain interpreter results.
 Bodies must be `application/json`, at most 262144 bytes, and additionally satisfy
 the shared strict JSON bounds. Commands/envelopes have exact members. Unknown API
-routes fail closed; frontend serving is an explicit `/`, `/index.html`, `/app.mjs`,
-`/derive.mjs` allowlist (missing concurrently-built frontend files return 404).
+routes fail closed; frontend serving is an explicit `/`, `/index.html`, `/app.ts`,
+`/derive.ts` allowlist (missing concurrently-built frontend files return 404).
 
 Host must be the listener's exact `127.0.0.1:port` or `localhost:port` authority.
 When present, Origin must equal `http://Host`; cross-site/same-site Fetch Metadata
@@ -116,6 +116,6 @@ evidence, not browser end-to-end evidence or exhaustive verification of the prof
 Executed on Node v25.2.0 with installed Effect 4.1.4:
 
 ```sh
-node --test workspace/derive.test.mjs workspace/server.test.mjs adapters/effect/*.test.mjs semantic/*.test.mjs semantic/v2/*.test.mjs
+node --test workspace/derive.test.ts workspace/server.test.ts adapters/effect/*.test.ts semantic/*.test.ts semantic/v2/*.test.ts
 # 66 passed, 0 failed (11 workspace tests plus 55 existing regression tests).
 ```

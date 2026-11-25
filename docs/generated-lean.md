@@ -10,8 +10,8 @@ the adapter's generated proofs and differential cases independently executed.
 ## Reproduce
 
 ```sh
-node --test adapters/lean/adapter.test.mjs
-node adapters/lean/check.mjs
+node --test adapters/lean/adapter.test.ts
+node adapters/lean/check.ts
 ```
 
 Uses `/tmp/opencode/elan/toolchains/leanprover--lean4---v4.19.0/bin/lean` by
@@ -25,7 +25,7 @@ For a later inventory fragment, export the complete shared IR and a separate
 numeric obligation as JSON, then run:
 
 ```sh
-node adapters/lean/check.mjs inventory-ir.json capacity-law.json adapters/lean/inventory-evidence
+node adapters/lean/check.ts inventory-ir.json capacity-law.json adapters/lean/inventory-evidence
 ```
 
 This command **projects** the selected numeric action kernel; it does not verify
@@ -71,9 +71,9 @@ This is not a claim of full runtime observational equivalence.
 
 ## Independent obligation and evidence
 
-`fixture.mjs` declares a generic capacity resource and decrement action in the
-actual shared IR. `generate.mjs` traverses its schemas, preconditions and update
-ASTs; `template.mjs` contains only emission/proof strategy, not capacity equations.
+`fixture.ts` declares a generic capacity resource and decrement action in the
+actual shared IR. `generate.ts` traverses its schemas, preconditions and update
+ASTs; `template.ts` contains only emission/proof strategy, not capacity equations.
 Changing an update changes the generated transition and source/generated hashes.
 
 The separate `numeric-law/v1` obligation identifies an action, an `ensures` AST

@@ -12,13 +12,13 @@ time-away slice. Not a general package system, production compiler or native ren
 | `leave/browser.domain` | Browser presentation, actors and named host input mappings |
 | `leave/cli.domain` | Explicit alternative CLI presentation declaration |
 | `leave/mobile.domain` | Explicit alternative mobile presentation declaration |
-| `leave/model.mjs` | Compatibility bridge loading **browser.domain** |
+| `leave/model.ts` | Compatibility bridge loading **browser.domain** |
 
 All three view entries directly import/use the **same domain** and import the same
 demo module. Tests compare their entire domain and initial state, not only their
 names. No policies are copied into a view. They may vary labels, columns and order.
 View declarations are alternative presentation projections; they are not three
-independent databases. `npm run leave:cli -- list` loads `cli.domain` for presentation,
+independent databases. `pnpm run leave:cli list` loads `cli.domain` for presentation,
 checks exact full domain identity against the backend, and consumes the backend's
 served contract including its host input mappings. It does not execute local actions
 or treat `cli.domain` as an alternative authorization authority. Likewise a mobile renderer
@@ -103,23 +103,23 @@ conditional lazy **runtime** reads. “Lazy” here describes elaboration only.
 
 ```sh
 # Terminal 1: persistent existing leave database; default http://127.0.0.1:4174
-npm run leave
+pnpm run leave
 
 # Terminal 2: reads and writes against that exact host, not another local model
-npm run application:cli -- list --url http://127.0.0.1:4174
-npm run application:cli -- inspect leave.request
-npm run application:cli -- preview leave.request --actor maya \
+pnpm run application:cli list --url http://127.0.0.1:4174
+pnpm run application:cli inspect leave.request
+pnpm run application:cli preview leave.request --actor maya \
   --args '{"start":"2026-11-23","end":"2026-11-25"}'
-npm run application:cli -- execute leave.request --actor maya \
+pnpm run application:cli execute leave.request --actor maya \
   --args '{"start":"2026-11-23","end":"2026-11-25"}' --json
-npm run application:cli -- inbox --actor sam --json
-npm run application:cli -- grant REQUEST_ID --actor sam --policy leave.manager-approval
-npm run application:cli -- resume REQUEST_ID --actor sam
-npm run application:cli -- list employee
+pnpm run application:cli inbox --actor sam --json
+pnpm run application:cli grant REQUEST_ID --actor sam --policy leave.manager-approval
+pnpm run application:cli resume REQUEST_ID --actor sam
+pnpm run application:cli list employee
 
 # Same generic CLI, with the explicitly imported CLI view's presentation:
-npm run leave:cli -- list
-npm run leave:cli -- inbox --actor sam --json
+pnpm run leave:cli list
+pnpm run leave:cli inbox --actor sam --json
 ```
 
 `APPLICATION_URL` or `--url` selects the backend; no separate CLI database exists.
@@ -137,7 +137,7 @@ the complete response for scripts. Transport/usage errors exit nonzero. A valid
 HTTP response containing a semantic rejection is returned as data (exit zero);
 machine consumers must inspect `status`/`code`. Grant and resume remain separate.
 
-`application/client.mjs` is shared by browser and CLI, checks contract IDs and does
+`application/client.ts` is shared by browser and CLI, checks contract IDs and does
 no local authorization or execution. The browser retains SSE and snapshot ordering.
 Inbox filtering is display only; the server authorizes every operation. Local actor
 selection is **not authentication**. The existing endpoint envelopes remain:
@@ -159,19 +159,19 @@ resume rejection does not make arbitrary repeated execute calls idempotent.
 ## Tooling and evidence
 
 ```sh
-npm run syntax:check -- leave/browser.domain
-npm run syntax:check -- leave/cli.domain
-npm run syntax:check -- leave/mobile.domain
-npm run syntax:lint -- leave/browser.domain --strict
-npm run syntax:reader -- leave/browser.domain artifacts/time-away-highlighted.html
-npm run application:count -- leave model.mjs server.mjs cli.domain mobile.domain \
+pnpm run syntax:check leave/browser.domain
+pnpm run syntax:check leave/cli.domain
+pnpm run syntax:check leave/mobile.domain
+pnpm run syntax:lint leave/browser.domain --strict
+pnpm run syntax:reader leave/browser.domain artifacts/time-away-highlighted.html
+pnpm run application:count leave model.ts server.ts cli.domain mobile.domain \
   --report artifacts/model-derived-application-count.json
-npm test
-npm run application:test
-npm run leave:test
-npm run syntax:browser
-npm run syntax:reader:test
-npm run application:cli:test
+pnpm test
+pnpm run application:test
+pnpm run leave:test
+pnpm run syntax:browser
+pnpm run syntax:reader:test
+pnpm run application:cli:test
 ```
 
 The source reader shows **each complete imported file**, separately labeled, with

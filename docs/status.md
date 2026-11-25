@@ -118,7 +118,7 @@ terminal records. SQLite-backed Effect execution persists outcomes, pending
 requests, grants, state and an outbox across reopen; resume consumes a request
 atomically once. Duplicate IDs retain their historical result.
 
-The executed CLI scenario is `npm run inventory:durable`; evidence and boundaries
+The executed CLI scenario is `pnpm run inventory:durable`; evidence and boundaries
 are in `docs/inventory-v2.md` and `docs/durable-execution.md`. Routing is still one-hop; authentication, scheduling,
 external delivery, model migration and v2 proofs remain future work. Runtime/proof
 correspondence is unproved.

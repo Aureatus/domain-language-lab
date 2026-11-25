@@ -1,7 +1,7 @@
 # Stockroom: second application on shared semantics
 
 Status: implemented experimental offline application, 2026-11-11. This consumer
-imports `semantic/core.mjs` unchanged and uses the exact `semantic-core/v1` IR in
+imports `semantic/core.ts` unchanged and uses the exact `semantic-core/v1` IR in
 `semantic/CONTRACT.md`. The existing issue application, package configuration,
 semantic directory and adapters were not modified by this consumer. Root scripts
 and adapter integration were added afterward. Generated outputs are under
@@ -12,18 +12,17 @@ and adapter integration were added afterward. Generated outputs are under
 From the repository root:
 
 ```sh
-node --test inventory/inventory.test.mjs
-node inventory/build.mjs
-node inventory/browser-test.mjs
-node inventory/video.mjs
+node --test inventory/inventory.test.ts
+node inventory/build.ts
+node inventory/browser-test.ts
+node inventory/video.ts
 ffprobe -v error -show_entries format=duration,size -show_entries stream=codec_name,width,height -of json artifacts/inventory-demo.mp4
 ```
 
-Open `artifacts/inventory.html` directly as a file. No server, installation,
-network, remote font, framework or backend is needed. Browser tests and recording
-use the existing Chromium tooling imported from
-`/tmp/opencode/workbench-tooling/node_modules/playwright/index.mjs`. Recording also
-requires `ffmpeg` on PATH. These scripts do not install dependencies.
+Open `artifacts/inventory.html` directly as a file after building it. No server,
+network, remote font, or backend is needed. Browser tests and recording use the
+workspace Playwright dependency; install Chromium with `pnpm exec playwright install chromium`.
+Recording also requires `ffmpeg` on PATH.
 
 1. **Run broken host** executes two preparations and two stale-snapshot commits.
    Read the actual oracle failure, inspect each step and its facts.
@@ -45,7 +44,7 @@ export before closing. Reset does not promise to reset every form preference.
 
 ## Declarations and API
 
-`inventory/model.mjs` exports:
+`inventory/model.ts` exports:
 
 - `inventoryModel`: complete data-only IR with stable declaration IDs.
 - `initialState`: validated frozen seed, five field cameras and three slots.
@@ -88,7 +87,7 @@ support paths. Alice receives two paths when warehouse expires slotA. These are
 recipient snapshots, not delivered notifications. Same-group facts are sibling
 assignments, not an invented causal sequence.
 
-`inventory/host.mjs` exports:
+`inventory/host.ts` exports:
 
 ```js
 const h = createHost();
@@ -130,7 +129,7 @@ would falsely reassure the user. The retained accepted-command ledger instead
 contains **two promises totaling 6 from capacity 5**. This is a real lost accepted
 reservation and overselling of promises, not an interpreter isolation failure.
 
-`inventory/oracle.mjs` does not import/evaluate the IR or use change patches to
+`inventory/oracle.ts` does not import/evaluate the IR or use change patches to
 calculate expected stock. It independently accounts for quantities in accepted
 reserve commands and removes them on accepted cancel/expire. BigInt summation
 avoids oracle arithmetic overflow. It checks:
@@ -148,7 +147,7 @@ expiry boundaries, routing and rejection atomicity.
 
 ## Build and evidence
 
-`inventory/build.mjs` bundles the actual shared core source plus model, host,
+`inventory/build.ts` bundles the actual shared core source plus model, host,
 oracle and UI into an inline offline module; it does not substitute precomputed
 outcomes. `artifacts/inventory-build.json` records SHA-256 source hashes. Rebuild
 after any source changes; model IDs alone are not content hashes. The builder is
@@ -156,14 +155,14 @@ intentionally narrow for these known module sources, not a general JS bundler.
 
 Executed verification:
 
-- `node --test inventory/inventory.test.mjs`: 11 passing tests covering all three
+- `node --test inventory/inventory.test.ts`: 11 passing tests covering all three
   actions, ownership policies, inclusive expiration boundary, stock pairing,
   quantities, clock, insufficient stock, missing records, overflow/routing group
   rejection, both competing schedules, both actual mutant failures, deterministic
   JSON replay, tampered observation rejection, independent accounting, declaration
   edits, initial snapshot isolation and duplicate IDs.
-- `node inventory/build.mjs`: generated offline HTML from shared source.
-- `node inventory/browser-test.mjs`: Chromium file:// tests of actual UI reserve,
+- `node inventory/build.ts`: generated offline HTML from shared source.
+- `node inventory/browser-test.ts`: Chromium file:// tests of actual UI reserve,
   cancel, expire, policy denial, expiration boundary, mutant failure, correct
   rejection/retry, history, JSON download/import, replay and 390px mobile overflow.
   No page errors or non-file network requests. Machine result in
@@ -172,7 +171,7 @@ Executed verification:
   is a five-bin allocation shelf; held bins use diagonal hatch as well as color.
   Offline Georgia display, Trebuchet body and monospace evidence; blue warehouse
   labeling, pale steel backgrounds, amber allocations and raspberry failures.
-- `node inventory/video.mjs`: one continuous, paced browser recording; actual
+- `node inventory/video.ts`: one continuous, paced browser recording; actual
   mouse movement is exposed with a DOM cursor. No spliced screenshots or invented
   trace. ffmpeg transcodes the original WebM to H.264 MP4, 1440×1100; metadata in
   `artifacts/inventory-video.json`. `ffprobe` checked the output. Duration is about

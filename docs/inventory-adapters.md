@@ -12,9 +12,9 @@ The checks below were independently executed against these implementations.
 ## Reproduce
 
 ```sh
-node --test inventory/adapters.test.mjs adapters/lean/inventory.test.mjs
-node adapters/lean/inventory.mjs
-npm run proof:inventory # repository artifact destination
+node --test inventory/adapters.test.ts adapters/lean/inventory.test.ts
+node adapters/lean/inventory.ts
+pnpm run proof:inventory # repository artifact destination
 ```
 
 Executed result: **7 tests pass**, CLI reports **`proof_checked`**. Uses the existing
@@ -28,13 +28,13 @@ Lean, metadata, logs and reports. The positive CLI defaults to `positive/`; an
 optional directory argument changes its destination. Tests also write
 `actual-reserve.lean` and `actual-mutant.lean` with their execution logs. These are
 regenerable local evidence, not committed fixtures or independent authorities.
-The integrated command `npm run proof:inventory` writes the positive evidence to
+The integrated command `pnpm run proof:inventory` writes the positive evidence to
 `artifacts/inventory-proof/` for convenient inspection.
 
 ## Effect: full experimental inventory model, bounded tests
 
-`inventory/adapters.test.mjs` calls the existing Effect adapter with the actual
-`inventory/model.mjs` interpreter, not an action-name reimplementation. Tests cover:
+`inventory/adapters.test.ts` calls the existing Effect adapter with the actual
+`inventory/model.ts` interpreter, not an action-name reimplementation. Tests cover:
 
 - Reserve → cancel and reserve → early expiry rejection → expiry at the boundary.
   Every returned outcome, published state and routed event batch is compared with
@@ -57,7 +57,7 @@ of that interpreter; the race oracle supplies independent domain expectations.
 
 ## Lean: `inventory-stock-capacity/1`
 
-`adapters/lean/inventory.mjs` validates the complete original inventory AST, then
+`adapters/lean/inventory.ts` validates the complete original inventory AST, then
 extracts integer stock schemas (`capacity`, `available`), the `quantity` input
 schema, `reservation.reserve.capacity` guard and
 `reservation.reserve.set.available` update **from that AST**. There are no duplicate

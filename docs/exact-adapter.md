@@ -32,7 +32,7 @@ Pinned SDK and read depth: [research memo](research/exact.md).
 ## Chromium/Exact conformance
 
 This is separate from the [bounded checker and offline replay](check-interactions.md).
-Use the same Node/npm and run `npm run adapters:install` in this repository.
+Use the same Node version and run `pnpm install --frozen-lockfile` in this repository.
 Install [Bun 1.4.2](https://github.com/oven-sh/bun/releases/tag/bun-v1.4.2),
 [rustup](https://rustup.rs/) and a Linux C toolchain (e.g. `build-essential` on
 Ubuntu). On Linux x86-64, use glibc 2.36 or newer (e.g. Ubuntu 24.04);
@@ -58,9 +58,9 @@ node "$EXACT_ROOT/node_modules/playwright-core/cli.js" install chromium
 "$BUN" "$EXACT_ROOT/scripts/exact.mjs" new "$EXACT_TEMPLATE" \
   --name Derived --bundle-id research.derived.exact
 
-npm run application:review:test
+pnpm run application:review:test
 # Or replay the lost-then-snapshot prefix using the trace from check-interactions.md:
-# npm run application:review:test -- "$trace"
+# pnpm run application:review:test "$trace"
 ```
 
 If Chromium reports missing Linux libraries, install them using the same
@@ -84,14 +84,14 @@ directory outside this repository.
 
 ```sh
 # Shared backend in fresh isolated data; gateway serves compiled web at its origin.
-node adapters/exact/serve.mjs leave/model.mjs "$tools_dir/android-demo/dist" \
+node adapters/exact/serve.ts leave/model.ts "$tools_dir/android-demo/dist" \
   4186 "$tools_dir/android-data"
 
 # In another terminal, from the repository root:
 export EXACT="$EXACT_ROOT" # The generated launcher's checkout override.
 "$BUN" "$EXACT_ROOT/scripts/exact.mjs" new "$tools_dir/android-demo" \
   --name Derived --bundle-id research.derived.exact --with android
-node adapters/exact/generate.mjs http://127.0.0.1:4186 "$tools_dir/android-demo"
+node adapters/exact/generate.ts http://127.0.0.1:4186 "$tools_dir/android-demo"
 cd "$tools_dir/android-demo"
 "$BUN" exact.mjs contract build app.contract --json --errors-only
 "$BUN" exact.mjs web-build --out dist
@@ -155,7 +155,7 @@ export EXACT="$EXACT_ROOT"
 "$BUN" "$EXACT_ROOT/scripts/exact.mjs" setup --check --platform ios
 "$BUN" "$EXACT_ROOT/scripts/exact.mjs" new "$tools_dir/ios-demo" \
   --name Derived --bundle-id research.derived.exact --with ios
-node adapters/exact/generate.mjs http://127.0.0.1:4186 "$tools_dir/ios-demo"
+node adapters/exact/generate.ts http://127.0.0.1:4186 "$tools_dir/ios-demo"
 cd "$tools_dir/ios-demo"
 "$BUN" exact.mjs ios --no-install
 # With a usable iOS Simulator, build and launch:
@@ -171,8 +171,8 @@ passed on iOS.
 Mapping tests:
 
 ```sh
-node --test adapters/exact/test.mjs
-node adapters/exact/run-web-test.mjs # requires compiled /tmp/opencode/exact-generated/dist
+node --test adapters/exact/test.ts
+node adapters/exact/run-web-test.ts # requires compiled /tmp/opencode/exact-generated/dist
 ```
 
 These execute real isolated HTTP/Effect/SQLite preview → pending → grant → resume,
@@ -180,8 +180,8 @@ check **5 → 5 → 5 → 2** balance, one-shot rejection, retained saved grants
 stale completion, mismatch refusal and transport failure. They are not native UI
 evidence. Generated snapshots use `artifacts/exact-*`; do not reset user data.
 
-`serve.mjs` also accepts a standalone view entry such as `leave/mobile.domain`
-instead of `leave/model.mjs`. Its declared input bindings/defaults/views then
+`serve.ts` also accepts a standalone view entry such as `leave/mobile.domain`
+instead of `leave/model.ts`. Its declared input bindings/defaults/views then
 drive the generated client; the adapter does not supply leave-specific metadata.
 
 ## Executed evidence

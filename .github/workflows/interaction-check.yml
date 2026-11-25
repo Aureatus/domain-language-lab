@@ -14,9 +14,10 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: 24.22.3
-      - run: npm run adapters:install
-      - run: npm run check:interactions -- leave/browser.domain leave.request --actor maya
-      - run: node --test application/interaction-check.test.mjs application/action-review.test.mjs application/submission.test.mjs adapters/exact/test.mjs
+      - uses: pnpm/action-setup@v4
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run check:interactions leave/browser.domain leave.request --actor maya
+      - run: node --test application/interaction-check.test.ts application/action-review.test.ts application/submission.test.ts adapters/exact/test.ts
       - name: Reject and replay the snapshot-unlocks mutant
         shell: bash
         run: |
@@ -24,7 +25,7 @@ jobs:
           trap 'rm -rf "$scratch"' EXIT
           trace="$scratch/snapshot-fault.json"
           status=0
-          npm run --silent check:interactions -- leave/browser.domain leave.request --actor maya \
+          pnpm --silent run check:interactions leave/browser.domain leave.request --actor maya \
             --mutant snapshot-unlocks --out "$trace" > "$scratch/summary.json" || status=$?
           cat "$scratch/summary.json"
           test "$status" -eq 1
@@ -37,4 +38,4 @@ jobs:
           assert.deepEqual(summary.sequence, ['snapshot', 'draft', 'submit', 'lost', 'snapshot']);
           assert.equal(summary.observedControls.submit, true);
           NODE
-          npm run inspect:action -- leave/browser.domain leave.request --replay "$trace"
+          pnpm run inspect:action leave/browser.domain leave.request --replay "$trace"

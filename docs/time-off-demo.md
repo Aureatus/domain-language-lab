@@ -1,15 +1,15 @@
 # Time away: a model-derived leave application
 
-Run `npm run leave`, then open **http://127.0.0.1:4174**. No build is needed.
+Run `pnpm run leave`, then open **http://127.0.0.1:4174**. No build is needed.
 `PORT` and `LEAVE_DIR` select the listener and persistent directory; the default
 remains `artifacts/leave-data/leave.sqlite`. Existing storage is reopened, not reset.
 
 The application author entry is now **`leave/time-away.domain`**, a standalone
 [experimental text syntax](standalone-syntax.md) declaring the semantic domain,
-initial state and data-only presentation/input configuration. `leave/model.mjs`
+initial state and data-only presentation/input configuration. `leave/model.ts`
 is only its loading bridge. The reusable
 `application/` runtime derives server dispatch, the browser forms/views/inbox and
-HTML-shell content. `leave/server.mjs` is only a compatibility launcher.
+HTML-shell content. `leave/server.ts` is only a compatibility launcher.
 
 See **[model-derived application](model-derived-application.md)** for the exact
 authoring boundary, generic HTTP API, executable source count, tests and limitations.
@@ -41,16 +41,16 @@ observer layout, not for security. `/?explain=1` enables the optional generic
 ## Verify
 
 ```sh
-node --test application/*.test.mjs leave/*.test.mjs
-node leave/browser-test.mjs
-node leave/explained-video.mjs --test
-npm run application:test
-npm test
+node --test application/*.test.ts leave/*.test.ts
+node leave/browser-test.ts
+node leave/explained-video.ts --test
+pnpm run application:test
+pnpm test
 ```
 
-Browser scripts reuse the existing Playwright installation at
-`/tmp/opencode/workbench-tooling/node_modules/playwright/index.mjs`. No dependencies
-were installed. Browser runs use fresh temporary DBs and do not reset the demo.
+Browser scripts use the workspace Playwright dependency. Install Chromium with
+`pnpm exec playwright install chromium`. Browser runs use fresh temporary DBs
+and do not reset the demo.
 Current reports/screenshots use `artifacts/derived-time-off-*`.
 
 ## Recordings are historical
@@ -62,7 +62,7 @@ The preserved [narrated edition](../artifacts/time-off-demo-narrated.mp4),
 renderer. Their original outcomes were actual executions; they are not current UI
 verification. [Audio sources and reproduction](time-off-audio.md) remain unchanged.
 
-`node leave/video.mjs` and `node leave/explained-video.mjs` now use the generated
+`node leave/video.ts` and `node leave/explained-video.ts` now use the generated
 contracts and separate grant/resume controls and produce new raw WebM recordings
 through the browser scenario. They do not overwrite the historical MP4s. No new
 recording was required or made for this migration.

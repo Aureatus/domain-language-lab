@@ -1,7 +1,7 @@
 # Lifecycle and approval core — adapter contract v2
 
 Status: implemented bounded reference profile, not a durable engine or authentication
-system. Import `semantic/v2/core.mjs`; declarations are in `core.d.mts`.
+system. Import `semantic/v2/core.ts`; declarations are in `types.ts`.
 This is an **opt-in new profile** (`semantic-core/v2`). v1 is neither modified nor
 automatically migrated. Its existing adapters and Lean evidence still describe v1,
 not this profile. No v2 theorem or runtime/proof correspondence is claimed.
@@ -215,7 +215,7 @@ reactive propagation, business facts or v2 verification adapter is implemented.
 
 ## Evidence and implementation boundaries
 
-`node --test semantic/v2/*.test.mjs semantic/*.test.mjs` exercises the new mapping
+`node --test semantic/v2/*.test.ts semantic/*.test.ts` exercises the new mapping
 and the unchanged v1 core. v2 tests cover lifecycle grouping/rollback/aliasing,
 snapshots/no-ops/version bounds, malformed IR, approval outcomes, unauthorized and
 self grants, serialization/restart, exact binding invalidation, fresh-clock policy
