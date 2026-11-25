@@ -29,7 +29,8 @@ const derivationObject = value => value !== null && typeof value === 'object' &&
 const derivationScope = 'Finite generated declaration checks in private reconstructed runtimes; current roles, schema rejection, valid-state witnesses and event-time relationship routes. Not exhaustive; no external delivery or authentication tested.';
 
 export function describeChange(model: LiveModel, action, patch) {
-  if (typeof action !== 'string' || !Object.prototype.hasOwnProperty.call(model.actions, action)) {
+  const rule=typeof action==='string'&&Object.hasOwn(model.actions,action)?model.actions[action]:undefined;
+  if (!rule) {
     return {ok: false, reason: `Unknown action: ${action}`};
   }
   if (!derivationObject(patch) || !Object.keys(patch).length || Object.keys(patch).some(key => !['allowedRoles', 'notify'].includes(key))) {
@@ -41,7 +42,6 @@ export function describeChange(model: LiveModel, action, patch) {
       return {ok: false, reason: `Invalid ${key}`};
     }
   }
-  const rule = model.actions[action];
   const roles = patch.allowedRoles ?? rule.allowedRoles;
   const notify = patch.notify ?? rule.notify;
   const roleChanges = ['lead', 'member'].filter(role => rule.allowedRoles.includes(role) !== roles.includes(role))
@@ -72,7 +72,7 @@ function derivedRoutes(issue, paths: string[], actorId): Route[] {
     const reasons = paths.filter(path => path === 'watchers' ? issue.watchers.includes(recipient) : issue[path] === recipient);
     return {recipient, reasons, paths: reasons.map(relationship => ({from: issue.id, relationship, to: recipient}))};
   }).filter(row => row.reasons.length).sort((a, b) => {
-    const pathOrder = paths.indexOf(a.reasons[0]) - paths.indexOf(b.reasons[0]);
+    const pathOrder=paths.findIndex(path=>path===a.reasons[0])-paths.findIndex(path=>path===b.reasons[0]);
     return pathOrder || (a.reasons[0] === 'watchers' ? issue.watchers.indexOf(a.recipient) - issue.watchers.indexOf(b.recipient) : 0);
   });
 }

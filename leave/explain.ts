@@ -16,6 +16,7 @@ export function declaration(id,value,path){
 // This deliberately avoids a second expression evaluator or copied domain rules.
 export function explainEvaluation(state,invocation,result,{phase='preview',grantStatus}:{phase?:string;grantStatus?:string}={}){
   const a=leaveModel.actions[invocation.action];
+  if(!a)throw Error(`Unknown leave action: ${invocation.action}`);
   const checks=[...a.policies.map((p,i)=>({p,kind:p.effect,path:`actions.${invocation.action}.policies[${i}]`})),...a.preconditions.map((p,i)=>({p,kind:'precondition',path:`actions.${invocation.action}.preconditions[${i}]`}))].map(({p,kind,path})=>{
     const probe=structuredClone(leaveModel);
     probe.actions={ [invocation.action]:{...structuredClone(a),policies:[{id:'explain.probe-allow',effect:'allow',when:{op:'literal',value:true}}],preconditions:[{id:p.id,when:p.when}],updates:[],inserts:[],deletes:[],observe:[]} };

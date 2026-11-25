@@ -124,10 +124,11 @@ const issue = () => view.state.issues.find(i => i.id === selected);
 const option = (value, text, current) => `<option value="${esc(value)}" ${value === current ? 'selected' : ''}>${esc(text)}</option>`;
 const whyButton = eventId => `<button class="link" data-why="${esc(eventId)}">Why<span class="sr-only"> event ${esc(eventId)}</span></button>`;
 function fields(action: string, values: Record<string, unknown> = {}, omit: string[] = []) {
-  const schema = view.model.actions[action].inputs;
+  const schema=view.model.actions[action]?.inputs;
+  if(!schema)throw Error(`Unknown action: ${action}`);
   return Object.entries(schema.properties).filter(([key]) => !omit.includes(key)).map(([key, def]) => {
     const titles: Record<string, string> = {issueId:'Issue',body:'Comment',assignee:'Assign to'};
-    const title = def.title || def.label || titles[key] || key[0].toUpperCase()+key.slice(1);
+    const title = def.title || def.label || titles[key] || key.charAt(0).toUpperCase()+key.slice(1);
     const required = schema.required?.includes(key) ? 'required' : '';
     let input;
     if (key === 'assignee') input = `<select name="${key}">${option('', 'Unassigned', values[key] ?? '')}${view.state.users.map(u=>option(u.id,u.name,values[key])).join('')}</select>`;

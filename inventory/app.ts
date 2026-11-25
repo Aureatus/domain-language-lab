@@ -16,13 +16,16 @@ const isMutant = (operation: Step['operation'])=>operation.type==='commit'&&oper
 function render() {
   $('replay-result').textContent='';
   const state=selected<0?host.state:stateAt(selected);
-  const {available, capacity}=state.records['stock']['camera'].values;
+  const camera=state.records['stock']?.['camera'],reservations=state.records['reservation'];
+  if(!camera||!reservations)throw Error('Missing inventory records');
+  const {available,capacity}=camera.values;
   if(typeof available!=='number'||typeof capacity!=='number') throw Error('Inventory stock counts must be numbers');
   $('available').textContent=String(available);
   $('revision').textContent=`Snapshot r${state.revision} · ${selected<0?'latest':'history / read only'}`;
   $('allocation').innerHTML=Array.from({length:capacity},(_,i)=>`<span class="unit ${i<available?'free':'held'}">${i<available?'AVAILABLE':'HELD'}</span>`).join('');
-  $('reservations').innerHTML=Object.entries(state.records['reservation']).map(([key,{version,values:r}])=>`<tr><th>${key}</th><td>${escape(r['owner'])}</td><td><span class="status ${r['status']}">${r['status']}</span></td><td>${r['quantity']}</td><td>${r['expiresAt']||'—'}</td><td>v${version}</td></tr>`).join('');
-  const oracle=selected<0?host.oracle:host.steps[selected].observation.oracle;
+  $('reservations').innerHTML=Object.entries(reservations).map(([key,{version,values:r}])=>`<tr><th>${key}</th><td>${escape(r['owner'])}</td><td><span class="status ${r['status']}">${r['status']}</span></td><td>${r['quantity']}</td><td>${r['expiresAt']||'—'}</td><td>v${version}</td></tr>`).join('');
+  const oracle=selected<0?host.oracle:host.steps[selected]?.observation.oracle;
+  if(!oracle)throw Error('Missing selected inventory step');
   $('health').className=oracle.ok?'health':'health failed';
   $('health').textContent=oracle.ok?'Conservation holds · accepted ledger agrees':`INVARIANT FAILURE · ${oracle.failures.join(' · ')}`;
   $('steps').innerHTML=host.steps.map(({operation:o,observation:r},i)=>`<button class="step ${selected===i?'selected':''}" data-step="${i}"><span>${i+1}. ${escape(o.type)} ${escape(o.type==='execute'?o.invocation.action.split('.')[1]:o.token)}${isMutant(o)?' · MUTANT':''}</span><strong class="${r.status==='rejected'?'rejected':''}">${escape(r.code??r.status)}</strong></button>`).join('')||'<p class="muted">No operations yet. Reserve stock or run a competing schedule.</p>';

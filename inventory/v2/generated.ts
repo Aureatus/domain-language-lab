@@ -71,7 +71,12 @@ const count = (value: Value | undefined) => {
 export function generatedHistory(seed: number, steps = 30) {
   validSeed(seed); positiveInteger(steps, 'steps');
   if (steps < 30) throw new RangeError('steps must be at least 30 for guaranteed boundary coverage');
-  const random = rng(seed), pick = <T>(xs: readonly T[]) => xs[Math.floor(random() * xs.length)];
+  const random=rng(seed);
+  function pick<T>(xs:readonly T[]):T {
+    const item=xs[Math.floor(random()*xs.length)];
+    assert.ok(item!==undefined,'Expected a nonempty generation pool');
+    return item;
+  }
   const owner = () => pick(['alice', 'bob', 'carol']);
   const prefix = `s${seed.toString(16)}`, blocks: Operation[][] = []; let serial = 0;
   const id = label => `${prefix}-${label}-${serial++}`;
@@ -102,7 +107,11 @@ export function generatedHistory(seed: number, steps = 30) {
     const t = clock(), r = reserve('expired', owner(), t, pick([3, 4]));
     blocks.push([r, grant(r), resume(r, r.command.args.expiresAt)]);
   }
-  for (let i = blocks.length - 1; i > 0; i--) { const j = Math.floor(random() * (i + 1)); [blocks[i], blocks[j]] = [blocks[j], blocks[i]]; }
+  for (let i=blocks.length-1;i>0;i--) {
+    const j=Math.floor(random()*(i+1)), a=blocks[i],b=blocks[j];
+    assert.ok(a&&b,'Missing block during shuffle');
+    [blocks[i],blocks[j]]=[b,a];
+  }
   const ops = blocks.flat(), t = clock();
   ops.push(reserve('invalid-expiry', owner(), t, 1, t));
   const first = ops.find(x => x.api === 'execute'); assert.ok(first);
@@ -118,7 +127,9 @@ export function generatedHistory(seed: number, steps = 30) {
 // An inventory-specific state machine. No execute/prepare/approve/resume calls,
 // declaration traversal, or observed-success-driven oracle updates are used here.
 function oracle(): Oracle {
-  const {version, values: {available, capacity, watchers, operator}} = initialState.records['stock']['camera'];
+  const camera=initialState.records['stock']?.['camera'];
+  assert.ok(camera,'Missing initial camera stock');
+  const {version,values:{available,capacity,watchers,operator}}=camera;
   assert.ok(Array.isArray(watchers) && typeof operator === 'string');
   return {state:{revision:initialState.revision, records:{stock:{camera:{version, values:{available:count(available), capacity:count(capacity), watchers:copy(watchers), operator}}}, reservation:{}}}, pending:{}, ledger:new Map()};
 }
@@ -173,7 +184,12 @@ function predict(o: Oracle, op: Operation): Prediction {
     const kind = inv.action.split('.').at(-1), a = inv.args, stock = o.state.records.stock.camera, records = o.state.records.reservation;
     if (kind === 'reserve') { stock.values.available -= count(a['quantity']); stock.version++; records[a.reservationId] = {version:0, values:{stockId:'camera', owner:inv.actor, quantity:count(a['quantity']), expiresAt:count(a['expiresAt']), status:'active'}}; }
     else if (kind === 'delete-terminal') delete records[a.reservationId];
-    else { stock.values.available += records[a.reservationId].values.quantity; stock.version++; records[a.reservationId].version++; records[a.reservationId].values.status = kind === 'cancel' ? 'cancelled' : 'expired'; }
+    else {
+      const record=records[a.reservationId];
+      assert.ok(record,'Missing committed reservation');
+      stock.values.available+=record.values.quantity;stock.version++;record.version++;
+      record.values.status=kind==='cancel'?'cancelled':'expired';
+    }
     o.state.revision++;
     expected.invocation = copy(inv);
   }
@@ -221,7 +237,7 @@ function checkEvents(events: NonNullable<ObservedResult['events']>, before: Orac
     }
   }
   assert.equal(events.length, changes.length + 1, 'one action and exactly the predicted record changes');
-  assert.equal(events[0]['kind'], 'action');
+  assert.equal(events[0]?.['kind'], 'action');
   const projection = e => Object.fromEntries(['kind', 'resource', 'key', 'field', 'before', 'after'].filter(k => Object.hasOwn(e, k)).map(k => [k, e[k]]));
   assert.deepEqual(events.slice(1).map(projection).sort((a,b) => canonical(a).localeCompare(canonical(b))), changes.sort((a,b) => canonical(a).localeCompare(canonical(b))));
   for (const event of events) {
@@ -234,11 +250,13 @@ function checkEvents(events: NonNullable<ObservedResult['events']>, before: Orac
 // predictions, generated commands, or the actual database.
 export function checkHistory(commands: Operation[], observations: Observation[]): {status: 'passed'; steps: number} | Counterexample {
   const o = oracle(); let previousEvents: Snapshot['events'] = [];
-  for (let index = 0; index < commands.length; index++) {
-    const op = commands[index]; let expected: Prediction | undefined;
+  for (const [index,op] of commands.entries()) {
+    let expected: Prediction | undefined;
     try {
       const before = copy(o.state); expected = predict(o, op);
-      const {result, snapshot} = observations[index];
+      const observation=observations[index];
+      assert.ok(observation,'Missing step observation');
+      const {result,snapshot}=observation;
       checkOutcome(result, expected, o, op);
       assert.deepEqual(snapshot.state, o.state, 'persisted domain state');
       assert.equal(snapshot.state.records.stock.camera.values.available, 8 - Object.values(o.state.records.reservation).filter(r => r.values.status === 'active').reduce((n,r) => n + r.values.quantity, 0), 'capacity conservation');
@@ -287,11 +305,11 @@ async function observe(path: string, commands: Operation[]): Promise<{observatio
   const observations: Observation[] = [];
   try { await durable(path, (rt, db) => run(initializeDurableState(rt, db, initialState))); }
   catch (error) { return {observations, failure:{status:'counterexample', phase:'initialize', cause:{name:asError(error).name, message:errorMessage(error)}, failingPrefix:[]}}; }
-  for (let index = 0; index < commands.length; index++) {
+  for (const [index,command] of commands.entries()) {
     // The replay contract is JSON data. Optional undefined JS properties (for
     // example conflict.state) cannot survive report serialization.
-    try { observations.push({result:copy(await execute(path, commands[index])), snapshot:await snapshot(path, commands)}); }
-    catch (error) { return {observations, failure:{status:'counterexample', index, command:commands[index], cause:{name:asError(error).name, message:errorMessage(error)}, failingPrefix:commands.slice(0, index + 1)}}; }
+    try { observations.push({result:copy(await execute(path,command)),snapshot:await snapshot(path,commands)}); }
+    catch (error) { return {observations, failure:{status:'counterexample', index, command, cause:{name:asError(error).name, message:errorMessage(error)}, failingPrefix:commands.slice(0, index + 1)}}; }
   }
   return {observations};
 }
@@ -303,8 +321,8 @@ export function mutationChecks(commands: Operation[], observations: Observation[
   const mutations = {
     bogusStaleCommitDetected: [staleIndex, row => { row.result = {...row.result, status:'committed', events:[]}; }],
     duplicateDecrementDetected: [commitIndex, row => {
-      const {state} = row.snapshot, camera = state.records['stock']['camera'];
-      assert.ok(row.result.state);
+      const {state}=row.snapshot,camera=state.records['stock']?.['camera'];
+      assert.ok(camera&&row.result.state);
       row.snapshot.state = {...state, records:{...state.records, stock:{...state.records['stock'],
         camera:{...camera, values:{...camera.values, available:count(camera.values['available']) - 1}}}}};
       row.result.state.records.stock.camera.values.available--;
@@ -312,7 +330,8 @@ export function mutationChecks(commands: Operation[], observations: Observation[
     missingExpectedCommitDetected: [commitIndex, row => { row.result = {status:'rejected', code:'precondition'}; }],
   } satisfies Record<string, [number, (row: Observation) => void]>;
   return Object.fromEntries(Object.entries(mutations).map(([name, [index, mutate]]) => {
-    const altered = copy(observations); mutate(altered[index]);
+    const altered=copy(observations),row=altered[index];
+    assert.ok(row,'Missing mutation target');mutate(row);
     const result = checkHistory(commands, altered);
     assert.equal(result.status, 'counterexample', `${name}: checker accepted altered history`);
     assert.equal(result.index, index, `${name}: detection must identify altered step`);
@@ -322,10 +341,12 @@ export function mutationChecks(commands: Operation[], observations: Observation[
 
 export async function runGenerated({reportPath, seed = 0x51a7, runs = 6, steps = 30, histories}: GeneratedOptions = {}) {
   validSeed(seed); positiveInteger(runs, 'runs'); positiveInteger(steps, 'steps');
-  const seeds = histories ? histories.map(x => x.seed) : Array.from({length:runs}, (_, i) => (seed + Math.imul(i, 0x9e3779b9)) >>> 0);
+  const scenarios=histories?.map(history=>({caseSeed:history.seed,history})) ??
+    Array.from({length:runs},(_,i)=>({caseSeed:(seed+Math.imul(i,0x9e3779b9))>>>0,history:undefined}));
+  const seeds=scenarios.map(({caseSeed})=>caseSeed);
   const root = await temp(), cases: Case[] = [], coverage: Record<string, number> = {}; let mutations: ReturnType<typeof mutationChecks> | undefined;
-  for (const [i, caseSeed] of seeds.entries()) {
-    const commands = histories ? copy(histories[i].commands ?? histories[i].failingPrefix) : generatedHistory(caseSeed, steps);
+  for (const [i,{caseSeed,history}] of scenarios.entries()) {
+    const commands=history?copy(history.commands??history.failingPrefix):generatedHistory(caseSeed,steps);
     const path = join(root, `seed-${i}.sqlite`), observed = await observe(path, commands);
     const prefixCheck = checkHistory(commands.slice(0, observed.observations.length), observed.observations);
     const checked = prefixCheck.status === 'counterexample' ? prefixCheck : observed.failure ?? prefixCheck;
@@ -335,19 +356,22 @@ export async function runGenerated({reportPath, seed = 0x51a7, runs = 6, steps =
       let phase = 'replay';
       try {
         // A supplied saved report is also a baseline, not merely a source of commands.
-        const baseline = histories?.[i].observations;
+        const baseline=history?.observations;
         if (baseline) {
           for (let index = 0; index < Math.max(baseline.length, observed.observations.length); index++) {
             try { assert.deepEqual(observed.observations[index], baseline[index], 'saved report observations must replay exactly'); }
-            catch (error) { item.checks = 'counterexample'; item.counterexample = {status:'counterexample', phase:'saved-replay', index, command:commands[index], cause:{name:asError(error).name, message:errorMessage(error)}, failingPrefix:commands.slice(0, index + 1)}; break; }
+            catch (error) {
+              const command=commands[index];
+              item.checks='counterexample';item.counterexample={status:'counterexample',phase:'saved-replay',index,...(command?{command}:{}),cause:{name:asError(error).name,message:errorMessage(error)},failingPrefix:commands.slice(0,index+1)};break;
+            }
           }
         }
         const replay = await observe(join(root, `replay-${i}.sqlite`), commands);
         if (replay.failure) { item.checks = 'counterexample'; item.counterexample = {...replay.failure, phase}; }
         else {
-          for (let index = 0; index < commands.length; index++) {
+          for (const [index,command] of commands.entries()) {
             try { assert.deepEqual(replay.observations[index], observed.observations[index], 'exact fresh DB outcomes, states, pending projections and ordered events'); }
-            catch (error) { item.checks = 'counterexample'; item.counterexample = {status:'counterexample', phase, index, command:commands[index], cause:{name:asError(error).name, message:errorMessage(error)}, failingPrefix:commands.slice(0, index + 1)}; break; }
+            catch (error) { item.checks = 'counterexample'; item.counterexample = {status:'counterexample', phase, index, command, cause:{name:asError(error).name, message:errorMessage(error)}, failingPrefix:commands.slice(0, index + 1)}; break; }
           }
           const replayCheck = checkHistory(commands, replay.observations);
           if (replayCheck.status !== 'passed' && !item.counterexample) { item.checks = 'counterexample'; item.counterexample = {...replayCheck, phase}; }
@@ -361,7 +385,8 @@ export async function runGenerated({reportPath, seed = 0x51a7, runs = 6, steps =
         phase = 'outbox-pull-ack';
         await durable(path, async (_rt, db) => {
           const first = await run(pullOutbox(db, {limit:2})); assert.deepEqual(await run(pullOutbox(db, {limit:2})), first);
-          if (first.length) { assert.equal(await run(acknowledgeOutbox(db, first[0].sequence)), true); assert.ok(!(await run(pullOutbox(db, {limit:2}))).some(x => x.sequence === first[0].sequence)); }
+          const [entry]=first;
+          if(entry){assert.equal(await run(acknowledgeOutbox(db,entry.sequence)),true);assert.ok(!(await run(pullOutbox(db,{limit:2}))).some(x=>x.sequence===entry.sequence));}
         });
       } catch (error) {
         item.checks = 'counterexample'; item.counterexample = {status:'counterexample', phase, cause:{name:asError(error).name, message:errorMessage(error)}, failingPrefix:commands};
@@ -383,12 +408,17 @@ export async function runGenerated({reportPath, seed = 0x51a7, runs = 6, steps =
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const args = process.argv.slice(2), options: GeneratedOptions = {}; let replay;
+  function argValue(index:number):string {
+    const value=args[index];
+    if(value===undefined)throw new TypeError(`Missing value for ${args[index-1]}`);
+    return value;
+  }
   for (let i = 0; i < args.length; i++) {
-    const arg = args[i];
+    const arg=argValue(i);
     if (arg === '--seed') options.seed = Number(args[++i]);
     else if (arg === '--runs') options.runs = Number(args[++i]);
     else if (arg === '--steps') options.steps = Number(args[++i]);
-    else if (arg === '--report') options.reportPath = resolve(args[++i]);
+    else if (arg === '--report') options.reportPath = resolve(argValue(++i));
     else if (arg === '--replay') replay = args[++i];
     else if (!arg.startsWith('-') && !options.reportPath) options.reportPath = resolve(arg);
     else throw new TypeError(`Unknown option ${arg}`);

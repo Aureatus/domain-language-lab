@@ -265,8 +265,8 @@ function createRuntime(options: Record<string, unknown> = {}, trusted?) {
     let category = 'action';
     let missingRequirements: string[] = [];
     try {
-      if (typeof action !== 'string' || !own(model.actions, action)) throw Error(`Unknown action: ${action}`);
-      const rule = model.actions[action];
+      const rule=typeof action==='string'&&own(model.actions,action)?model.actions[action]:undefined;
+      if(!rule)throw Error(`Unknown action: ${action}`);
       category = 'actor';
       const actor = state.users.find(user => user.id === actorId);
       if (!actor) throw Error(`Unknown actor: ${actorId}`);

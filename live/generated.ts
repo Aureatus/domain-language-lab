@@ -76,6 +76,7 @@ function trial(seed: number, maxSteps: number, wrapper?: Wrapper) {
       if(result.ok) coverage.ruleEdits++; continue;
     }
     const action=ACTIONS[step%ACTIONS.length], actor=pick(r,['u1','u2','u3','nobody']);
+    if(!action)throw Error('Missing generated action');
     const args: Args=action==='create'?{title:`generated ${seed}-${step}`,...(r()<.35?{}:{priority:pick(r,['normal','high'])})}: {issueId:r()<.12?'missing':pick(r,before.issues).id};
     if(action==='assign') args['assignee']=pick(r,['u1','u2','u3',null,'missing']);
     if(action==='comment') args['body']=r()<.12?'  ':`comment ${step}`;
@@ -83,16 +84,17 @@ function trial(seed: number, maxSteps: number, wrapper?: Wrapper) {
     const allowed=permitted(before,modelBefore,action,actor), valid=validateCandidate(before,action,args), domain=valid&&domainValid(before,action,args), expected=allowed&&valid&&domain;
     const result=(wrapper?.dispatch ?? app.dispatch).call(app,action,args,actor); history.push({kind:'dispatch',action,args,actor});
     if(!snapshotsStable()) return {failed:true as const,history,why:'historical snapshot lost immutability'};
-    coverage.actions[action]++;
+    coverage.actions[action]=(coverage.actions[action]??0)+1;
     if(!allowed) coverage.denials++;
     if(result.ok!==expected) return {failed:true as const,history,why:`${action}: expected ok=${expected}, got ${result.ok}`};
     if(!result.ok) { coverage.rejections++; if(app.state!==before || app.model!==modelBefore) return {failed:true as const,history,why:'rejected operation changed state/model'}; continue; }
-    coverage.acceptedActions[action]++;
+    coverage.acceptedActions[action]=(coverage.acceptedActions[action]??0)+1;
     const expectedIssue=issueAfter(before,action,args,actor,1700000000000+before.events.length), now=app.state, actual=now.issues.find(x=>x.id===expectedIssue.id), rule=modelBefore.actions[action];
+    if(!rule)throw Error(`Missing generated action rule: ${action}`);
     if(JSON.stringify(actual)!==JSON.stringify(expectedIssue)) return {failed:true as const,history,why:'issue transition differs from independent oracle'};
     const event=result.event, route=oracleRoute(expectedIssue,rule.notify,actor);
     if(!event || JSON.stringify(event.recipients)!==JSON.stringify(route)) return {failed:true as const,history,why:'notification route differs from declared-path oracle'};
-    for(const x of rule.notify) coverage.notificationPaths[x]++;
+    for(const x of rule.notify)coverage.notificationPaths[x]=(coverage.notificationPaths[x]??0)+1;
     if(event.actorId!==actor || event.revision!==modelBefore.revision || event.rule.allowedRoles.includes(before.users.find(u=>u.id===actor).role)===false) return {failed:true as const,history,why:'event policy snapshot mismatch'};
   }
   const rebuilt=createApp({workspace:app.exportWorkspace()});
@@ -108,7 +110,12 @@ export function runGenerated({seed=0x51eed,runs=40,maxSteps=80,wrapper}: Options
       let lo=1,hi=run.history.length; while(lo<hi){const mid=Math.floor((lo+hi)/2); if(trial((seed+n)>>>0,mid,wrapper).failed) hi=mid; else lo=mid+1;}
       return {status:'counterexample' as const,seed:(seed+n)>>>0,runs:n+1,maxSteps,actionsExecuted:run.history.length,coverage:aggregate,counterexample:{history:run.history.slice(0,lo),why:run.why}};
     }
-    for(const a of ACTIONS) {aggregate.actions[a]+=run.coverage.actions[a];aggregate.acceptedActions[a]+=run.coverage.acceptedActions[a];} for(const k of ['denials','rejections','ruleEdits','invalidReferences']) aggregate[k]+=run.coverage[k]; for(const p of PATHS) aggregate.notificationPaths[p]+=run.coverage.notificationPaths[p];
+    for(const a of ACTIONS){
+      aggregate.actions[a]=(aggregate.actions[a]??0)+(run.coverage.actions[a]??0);
+      aggregate.acceptedActions[a]=(aggregate.acceptedActions[a]??0)+(run.coverage.acceptedActions[a]??0);
+    }
+    for(const k of ['denials','rejections','ruleEdits','invalidReferences'] as const)aggregate[k]+=run.coverage[k];
+    for(const p of PATHS)aggregate.notificationPaths[p]=(aggregate.notificationPaths[p]??0)+(run.coverage.notificationPaths[p]??0);
   }
   return {status:'sampled_pass' as const,seed,runs,maxSteps,actionsExecuted:Object.values(aggregate.actions).reduce((a,b)=>a+b,0),coverage:aggregate};
 }

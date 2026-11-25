@@ -42,7 +42,7 @@ async function declarationChecks(){
   await page.waitForFunction(count=>document.querySelectorAll('#derived-output tbody tr').length===count,expected.cases.length);
   assert.equal(await page.locator('#derived-output tbody tr').count(),expected.cases.length);
   const rows=await page.locator('#derived-output tbody tr').allTextContents();
-  expected.cases.forEach((c,i)=>{for(const value of [c.id,c.action,c.actorId,c.status])if(value!==undefined)assert.ok(rows[i].includes(String(value)));const value=typeof c.expected==='string'?c.expected:JSON.stringify(c.expected);assert.ok(rows[i].includes(value))});
+  expected.cases.forEach((c,i)=>{const row=rows[i];assert.ok(row);for(const value of [c.id,c.action,c.actorId,c.status])if(value!==undefined)assert.ok(row.includes(String(value)));const value=typeof c.expected==='string'?c.expected:JSON.stringify(c.expected);assert.ok(row.includes(value))});
   assert.match(await page.locator('#derived-output').innerText(),/\d+ unknown/);
   assert.deepEqual(await workspace(),before,'Generated checks cannot mutate live state, model or journal');
   assert.deepEqual(await get(),snapshot,'Generated checks preserve actual in-memory state/model');

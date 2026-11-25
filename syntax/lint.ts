@@ -24,7 +24,9 @@ export function lintSource(source:string,{filename='<source>',parsed:provided}:{
     if(indent)report('style/tab-indentation','warning',i+1,line.indexOf('\t')+1,'Use spaces for indentation; tab display widths vary.');
   });
   for(const [id,action] of Object.entries(parsed.declaration.domain.actions)){
-    if(provided&&parsed.sourceMap[id].filename!==filename)continue;
+    const span=parsed.sourceMap[id];
+    if(!span)throw Error(`Missing source span for '${id}'.`);
+    if(provided&&span.filename!==filename)continue;
     const used=new Set<string|number>();
     const visit=(value:unknown)=>{
       if(!value||typeof value!=='object')return;
@@ -37,7 +39,6 @@ export function lintSource(source:string,{filename='<source>',parsed:provided}:{
     const metadata=parsed.declaration.application?.actions[id];
     for(const adapter of metadata?.adapters??[])for(const name of Object.values(adapter.mapping))used.add(name);
     for(const [name,field] of Object.entries(metadata?.fields??{}))if(field.binding)used.add(name);
-    const span=parsed.sourceMap[id];
     for(const name of Object.keys(action.inputs))if(!used.has(name)){
       const token=parsed.inputLocations[id]?.[name];
       report('usage/unused-input','warning',token?.line??span.start.line,token?.column??span.start.column,`Input '${name}' has no core expression, host binding or adapter reference; review whether it is intended.`);
@@ -49,14 +50,15 @@ export function lintSource(source:string,{filename='<source>',parsed:provided}:{
 export function lintCLI(args:string[]){
   const json=args.includes('--json'),strict=args.includes('--strict');
   const paths=args.filter(x=>!x.startsWith('--'));
+  const [path]=paths;
   let diagnostics:Diagnostic[]=[];
-  if(paths.length!==1||args.some(x=>x.startsWith('--')&&!['--json','--strict'].includes(x))){
+  if(!path||paths.length!==1||args.some(x=>x.startsWith('--')&&!['--json','--strict'].includes(x))){
     diagnostics=[{filename:paths[0]??'<cli>',line:1,column:1,severity:'error',ruleId:'cli/usage',message:'Usage: syntax:lint -- PATH [--json] [--strict]'}];
   }else try{
-    const parsed=loadSource(paths[0]);
+    const parsed=loadSource(path);
     diagnostics=parsed.modules.flatMap(m=>lintSource(m.source,{filename:m.filename,parsed}));
   }
-  catch(error){diagnostics=[{filename:paths[0],line:1,column:1,severity:'error',ruleId:'io/read-source',message:errorMessage(error)}];}
+  catch(error){diagnostics=[{filename:path,line:1,column:1,severity:'error',ruleId:'io/read-source',message:errorMessage(error)}];}
   const errors=diagnostics.filter(d=>d.severity==='error').length,warnings=diagnostics.length-errors;
   if(json)console.log(encodeJsonPretty({diagnostics,errors,warnings}));
   else {
