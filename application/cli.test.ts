@@ -9,7 +9,7 @@ import {deriveApplication} from './derive.ts';
 import declaration from '../leave/model.ts';
 import {present} from '../semantic/test-support.ts';
 const exec=promisify(execFile);
-export async function cli(url:string,...args:string[]){
+async function cli(url:string,...args:string[]){
   const {stdout}=await exec(process.execPath,['application/cli.ts','--view','leave/cli.domain',...args,'--url',url,'--json']);return JSON.parse(stdout);
 }
 test('spawned CLI advances the same durable HTTP backend; grant/resume, duplicates, stale and reopen',async()=>{

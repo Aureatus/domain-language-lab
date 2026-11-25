@@ -1,8 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-// Resolve the adapter-owned dependency without adding a root dependency.
-import * as SynchronizedRef from '../adapters/effect/node_modules/effect/dist/SynchronizedRef.js';
-import {Effect, execute, makeStore} from '../adapters/effect/index.ts';
+import {Effect, SynchronizedRef, execute, makeStore} from '../adapters/effect/index.ts';
 import type {Event, State} from '../semantic/types.ts';
 import {runtime, initialState, invocation} from './model.ts';
 import {present} from '../semantic/test-support.ts';

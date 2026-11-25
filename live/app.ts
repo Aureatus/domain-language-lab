@@ -355,7 +355,7 @@ function download(text:string,filename:string) {
 }
 render();
 // Inspectable for browser assertions, never an alternative execution path.
-export type LiveWorkspace = {core: typeof core; readonly selected: string | undefined; showWhy: typeof showWhy};
+type LiveWorkspace = {core: typeof core; readonly selected: string | undefined; showWhy: typeof showWhy};
 declare global {
   interface Window {
     liveWorkspace: LiveWorkspace;

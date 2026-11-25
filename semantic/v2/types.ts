@@ -23,16 +23,16 @@ export interface RecordSnapshot {readonly version: number; readonly values: Read
 export interface State {readonly revision: number; readonly records: Readonly<Record<string, Readonly<Record<string, RecordSnapshot>>>>}
 export interface Invocation {readonly id: string; readonly action: string; readonly args: Readonly<Record<string, Value>>; readonly actor: string; readonly clock: number}
 export type InvocationInput = Omit<Invocation,'args'>&{readonly args:unknown};
-export interface Requirement {readonly policyId: string; readonly approvers: readonly string[]; readonly allowSelfApproval: boolean}
+interface Requirement {readonly policyId: string; readonly approvers: readonly string[]; readonly allowSelfApproval: boolean}
 export interface ApprovalRequest {readonly format: 'semantic-approval-request/v2'; readonly model: Model; readonly invocation: Invocation; readonly prestate: State; readonly requirements: readonly Requirement[]}
 export interface Grant {readonly policyId: string; readonly approver: string}
 export interface ApprovalReceipt extends Grant {readonly format: 'semantic-approval-receipt/v2'; readonly request: ApprovalRequest}
 export interface Recipient {readonly recipient: string; readonly paths: readonly {readonly relationship: string; readonly resource: string; readonly key: string}[]}
-export interface EventBase {readonly id: string; readonly modelId: string; readonly actionId: string; readonly invocationId: string; readonly actor: string; readonly clock: number; readonly revision: number; readonly recipients: readonly Recipient[]; readonly semanticId: string}
+interface EventBase {readonly id: string; readonly modelId: string; readonly actionId: string; readonly invocationId: string; readonly actor: string; readonly clock: number; readonly revision: number; readonly recipients: readonly Recipient[]; readonly semanticId: string}
 export type Event = EventBase & ({readonly kind: 'action'} | {readonly kind: 'change'; readonly resource: string; readonly key: string; readonly field: string; readonly before: Value; readonly after: Value} | {readonly kind: 'create'; readonly resource: string; readonly key: string; readonly after: RecordSnapshot} | {readonly kind: 'delete'; readonly resource: string; readonly key: string; readonly before: RecordSnapshot});
 declare const opaque: unique symbol;
 export type Prepared = {readonly kind: 'semantic-prepared/v2'; readonly [opaque]: true};
-export type Failure = Readonly<{status: 'rejected'; code: string; reason: string}>;
+type Failure = Readonly<{status: 'rejected'; code: string; reason: string}>;
 export type Rejected = Failure & {readonly state: State};
 export type Pending = Readonly<{status: 'pending'; policyIds: readonly string[]; request: ApprovalRequest; state: State}>;
 export type Committed = Readonly<{status: 'committed'; state: State; events: readonly Event[]}>;

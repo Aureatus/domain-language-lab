@@ -5,6 +5,7 @@
   "packageManager": "pnpm@10.34.7",
   "engines": { "node": "^22.18.0 || ^24.11.0 || >=26.0.0" },
   "scripts": {
+    "knip": "knip",
     "lint": "vp lint -c .oxlintrc.json",
     "typecheck": "effect-language-service patch && tsc -p tsconfig.json && effect-tsgo tsc@7.0.2 -p tsconfig.json",
     "test": "node --test prototype/*.test.ts live/*.test.ts semantic/*.test.ts semantic/v2/*.test.ts inventory/*.test.ts inventory/v2/*.test.ts adapters/effect/*.test.ts adapters/lean/*.test.ts adapters/exact/test.ts workspace/*.test.ts application/*.test.ts leave/*.test.ts syntax/*.test.ts",
@@ -55,6 +56,7 @@
     "@effect/tsgo": "0.73.4",
     "@types/node": "24.19.4",
     "axe-core": "4.11.1",
+    "knip": "6.46.1",
     "playwright": "1.65.0",
     "typescript": "5.9.3",
     "vite-plus": "1.8.0"

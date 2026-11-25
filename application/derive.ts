@@ -18,7 +18,7 @@ export type ApplicationContract = {format:string; title:string; eyebrow:string; 
   resources:Model['resources']; relationships:Model['relationships']};
 
 const title=(s:string)=>s.replace(/[._-]/g,' ').replace(/([a-z])([A-Z])/g,'$1 $2').replace(/^./,c=>c.toUpperCase());
-export function exact(value:unknown,keys:readonly string[],required:readonly string[]=[]):asserts value is Record<string,unknown> {
+function exact(value:unknown,keys:readonly string[],required:readonly string[]=[]):asserts value is Record<string,unknown> {
   if(!value||typeof value!=='object'||Array.isArray(value)||Object.keys(value).some(k=>!keys.includes(k))||required.some(k=>!Object.hasOwn(value,k)))throw Error(`Unsupported or missing configuration members (allowed: ${keys.join(', ')}).`);
 }
 const text=(s:unknown)=>{if(typeof s!=='string'||!s.length)throw Error('Expected nonempty text.');return s;};
