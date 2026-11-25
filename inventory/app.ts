@@ -1,6 +1,7 @@
 import {errorMessage} from '../errors.ts';
 import {createHost,competition,replay} from './host.ts';
 import {invocation} from './model.ts';
+import {decodeJson,encodeJsonPretty,InventoryReplaySchema} from '../adapters/effect/json.ts';
 let host=createHost(), sequence=0, selected=-1;
 function $<T extends HTMLElement>(id: string, constructor: new () => T): T;
 function $(id: string): HTMLElement;
@@ -62,9 +63,9 @@ $('reset').onclick=()=>{host=createHost();selected=-1;render();};
 $('live').onclick=()=>{selected=-1;render();};
 $('steps').onclick=event=>{const button=event.target instanceof Element && event.target.closest<HTMLButtonElement>('[data-step]');if(button){selected=Number(button.dataset['step']);render();}};
 $('replay').onclick=()=>{try {host=replay(JSON.parse(JSON.stringify(host.export())));selected=-1;render();$('replay-result').textContent='Exact replay matched every observation, event and final record.';}catch(error){$('replay-result').textContent=errorMessage(error);}};
-$('export').onclick=()=>{const url=URL.createObjectURL(new Blob([JSON.stringify(host.export(),null,2)],{type:'application/json'}));const a=document.createElement('a');a.href=url;a.download='inventory-replay.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);};
+$('export').onclick=()=>{const url=URL.createObjectURL(new Blob([encodeJsonPretty(host.export(),InventoryReplaySchema)],{type:'application/json'}));const a=document.createElement('a');a.href=url;a.download='inventory-replay.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);};
 const importInput=$('import', HTMLInputElement);
-importInput.onchange=async()=>{try {const file=importInput.files?.[0];if(!file)return;host=replay(JSON.parse(await file.text()));selected=-1;render();$('replay-result').textContent='Imported replay verified.';}catch(error){$('replay-result').textContent=`Import rejected: ${errorMessage(error)}`;}};
+importInput.onchange=async()=>{try {const file=importInput.files?.[0];if(!file)return;host=replay(decodeJson(InventoryReplaySchema,await file.text()));selected=-1;render();$('replay-result').textContent='Imported replay verified.';}catch(error){$('replay-result').textContent=`Import rejected: ${errorMessage(error)}`;}};
 render();
 declare global {
   interface Window {

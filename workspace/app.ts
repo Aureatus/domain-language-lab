@@ -1,3 +1,4 @@
+import {decodeJson,decodeJsonObject,decodeJsonValue,encodeJson,WorkspaceChangeSchema} from '../adapters/effect/json.ts';
 import {errorMessage} from '../errors.ts';
 import type {ApprovalRequest,FieldSchema,Grant,RecordSnapshot,State,Value} from '../semantic/v2/types.ts';
 
@@ -88,9 +89,10 @@ async function refresh(gen = generation) {
   const serial = ++requestSerial; const {profile,actor} = context();
   try {
     const response = await fetch(`/api/snapshot?${new URLSearchParams({profile,actor})}`);
-    const value = await response.json(); if (!response.ok) throw Error(value.error);
+    const value = decodeJsonObject(await response.text()); if (!response.ok) throw Error(typeof value['error']==='string'?value['error']:`HTTP ${response.status}`);
     if (gen !== generation || serial !== requestSerial) return;
-    const first = !snapshot; const current:Snapshot=value;snapshot=current;
+    if((value['profile']!=='v1'&&value['profile']!=='v2')||!Array.isArray(value['tools'])||!value['state']||typeof value['state']!=='object'||typeof value['sequence']!=='number')throw Error('Invalid workspace snapshot.');
+    const first = !snapshot; const current=value as unknown as Snapshot;snapshot=current;
     if (first) { actionInput.innerHTML = current.tools.map(t => `<option>${esc(t.name)}</option>`).join(''); buildForm(); }
     render(current); $('notice').textContent = ''; $('action-form').inert = false; executeJSON.disabled = false;
     if (stream?.readyState === EventSource.OPEN) $('connection').textContent = 'Connected · snapshot current';
@@ -103,18 +105,21 @@ function connect() {
   stream = new EventSource(`/api/events?${new URLSearchParams(context())}`);
   stream.onopen = () => { if(gen === generation) $('connection').textContent = 'Connected · snapshot resync'; };
   stream.onerror = () => { if(gen === generation) $('connection').textContent = 'Reconnecting · waiting for server'; };
-  stream.addEventListener('change', event => { if (gen !== generation) return; try { $('relationship').textContent = json(JSON.parse(event.data)); } catch { $('relationship').textContent = event.data; } refresh(gen); });
+  stream.addEventListener('change', event => { if (gen !== generation) return; try { $('relationship').textContent = json(decodeJson(WorkspaceChangeSchema,event.data)); } catch { $('relationship').textContent = event.data; } refresh(gen); });
 }
 const help:Record<string,string> = {stale:'The captured state changed. Submit a fresh action; old grants cannot authorize a new request.',consumed:'This request already resumed. Inspect durable history; use a new invocation for new work.',precondition:'Check capacity, lifecycle status and expiry. At expiry, resume is no longer valid.',denied:'This simulated actor is not permitted by the declared policy.',approval:'Required grants are missing. Switch to an approver listed in Request Why.'};
 async function command(endpoint:'execute'|'approve'|'resume', body:object) {
   if (busy) return; busy = true; const gen = generation;
   try {
-    const response = await fetch(`/api/${endpoint}`, {method:'POST',headers:{'Content-Type':'application/json'},body:json(body)});
-    const value = await response.json(); if (!response.ok) throw Error(value.error);
+    const response = await fetch(`/api/${endpoint}`, {method:'POST',headers:{'Content-Type':'application/json'},body:encodeJson(body)});
+    const value = decodeJsonObject(await response.text()); if (!response.ok) throw Error(typeof value['error']==='string'?value['error']:`HTTP ${response.status}`);
     if (gen !== generation) return;
-    const outcome = value.status === 'duplicate' ? value.result : value;
-    $('result').dataset['status'] = outcome.status;
-    $('result').innerHTML = `<strong>${esc(value.status)}${outcome.code ? ` · ${esc(outcome.code)}` : ''}</strong><p>${esc(outcome.reason ?? (outcome.status === 'pending' ? 'Awaiting approval. Stock has not changed.' : 'Server result received.'))} ${esc(typeof outcome.code==='string'&&Object.hasOwn(help,outcome.code)?help[outcome.code]:'')}</p><details><summary>Exact server result</summary><pre>${esc(json(value))}</pre></details>`;
+    const outcome = value['status'] === 'duplicate' ? value['result'] : value;
+    if(!outcome||typeof outcome!=='object'||!('status' in outcome)||typeof outcome['status']!=='string')throw Error('Invalid workspace command result.');
+    const code='code' in outcome&&typeof outcome['code']==='string'?outcome['code']:undefined;
+    const reason='reason' in outcome?outcome['reason']:undefined;
+    $('result').dataset['status'] = outcome['status'];
+    $('result').innerHTML = `<strong>${esc(value['status'])}${code ? ` · ${esc(code)}` : ''}</strong><p>${esc(reason ?? (outcome['status'] === 'pending' ? 'Awaiting approval. Stock has not changed.' : 'Server result received.'))} ${esc(code&&Object.hasOwn(help,code)?help[code]:'')}</p><details><summary>Exact server result</summary><pre>${esc(json(value))}</pre></details>`;
     await refresh(gen);
   } catch(error) { if(gen === generation) { $('result').dataset['status']='error'; $('result').textContent=`Command not confirmed: ${errorMessage(error)}. Check connection and history before retrying.`; } }
   finally { busy = false; }
@@ -124,6 +129,6 @@ $('fields').addEventListener('input',syncJSON); clockInput.addEventListener('inp
 actionInput.addEventListener('change', buildForm);
 for (const name of ['profile','actor']) $(name).addEventListener('change', () => { $('result').replaceChildren(); connect(); });
 $('reconnect').addEventListener('click', () => {saveDraft(); connect();});
-executeJSON.addEventListener('click', () => {try {command('execute',{profile:context().profile,invocation:JSON.parse(toolInput.value)});}catch(error){$('result').dataset['status']='error';$('result').textContent=`Invalid JSON: ${errorMessage(error)}`;}});
+executeJSON.addEventListener('click', () => {try {command('execute',{profile:context().profile,invocation:decodeJsonValue(toolInput.value)});}catch(error){$('result').dataset['status']='error';$('result').textContent=`Invalid JSON: ${errorMessage(error)}`;}});
 $('pending').addEventListener('click', event => {const button = event.target instanceof Element?event.target.closest('button'):null; if (!button) return; const {profile,actor} = context(); if(button.dataset['grant']) command('approve',{profile,actor,command:{id:id(),invocationId:button.dataset['grant'],policyId:button.dataset['policy']}}); else if(button.dataset['resume']) { if(!resumeClock.reportValidity()) return; command('resume',{profile,command:{id:id(),invocationId:button.dataset['resume'],clock:Number(resumeClock.value)}}); }});
 connect();

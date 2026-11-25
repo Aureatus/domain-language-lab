@@ -4,7 +4,8 @@ import {acceptsSnapshot} from './snapshot.ts';
 import {viewRecords} from './view-records.ts';
 import {isNotSubmittedError,submissionStep,submissionControls} from './submission.ts';
 import {loadingPlan,loadingPresentation} from './loading.ts';
-import {createApplicationClient,inboxFor} from './client.ts';
+import {ApplicationSavedSubmissionsSchema,decodeStrictJson,encodeJson} from '../adapters/effect/json.ts';
+import {createApplicationClient,decodeApplicationSnapshot,inboxFor} from './client.ts';
 import type {ApplicationReceipt,ApplicationSnapshot} from './client.ts';
 import type {State,Value} from '../semantic/v2/types.ts';
 import type {ApplicationContract,ApplicationField} from './derive.ts';
@@ -32,8 +33,11 @@ type SavedSubmission=SubmissionState&{body:SubmissionBody;id:string};
 const submissions=new Map<string,SavedSubmission>(),storageKey=`submissions/v1/${contractId}`;
 const recovery=document.createElement('section');$('notice').after(recovery);
 // A tab reload interrupts the observation, not necessarily the durable write.
-const saved:SavedSubmission[]=JSON.parse(sessionStorage.getItem(storageKey)??'[]');
-for(const s of saved){
+const savedSubmissions=(()=>{
+  try{return decodeStrictJson(ApplicationSavedSubmissionsSchema,sessionStorage.getItem(storageKey)??'[]');}
+  catch(error){$('connection').textContent='Disconnected';actorControl.disabled=true;notice(`Could not load saved submissions. ${errorMessage(error)}`,true);throw error;}
+})();
+for(const s of savedSubmissions){
   const k=JSON.stringify([s.body.actor,s.body.action]);submissions.set(k,{...s,phase:'unknown'});drafts.set(k,{...s.body.args});
 }
 function track(k:string,state:SubmissionState){
@@ -43,7 +47,7 @@ function track(k:string,state:SubmissionState){
     if(!id||!body)throw Error('Missing saved submission.');
     submissions.set(k,{...state,id,body});
   }
-  sessionStorage.setItem(storageKey,JSON.stringify([...submissions.values()]));
+  sessionStorage.setItem(storageKey,encodeJson([...submissions.values()],ApplicationSavedSubmissionsSchema));
   return state;
 }
 const escapes: Record<string,string>={'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'};
@@ -176,4 +180,8 @@ function accept(next:ApplicationSnapshot){if(next.contractId!==contractId){notic
 actorControl.addEventListener('change',()=>{if(!snapshot)return;actor=actorControl.value;$('notice').hidden=true;renderForms(snapshot);renderViews(snapshot);updateLocks();for(const f of $('forms').querySelectorAll('form'))preview(actionFor(f));});
 actorControl.disabled=true;showInitialViews();
 try{accept(await client.snapshot());}catch(e){initialLoadError=true;$('summaries').replaceChildren();$('lists').replaceChildren();notice(`Could not load records. ${errorMessage(e)}`,true);}
-const stream=new EventSource('/api/events');stream.addEventListener('open',()=>{$('connection').textContent='Live';});stream.addEventListener('error',()=>{$('connection').textContent='Reconnecting…';});stream.addEventListener('update',e=>{accept(JSON.parse(e.data));if(initialLoadError&&snapshot){initialLoadError=false;$('notice').hidden=true;}});addEventListener('pagehide',()=>stream.close());
+const stream=new EventSource('/api/events');stream.addEventListener('open',()=>{$('connection').textContent='Live';});stream.addEventListener('error',()=>{$('connection').textContent='Reconnecting…';});stream.addEventListener('update',e=>{
+  try{accept(decodeApplicationSnapshot(e.data));}
+  catch(error){notice(`Could not load records. ${errorMessage(error)}`,true);return;}
+  if(initialLoadError&&snapshot){initialLoadError=false;$('notice').hidden=true;}
+});addEventListener('pagehide',()=>stream.close());

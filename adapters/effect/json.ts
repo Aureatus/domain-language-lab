@@ -253,4 +253,43 @@ export const WorkspaceResumeRequestSchema = Schema.Struct({
   }),
 });
 
+// --- Browser storage and event envelopes ---
+
+export const ApplicationSavedSubmissionsSchema = Schema.Array(Schema.Struct({
+  phase: Schema.Literals(['submitting', 'unknown', 'checking', 'retryable']),
+  id: SubmissionId,
+  body: Schema.Struct({actor: Schema.String, action: Schema.String, args: Schema.JsonObject}),
+}));
+
+export const ApplicationSnapshotSchema = openObject({
+  contractId: Schema.String,
+  snapshotVersion: SafeClock,
+  state: DurableStateSchema,
+  pending: Schema.Array(Schema.JsonObject),
+  defaults: Schema.JsonObject,
+  availability: Schema.JsonObject,
+});
+
+export const WorkspaceChangeSchema = openObject({
+  sequence: SafeClock,
+  invalidations: Schema.Array(Schema.JsonObject),
+  recipients: Schema.Array(Schema.JsonObject),
+  reason: Schema.String,
+});
+
+export const LiveWorkspaceDocumentSchema = Schema.Struct({
+  format: Schema.String,
+  seedVersion: SafeClock,
+  journal: Schema.Array(Schema.Json),
+});
+
+export const InventoryReplaySchema = openObject({
+  format: Schema.String,
+  host: Schema.String,
+  model: Schema.JsonObject,
+  initial: Schema.JsonObject,
+  steps: Schema.Array(Schema.JsonObject),
+  final: Schema.JsonObject,
+});
+
 export { Schema };

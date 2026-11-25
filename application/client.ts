@@ -1,4 +1,5 @@
 // Shared, renderer-independent HTTP client. No domain rules or local execution.
+import {ApplicationSnapshotSchema,decodeJson,decodeJsonObject,encodeJson} from '../adapters/effect/json.ts';
 import {submissionWireBody} from './submission.ts';
 import type {SubmissionBody,SubmissionReceipt} from './submission.ts';
 import type {ApplicationContract} from './derive.ts';
@@ -23,31 +24,47 @@ type ResumeBody={actor:string;requestId:string};
 type GrantBody=ResumeBody&{policyId:string};
 type RequestBody=ExecuteBody|ReconcileBody|GrantBody|ResumeBody;
 
+export function decodeApplicationSnapshot(text:unknown):ApplicationSnapshot{
+  return decodeJson(ApplicationSnapshotSchema,text) as unknown as ApplicationSnapshot;
+}
+
 export function createApplicationClient(url: string | URL,{fetch:transport=globalThis.fetch}={}){
   const base=new URL(url);let contractId:string|undefined;
   async function request(path: string,body?:RequestBody){
     const submissionId=body&&'submissionId' in body?body.submissionId:undefined;
-    const wire=body&&submissionId?submissionWireBody(body,contractId):JSON.stringify(body);
-    const response=await transport(new URL(path,base),body===undefined?{}:{method:'POST',headers:{'content-type':'application/json'},body:wire});
-    const value=await response.json();
+    let init:RequestInit={};
+    if(body!==undefined){
+      try{
+        const wire=submissionId?submissionWireBody(body,contractId,encodeJson):encodeJson(body);
+        init={method:'POST',headers:{'content-type':'application/json'},body:wire};
+      }
+      catch(error){if(path==='/api/actions/execute'&&error instanceof Error)Object.assign(error,{notSubmitted:true});throw error;}
+    }
+    const response=await transport(new URL(path,base),init);
+    const value=decodeJsonObject(await response.text());
     if(!response.ok){
-      const error=Error(value.error??`HTTP ${response.status}`);
-      if(path==='/api/actions/execute'&&response.status===400&&contractId&&value.contractId===contractId&&submissionId&&value.submissionId===submissionId&&value.disposition==='not-submitted')Object.assign(error,{notSubmitted:true});
+      const error=Error(typeof value['error']==='string'?value['error']:`HTTP ${response.status}`);
+      if(path==='/api/actions/execute'&&response.status===400&&contractId&&value['contractId']===contractId&&submissionId&&value['submissionId']===submissionId&&value['disposition']==='not-submitted')Object.assign(error,{notSubmitted:true});
       throw error;
     }
-    if(contractId&&value.contractId!==contractId)throw Error('Application contract changed; reconnect before continuing.');
-    if(submissionId&&value.submissionId!==submissionId)throw Error('Submission receipt identity mismatch.');
-    if(path==='/api/actions/reconcile'&&value.message)return {...value,message:`Original submission outcome: ${value.message}`};
+    if(contractId&&value['contractId']!==contractId)throw Error('Application contract changed; reconnect before continuing.');
+    if(submissionId&&value['submissionId']!==submissionId)throw Error('Submission receipt identity mismatch.');
+    if(path==='/api/actions/reconcile'&&value['message'])return {...value,message:`Original submission outcome: ${value['message']}`};
     return value;
   }
+  async function receipt(path:string,body:RequestBody):Promise<ApplicationReceipt>{
+    const value=await request(path,body);
+    if(typeof value['contractId']!=='string'||typeof value['status']!=='string')throw Error('Invalid application receipt.');
+    return value as unknown as ApplicationReceipt;
+  }
   return {
-    async contract(): Promise<{contract:ApplicationContract;contractId:string}>{const value=await request('/api/contract');contractId=value.contractId;return value;},
-    snapshot:():Promise<ApplicationSnapshot>=>request('/api/snapshot'),
-    preview:(body:SubmissionBody):Promise<ApplicationReceipt>=>request('/api/actions/preview',body),
-    execute:(body:ExecuteBody):Promise<ApplicationReceipt>=>request('/api/actions/execute',body),
-    reconcile:(body:ReconcileBody):Promise<ApplicationReceipt>=>request('/api/actions/reconcile',body),
-    grant:(body:GrantBody):Promise<ApplicationReceipt>=>request('/api/approvals/grant',body),
-    resume:(body:ResumeBody):Promise<ApplicationReceipt>=>request('/api/approvals/resume',body)
+    async contract(): Promise<{contract:ApplicationContract;contractId:string}>{const value=await request('/api/contract');if(typeof value['contractId']!=='string'||!value['contract']||typeof value['contract']!=='object'||Array.isArray(value['contract']))throw Error('Invalid application contract.');contractId=value['contractId'];return {contractId,contract:value['contract'] as unknown as ApplicationContract};},
+    snapshot:async()=>{const value=await request('/api/snapshot');return value as unknown as ApplicationSnapshot;},
+    preview:(body:SubmissionBody):Promise<ApplicationReceipt>=>receipt('/api/actions/preview',body),
+    execute:(body:ExecuteBody):Promise<ApplicationReceipt>=>receipt('/api/actions/execute',body),
+    reconcile:(body:ReconcileBody):Promise<ApplicationReceipt>=>receipt('/api/actions/reconcile',body),
+    grant:(body:GrantBody):Promise<ApplicationReceipt>=>receipt('/api/approvals/grant',body),
+    resume:(body:ResumeBody):Promise<ApplicationReceipt>=>receipt('/api/approvals/resume',body)
   };
 }
 
