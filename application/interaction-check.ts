@@ -1,27 +1,33 @@
 import {isDeepStrictEqual as equal} from 'node:util';
 import {actionReview} from './action-review.ts';
 import {walkthrough} from './action-walkthrough.ts';
+type WalkthroughEvent = Awaited<ReturnType<typeof walkthrough> extends AsyncIterable<infer Event> ? Event : never>;
+type ReviewEvent = WalkthroughEvent | {type:'switch'; actor:string} | {type:'refresh-start'} | {type:'refresh-end'; snapshot: Extract<WalkthroughEvent,{snapshot:unknown}>['snapshot']};
+type Observation = ReturnType<ReturnType<typeof actionReview>>;
 
 // All linear extensions of these small causal graphs. Events contain actual
 // fixture data; only their observation order is varied. No generated receipts.
-function* orders(chains,prefix=[]){
+function* orders<T>(chains: T[][],prefix: T[]=[]): Generator<T[]>{
   if(chains.every(c=>!c.length)){yield prefix;return;}
   for(const [i,c] of chains.entries())if(c.length)
     yield* orders(chains.map((other,j)=>i===j?other.slice(1):other),[...prefix,c[0]]);
 }
-function* schedules(events,peer){
+function* schedules(events: WalkthroughEvent[],peer: string | undefined): Generator<{name:string; events: ReviewEvent[]}>{
   const at=events.findIndex(e=>e.type==='submit'),receiptAt=events.findIndex(e=>e.type==='receipt');
   if(at<0||receiptAt<0){yield {name:'recorded only',events};return;}
   yield {name:'recorded',events};
   const base=events.slice(0,at+1),tail=events.slice(receiptAt+1),snap=events.slice(at+1).find(e=>e.type==='snapshot');
-  const recovery=['lost','check','receipt'].map(type=>events.find(e=>e.type===type));
+  const lost=events.find(e=>e.type==='lost'),check=events.find(e=>e.type==='check'),receipt=events.find(e=>e.type==='receipt');
+  if(!lost||!check||!receipt||!snap)throw Error('Incomplete recorded recovery');
+  const recovery=[lost,check,receipt];
   for(const seq of orders([recovery,[snap]]))yield {name:'snapshot / recovery',events:[...base,...seq,...tail]};
   // Refresh starts after loss; its result cannot precede the refresh request.
-  for(const seq of orders([recovery.slice(1),[{type:'refresh-start'},{type:'refresh-end',snapshot:snap.snapshot}]]))
+  for(const seq of orders<ReviewEvent>([recovery.slice(1),[{type:'refresh-start'},{type:'refresh-end',snapshot:snap.snapshot}]]))
     yield {name:'refresh / reconciliation',events:[...base,recovery[0],...seq,...tail]};
   if(peer){
-    const {body,id}=base.find(e=>e.type==='draft');
-    const peerDraft=snap.snapshot.availability[peer][body.action]?[{type:'draft',body:{actor:peer,action:body.action,args:snap.snapshot.defaults[peer][body.action]},id:`peer-${id}`}]:[];
+    const draft=base.find(e=>e.type==='draft');if(!draft?.body||!draft.id)throw Error('Missing recorded draft');
+    const {body,id}=draft;
+    const peerDraft: ReviewEvent[]=snap.snapshot.availability[peer][body.action]?[{type:'draft',body:{actor:peer,action:body.action,args:snap.snapshot.defaults[peer][body.action]},id:`peer-${id}`}]:[];
     yield {name:'late owner receipt',events:[...base,...recovery.slice(0,2),{type:'switch',actor:peer},...peerDraft,recovery[2],{type:'switch',actor:body.actor},...tail]};
   }
 }
@@ -71,9 +77,9 @@ export function interactionOracle(actor){
   };
 }
 export async function checkInteractions(declaration,contract,command,options={}){
-  const events=[];for await(const event of walkthrough(declaration,command))events.push(event);
+  const events: WalkthroughEvent[]=[];for await(const event of walkthrough(declaration,command))events.push(event);
   const peer=contract.actors.find(x=>x.id!==command.actor)?.id;
-  let shortest=null,count=0,observations=0;
+  let shortest: {rule:string; family:string; events:ReviewEvent[]; observed:Observation | undefined} | null=null,count=0,observations=0;
   const families=new Set();
   for(const schedule of schedules(events,peer)){
     count++;families.add(schedule.name);
@@ -81,7 +87,7 @@ export async function checkInteractions(declaration,contract,command,options={})
     fold({type:'open'});
     for(const [i,event] of schedule.events.entries()){
       observations++;
-      let rule,step;
+      let rule,step: Observation | undefined;
       try{step=fold(event);rule=check(event,step);}catch(e){rule=`projection.error: ${e.message}`;}
       if(rule){
         if(!shortest||i+1<shortest.events.length)shortest={rule,family:schedule.name,events:schedule.events.slice(0,i+1),observed:step};

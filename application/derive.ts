@@ -1,10 +1,23 @@
 import {createInterpreter,validateState,jsonSnapshot} from '../semantic/v2/core.ts';
+import type {Action, FieldSchema, Model, Value} from '../semantic/v2/types.ts';
 import {adapters} from './inputs.ts';
 import {loadingModes} from './loading.ts';
 export {loadingModes};
+type FieldReference = {resource:string; key:string; field:string};
+export type ApplicationField = {name:string; schema:FieldSchema; label:string; widget:string; hidden:boolean;
+  binding?:{source:'actor'|'operation-id'|'clock'|'constant'; value?:Value};
+  reference?:{resource:string; labelField?:string}; default?:Value|FieldReference};
+export type ApplicationAction = {id:string; label:string; description:string; fields:ApplicationField[];
+  adapters:{name:keyof typeof adapters; mapping:Parameters<(typeof adapters)['utc-weekday-range/v1']['validate']>[0]}[];
+  policies:Action['policies']; preconditions:Action['preconditions']};
+type ApplicationView = {kind:'list'|'summary'; resource:string; label:string; loading?:typeof loadingModes[number]; key?:string; ownerField?:string;
+  columns:{field:string; label:string; format?:'date'|'text'}[]};
+export type ApplicationContract = {format:string; title:string; eyebrow:string; subtitle:string; scope:string; loading?:typeof loadingModes[number];
+  actors:{id:string; label:string; name?:string}[]; actions:Record<string,ApplicationAction>; views:ApplicationView[];
+  resources:Model['resources']; relationships:Model['relationships']};
 
 const title=s=>s.replace(/[._-]/g,' ').replace(/([a-z])([A-Z])/g,'$1 $2').replace(/^./,c=>c.toUpperCase());
-export function exact(value,keys,required=[]) {
+export function exact(value: unknown,keys: readonly string[],required: readonly string[]=[]) {
   if(!value||typeof value!=='object'||Array.isArray(value)||Object.keys(value).some(k=>!keys.includes(k))||required.some(k=>!Object.hasOwn(value,k)))throw Error(`Unsupported or missing configuration members (allowed: ${keys.join(', ')}).`);
 }
 const text=s=>{if(typeof s!=='string'||!s.length)throw Error('Expected nonempty text.');return s;};
@@ -31,7 +44,7 @@ export function deriveApplication(declaration) {
   if(!Array.isArray(meta.actors)||!meta.actors.length)throw Error('Declare local simulation actors.');
   const actorIds=new Set();for(const a of meta.actors){exact(a,['id','label','name'],['id','label']);text(a.id);text(a.label);if(a.name!==undefined)text(a.name);if(actorIds.has(a.id))throw Error('Duplicate actor.');actorIds.add(a.id);}
   for(const name of Object.keys(meta.actions??{})){if(!Object.hasOwn(model.actions,name))throw Error(`Unknown action ${name}`);objectMap(meta.actions[name]);}
-  const actions=Object.fromEntries(Object.entries(model.actions).map(([id,a])=>{
+  const actions=Object.fromEntries(Object.entries(model.actions).map(([id,a]): [string,ApplicationAction]=>{
     const config=meta.actions?.[id]??{};
     exact(config,['label','description','fields','adapters']);
     if(Object.hasOwn(config,'fields'))objectMap(config.fields);
@@ -57,11 +70,12 @@ export function deriveApplication(declaration) {
       if(!reference){const b=a.bindings.find(b=>b.key.op==='input'&&b.key.name===name);if(b)reference={resource:b.resource};}
       if(reference){exact(reference,['resource','labelField'],['resource']);text(reference.resource);if(Object.hasOwn(reference,'labelField'))text(reference.labelField);if(schema.type!=='string'||!Object.hasOwn(model.resources,reference.resource)||(reference.labelField&&!Object.hasOwn(model.resources[reference.resource].fields,reference.labelField)))throw Error('Unknown or incompatible input reference.');}
       if(schema.type==='ids'&&!f.binding)throw Error('Visible ids inputs are not supported by this renderer.');
-      const widget=f.widget??(dateInputs.has(name)?'date':schema.enum||reference?'select':schema.type==='integer'?'number':schema.type==='boolean'?'checkbox':'text');
+      const choices=schema.type==='string'?schema.enum:undefined;
+      const widget=f.widget??(dateInputs.has(name)?'date':choices||reference?'select':schema.type==='integer'?'number':schema.type==='boolean'?'checkbox':'text');
       if(!['date','select','number','checkbox','text'].includes(widget))throw Error('Unsupported field widget.');
-      if((widget==='date'&&schema.type!=='string')||(widget==='number'&&schema.type!=='integer')||(widget==='checkbox'&&schema.type!=='boolean')||(widget==='select'&&!schema.enum&&!reference))throw Error('Widget/schema mismatch.');
+      if((widget==='date'&&schema.type!=='string')||(widget==='number'&&schema.type!=='integer')||(widget==='checkbox'&&schema.type!=='boolean')||(widget==='select'&&!choices&&!reference))throw Error('Widget/schema mismatch.');
       if(!f.binding&&((schema.type==='boolean'&&widget!=='checkbox')||(schema.type==='integer'&&widget!=='number')))throw Error('Unsupported schema/widget override.');
-      if((schema.enum||reference)&&widget!=='select')throw Error('Enums and references require select widgets.');
+      if((choices||reference)&&widget!=='select')throw Error('Enums and references require select widgets.');
       if(computed.has(name)&&f.binding)throw Error('Computed input cannot also have binding.');
       if((f.binding||computed.has(name))&&Object.hasOwn(f,'default'))throw Error('Hidden bound/computed inputs cannot have client defaults.');
       return {name,schema,label:f.label??title(name),widget,hidden:!!f.binding||computed.has(name),...(f.binding?{binding:f.binding}:{}),...(reference?{reference}:{}),...(f.default!==undefined?{default:f.default}:{})};
@@ -70,7 +84,7 @@ export function deriveApplication(declaration) {
   }));
   const views=Object.hasOwn(meta,'views')?meta.views:Object.keys(model.resources).map(resource=>({kind:'list',resource}));
   if(!Array.isArray(views))throw Error('Expected views array.');
-  const resolvedViews=views.map(v=>{
+  const resolvedViews=views.map((v): ApplicationView=>{
     exact(v,['kind','resource','label','loading','columns','key','fields','ownerField'],['kind','resource']);
     validateLoading(v);
     text(v.resource);if(!Object.hasOwn(model.resources,v.resource)||!['list','summary'].includes(v.kind))throw Error('Unsupported view.');
@@ -83,7 +97,7 @@ export function deriveApplication(declaration) {
     for(const c of columns){exact(c,['field','label','format'],['field']);text(c.field);if(!Object.hasOwn(model.resources[v.resource].fields,c.field))throw Error('Unknown view field.');if(c.label!==undefined)text(c.label);if(c.format!==undefined&&!['date','text'].includes(c.format))throw Error('Unsupported column format.');if(c.format==='date'&&model.resources[v.resource].fields[c.field].type!=='string')throw Error('Date column requires string schema.');}
     return {...v,label:v.label??title(v.resource),columns:columns.map(c=>({...c,label:c.label??title(c.field)}))};
   });
-  const contract=jsonSnapshot({format:'derived-application/v1',title:meta.title,eyebrow:meta.eyebrow??'',subtitle:meta.subtitle??'',scope:meta.scope??'Local identity simulation',...(Object.hasOwn(meta,'loading')?{loading:meta.loading}:{}),actors:meta.actors,actions,views:resolvedViews,resources:model.resources,relationships:model.relationships});
+  const contract: ApplicationContract=jsonSnapshot({format:'derived-application/v1',title:meta.title,eyebrow:meta.eyebrow??'',subtitle:meta.subtitle??'',scope:meta.scope??'Local identity simulation',...(Object.hasOwn(meta,'loading')?{loading:meta.loading}:{}),actors:meta.actors,actions,views:resolvedViews,resources:model.resources,relationships:model.relationships});
   return {model,runtime,initialState:state,contract};
 }
 export function inputDefaults(contract,actionId,state,actor){

@@ -1,4 +1,8 @@
 // Trusted host adapter registry. Configuration never supplies executable code.
+import type {FieldSchema} from '../semantic/v2/types.ts';
+
+type DateMapping = {start: string; end: string; output: string};
+
 export function businessDays(start,end) {
   const parse=value=>{
     if(typeof value!=='string'||!/^\d{4}-\d{2}-\d{2}$/.test(value))throw Error('Choose valid dates in YYYY-MM-DD format.');
@@ -15,7 +19,7 @@ export function businessDays(start,end) {
 }
 export const adapters={
   'utc-weekday-range/v1':{
-    validate(mapping,inputs){
+    validate(mapping: DateMapping,inputs: Readonly<Record<string, FieldSchema>>){
       if(Object.keys(mapping).sort().join(',')!=='end,output,start')throw Error('Date adapter requires start, end, output mappings.');
       if(new Set(Object.values(mapping)).size!==3)throw Error('Date adapter mappings must be distinct.');
       for(const name of Object.values(mapping))if(!inputs[name])throw Error(`Unknown adapter input ${name}`);

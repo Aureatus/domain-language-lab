@@ -1,14 +1,15 @@
 // Shared, renderer-independent HTTP client. No domain rules or local execution.
 import {submissionWireBody} from './submission.ts';
-export function createApplicationClient(url,{fetch:transport=globalThis.fetch}={}){
+import type {ApplicationContract} from './derive.ts';
+export function createApplicationClient(url: string | URL,{fetch:transport=globalThis.fetch}={}){
   const base=new URL(url);let contractId;
-  async function request(path,body){
+  async function request(path: string,body?){
     const wire=body?.submissionId?submissionWireBody(body,contractId):JSON.stringify(body);
     const response=await transport(new URL(path,base),body===undefined?{}:{method:'POST',headers:{'content-type':'application/json'},body:wire});
     const value=await response.json();
     if(!response.ok){
       const error=Error(value.error??`HTTP ${response.status}`);
-      if(path==='/api/actions/execute'&&response.status===400&&contractId&&value.contractId===contractId&&body?.submissionId&&value.submissionId===body.submissionId&&value.disposition==='not-submitted')error.notSubmitted=true;
+      if(path==='/api/actions/execute'&&response.status===400&&contractId&&value.contractId===contractId&&body?.submissionId&&value.submissionId===body.submissionId&&value.disposition==='not-submitted')Object.assign(error,{notSubmitted:true});
       throw error;
     }
     if(contractId&&value.contractId!==contractId)throw Error('Application contract changed; reconnect before continuing.');
@@ -17,7 +18,7 @@ export function createApplicationClient(url,{fetch:transport=globalThis.fetch}={
     return value;
   }
   return {
-    async contract(){const value=await request('/api/contract');contractId=value.contractId;return value;},
+    async contract(): Promise<{contract:ApplicationContract;contractId:string}>{const value=await request('/api/contract');contractId=value.contractId;return value;},
     snapshot:()=>request('/api/snapshot'),
     preview:body=>request('/api/actions/preview',body),
     execute:body=>request('/api/actions/execute',body),

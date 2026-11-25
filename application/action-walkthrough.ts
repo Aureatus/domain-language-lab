@@ -4,11 +4,12 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {createApplicationClient} from './client.ts';
 import {createApplicationServer} from './server.ts';
+import type {SubmissionBody} from './submission.ts';
 
 // An isolated demonstration, not a replay against a user's live database.
 // 'lost' models withholding a successful HTTP response from the observer;
 // it is not an assertion that a real network failure occurred.
-export async function* walkthrough(declaration, {action, actor, args, submissionId = randomUUID()}) {
+export async function* walkthrough(declaration, {action, actor, args, submissionId = randomUUID()}: SubmissionBody & {submissionId?: string}) {
   if (typeof submissionId !== 'string' || !submissionId.trim() || submissionId.length > 200)
     throw Error('Expected a nonempty submission ID of at most 200 characters.');
   const body = {action, actor, args: structuredClone(args)};

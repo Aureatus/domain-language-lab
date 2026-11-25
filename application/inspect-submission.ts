@@ -1,4 +1,5 @@
 import {submissionStep,submissionControls} from './submission.ts';
+import type {SubmissionState} from './submission.ts';
 import {loadSource} from '../syntax/load.ts';
 import {deriveApplication,inputDefaults} from './derive.ts';
 import {readFileSync} from 'node:fs';
@@ -9,7 +10,7 @@ const action=actionId??Object.keys(contract.actions)[0],actor=actorId??contract.
 if(!contract.actions[action]||!contract.actors.some(a=>a.id===actor))throw Error('Unknown action or actor.');
 const body={actor,action,args:inputDefaults(contract,action,initialState,actor)};
 function replay(events){
-  let state={phase:'editing'};
+  let state: SubmissionState={phase:'editing'};
   return events.map(event=>{
     if(event.type==='submit'&&(event.body?.actor!==actor||event.body?.action!==action))throw Error('Trace actor/action differs from selected action.');
     state=submissionStep(state,event);return {event,state,controls:submissionControls(state)};

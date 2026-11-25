@@ -17,7 +17,7 @@ try {
     'application/cli.ts','--view','leave/cli.domain',...args,'--url',server.url,'--json'
   ],{timeout:15000})).stdout);
   browser=await chromium.launch({headless:true});
-  const page=await browser.newPage(), errors=[];
+  const page=await browser.newPage(), errors: string[]=[];
   page.setDefaultTimeout(10000);
   page.on('pageerror',e=>errors.push(e.message));
   const execute='/api/actions/execute',reconcile='/api/actions/reconcile';

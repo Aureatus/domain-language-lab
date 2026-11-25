@@ -9,18 +9,21 @@ import leave from '../leave/model.ts';
 test('automatic input types, inferred references, added actions/inputs and policy changes alter contract',()=>{
   const {contract}=deriveApplication(fixture),a=contract.actions['supply.take'];
   assert.deepEqual(a.fields.map(f=>[f.name,f.widget]),[['cabinetKey','select'],['quantity','number'],['reason','select'],['tracked','checkbox']]);
-  assert.equal(a.fields[0].reference.resource,'cabinet');
-  const inferred=structuredClone(fixture);delete inferred.application.actions;
+  assert.equal(a.fields[0].reference?.resource,'cabinet');
+  const {actions: _actions,...inferredMeta}=fixture.application;
+  const inferred={...structuredClone(fixture),application:inferredMeta};
   assert.deepEqual(deriveApplication(inferred).contract.actions['supply.take'].fields[0].reference,{resource:'cabinet'});
   const changed=structuredClone(fixture);
   changed.domain.actions['supply.take'].inputs.memo={type:'string'};
-  changed.domain.actions['supply.take'].policies[1].approvers={op:'literal',value:'nora'};
+  const review=changed.domain.actions['supply.take'].policies[1];
+  assert.equal(review.effect,'approval-required');review.approvers={op:'literal',value:'nora'};
   changed.domain.actions['supply.audit']={inputs:{comment:{type:'string'}},bindings:[],policies:[{id:'audit.allow',effect:'allow',when:{op:'literal',value:true}}],preconditions:[],updates:[],inserts:[],deletes:[],observe:[]};
   const derived=deriveApplication(changed);
   assert.ok(derived.contract.actions['supply.take'].fields.some(f=>f.name==='memo'));
   assert.equal(derived.contract.actions['supply.audit'].fields[0].label,'Comment');
   const inv=buildInvocation(derived.contract,{action:'supply.take',actor:'quinn',args:{cabinetKey:'tools',quantity:2,reason:'Repair',tracked:true,memo:'Test'},id:'i',clock:1});
-  assert.deepEqual(derived.runtime.prepare(derived.initialState,inv).request.requirements[0].approvers,['nora']);
+  const result=derived.runtime.prepare(derived.initialState,inv);
+  assert.equal(result.status,'pending');assert.deepEqual(result.request.requirements[0].approvers,['nora']);
 });
 test('hidden actor/id/clock/constant mappings are host-owned, not client defaults or overrides',()=>{
   const x=structuredClone(fixture),a=x.domain.actions['supply.take'];

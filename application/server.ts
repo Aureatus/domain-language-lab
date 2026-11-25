@@ -1,4 +1,5 @@
 import {createServer} from 'node:http';
+import type {ServerResponse} from 'node:http';
 import {mkdir,readFile} from 'node:fs/promises';
 import {resolve} from 'node:path';
 import {createRequire} from 'node:module';
@@ -44,12 +45,13 @@ export function resultMessage(r){
   if(r.status==='pending')return 'Approval needed. No changes have been made.';
   return ({stale:'Things changed after this request was sent. No changes were made. Please send a new request.',precondition:'This request does not meet the requirements. Check the available balance and inputs.',denied:'You do not have permission for this action.','missing-record':'This person does not have the required record.','unauthorized-approval':'Only a named approver can approve this request.',consumed:'This request has already been completed.'})[r.code]??`Could not complete this request (${r.code??r.status}). No changes were made.`;
 }
-export async function createApplicationServer(declaration,{directory,port=0,database='application.sqlite',staticFiles=browserFiles}={}) {
+export async function createApplicationServer(declaration,{directory,port=0,database='application.sqlite',staticFiles=browserFiles}: {directory?: string; port?: number; database?: string; staticFiles?: Record<string, URL>}={}) {
   const derived=deriveApplication(declaration),{model,contract}=derived;
   const contractId=createHash('sha256').update(encodeJson({model,contract})).digest('hex');
+  if(directory===undefined)throw new TypeError('Application storage directory required.');
   await mkdir(directory,{recursive:true});
   const runtime=makeDurableRuntime(model),db=run(makeDurableStore(resolve(directory,database),{busyTimeout:250}));
-  let server,closed=false;const streams=new Set();
+  let server,closed=false;const streams=new Set<ServerResponse>();
   try{
     if(!db.prepare('SELECT value FROM durable_meta WHERE key=?').get('format'))run(initializeDurableState(runtime,db,derived.initialState));else run(durableState(runtime,db));
     // The invocation journal owns the outcome. Keep just the pre-elaboration
@@ -99,7 +101,7 @@ export async function createApplicationServer(declaration,{directory,port=0,data
       const defaults={},availability={};
       for(const actor of contract.actors){defaults[actor.id]={};availability[actor.id]={};for(const action of Object.keys(contract.actions)){
         const args=inputDefaults(contract,action,current,actor.id);defaults[actor.id][action]=args;
-        try{const {result}=preview(actor.id,action,args,current);availability[actor.id][action]=!['denied','missing-record'].includes(result.code);}catch{availability[actor.id][action]=true;}
+        try{const {result}=preview(actor.id,action,args,current);availability[actor.id][action]=result.status!=='rejected'||!['denied','missing-record'].includes(result.code);}catch{availability[actor.id][action]=true;}
       }}
       return {contractId,snapshotVersion,state:current,pending,defaults,availability};
     }
@@ -108,10 +110,10 @@ export async function createApplicationServer(declaration,{directory,port=0,data
     server=createServer(async(req,res)=>{
       const json=(status,value)=>{res.writeHead(status,{'content-type':'application/json','cache-control':'no-store'});res.end(encodeJson(value));};
       try{
-        if(![`127.0.0.1:${server.address().port}`,`localhost:${server.address().port}`].includes(req.headers.host))throw fail('Unexpected host.',403);
+        if(!req.headers.host||![`127.0.0.1:${server.address().port}`,`localhost:${server.address().port}`].includes(req.headers.host))throw fail('Unexpected host.',403);
         if(req.headers.origin&&req.headers.origin!==`http://${req.headers.host}`)throw fail('Cross-origin requests are not supported.',403);
         if(req.headers['sec-fetch-site']&&!['same-origin','none'].includes(req.headers['sec-fetch-site']))throw fail('Cross-site requests are not supported.',403);
-        const url=new URL(req.url,`http://${req.headers.host}`);
+        const url=new URL(req.url??'/',`http://${req.headers.host}`);
         if(req.method==='GET'&&url.pathname==='/api/contract')return json(200,{contractId,contract});
         if(req.method==='GET'&&url.pathname==='/api/snapshot')return json(200,snapshot());
         if(req.method==='GET'&&url.pathname==='/api/events'){
@@ -119,8 +121,8 @@ export async function createApplicationServer(declaration,{directory,port=0,data
         }
         if(req.method==='POST'&&['/api/actions/preview','/api/actions/execute','/api/actions/reconcile','/api/approvals/grant','/api/approvals/resume'].includes(url.pathname)){
           if(req.headers['content-type']?.split(';')[0]!=='application/json')throw fail('Expected JSON.',415);
-          let bytes=0;const chunks=[];for await(const chunk of req){bytes+=chunk.length;if(bytes>16384)throw fail('Request too large.',413);chunks.push(chunk);}
-          const kind=url.pathname.split('/').at(-1);let body,result,invocation,key,replayed=false;
+          let bytes=0;const chunks: Buffer[]=[];for await(const chunk of req){bytes+=chunk.length;if(bytes>16384)throw fail('Request too large.',413);chunks.push(chunk);}
+          const kind=url.pathname.slice(url.pathname.lastIndexOf('/')+1);let body,result,invocation,key,replayed=false;
           try{body=decodeStrictJson(requestSchemas[kind],Buffer.concat(chunks).toString());}catch(e){throw fail(e.message||'Invalid JSON.');}
           try{
             if(!contract.actors.some(a=>a.id===body.actor))throw Error('Choose a known person.');
@@ -179,6 +181,6 @@ export async function createApplicationServer(declaration,{directory,port=0,data
       }catch(e){if(res.headersSent)res.destroy();else json(e.httpStatus??500,{error:e.httpStatus?e.message:'Storage failed. The operation may have been recorded; reconnect before retrying.'});}
     });
     await new Promise((yes,no)=>{server.once('error',no);server.listen(port,'127.0.0.1',yes);});
-    return {url:`http://127.0.0.1:${server.address().port}`,async close(){if(closed)return;closed=true;for(const res of streams)res.end();streams.clear();await new Promise((yes,no)=>{server.close(e=>e?no(e):yes());server.closeAllConnections();});run(closeDurableStore(db));}};
+    return {url:`http://127.0.0.1:${server.address().port}`,async close(){if(closed)return;closed=true;for(const res of streams)res.end();streams.clear();await new Promise<void>((yes,no)=>{server.close(e=>e?no(e):yes());server.closeAllConnections();});run(closeDurableStore(db));}};
   }catch(e){run(closeDurableStore(db));throw e;}
 }

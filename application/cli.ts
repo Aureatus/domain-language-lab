@@ -15,15 +15,18 @@ inspect ACTION prints generated schemas, hidden bindings and adapters. Submit on
 visible arguments; server supplies actor/operation IDs and named computed inputs.
 Local actor simulation is not authentication. No automatic retry of writes.`;
 
-export async function runCLI(argv,{stdout=console.log}={}){
-  const options={},positionals=[];
+type CLIOptions = Partial<Record<'url'|'actor'|'args'|'policy'|'view'|'submission-id',string>> & {json?:boolean; help?:boolean};
+export async function runCLI(argv: string[],{stdout=console.log}={}){
+  const options: CLIOptions={},positionals: string[]=[];
   for(let i=0;i<argv.length;i++){
     const arg=argv[i];
-    if(arg==='--json'||arg==='--help'){options[arg.slice(2)]=true;continue;}
+    if(arg==='--json'){options.json=true;continue;}
+    if(arg==='--help'){options.help=true;continue;}
     if(arg.startsWith('--')){
-      if(!['--url','--actor','--args','--policy','--view','--submission-id'].includes(arg)||!argv[i+1]||argv[i+1].startsWith('--'))throw Error(`Unknown or missing option ${arg}.\n${usage}`);
-      if(Object.hasOwn(options,arg.slice(2)))throw Error(`Duplicate option ${arg}.`);
-      options[arg.slice(2)]=argv[++i];
+      const key=arg.slice(2);
+      if((key!=='url'&&key!=='actor'&&key!=='args'&&key!=='policy'&&key!=='view'&&key!=='submission-id')||!argv[i+1]||argv[i+1].startsWith('--'))throw Error(`Unknown or missing option ${arg}.\n${usage}`);
+      if(Object.hasOwn(options,key))throw Error(`Duplicate option ${arg}.`);
+      options[key]=argv[++i];
     }else positionals.push(arg);
   }
   if(options.help||!positionals.length){stdout(usage);return;}
@@ -36,7 +39,7 @@ export async function runCLI(argv,{stdout=console.log}={}){
   const {contract,contractId}=await client.contract();let result,presentation;
   if(options.view){
     const loaded=loadSource(options.view);
-    if(loaded.modules.at(-1).kind!=='view')throw Error('--view must select a view module entry.');
+    if(loaded.modules.at(-1)?.kind!=='view')throw Error('--view must select a view module entry.');
     const derived=deriveApplication(loaded.declaration);
     const expected=createHash('sha256').update(encodeJson({model:derived.model,contract})).digest('hex');
     if(expected!==contractId)throw Error('Local view domain differs from the backend. No command was sent.');
@@ -59,7 +62,8 @@ export async function runCLI(argv,{stdout=console.log}={}){
     }
   }else if(command==='reconcile'){
     result=await client.reconcile({actor:options.actor,submissionId:id});
-  }else result=await client[command]({actor:options.actor,requestId:id,...(command==='grant'?{policyId:options.policy}:{})});
+  }else if(command==='grant')result=await client.grant({actor:options.actor,requestId:id,policyId:options.policy});
+  else result=await client.resume({actor:options.actor,requestId:id});
   if(options.json)stdout(encodeJson(result));
   else if(result.message)stdout(`${result.message}\nStatus: ${result.status}${result.code?` (${result.code})`:''}${result.submissionId?`\nSubmission: ${result.submissionId}`:''}${result.snapshot?`\nRevision: ${result.snapshot.state.revision}`:''}`);
   else if(command==='list'&&!id)stdout(result.map(a=>`${a.id} — ${a.label}\n  arguments: ${a.arguments.map(f=>`${f.name}: ${f.schema.type}`).join(', ')||'(none)'}\n  inspect: inspect ${a.id}`).join('\n'));
