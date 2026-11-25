@@ -1,6 +1,7 @@
 import {test} from 'node:test';
 import './submission.test.mjs';
 import assert from 'node:assert/strict';
+import {Agent,request} from 'node:http';
 import {mkdtemp,rm,writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
@@ -8,6 +9,7 @@ import {createApplicationServer} from '../../application/server.mjs';
 import declaration from '../../leave/model.mjs';
 import {generate,writeAdapter} from './generate.mjs';
 import {createClient} from './client.mjs';
+import {startGateway} from './serve.mjs';
 import {renamedFixture} from '../../application/fixture.mjs';
 import {deriveApplication} from '../../application/derive.mjs';
 import loadingFixture from './loading-fixture.mjs';
@@ -17,6 +19,38 @@ async function scratch(t,prefix){
   t.after(()=>rm(directory,{recursive:true,force:true}));
   return directory;
 }
+
+test('Exact gateway leaves no pooled API connection for an unanswered execute to replay on',async t=>{
+  const directory=await scratch(t,'exact-gateway-');
+  const gateway=await startGateway(declaration,{directory,root:directory});
+  t.after(()=>gateway.close());
+  const agent=new Agent({keepAlive:true,maxSockets:1});
+  t.after(()=>agent.destroy());
+  function api(path,body){
+    return new Promise((resolve,reject)=>{
+      const req=request(gateway.url+'/api/'+path,{agent,...(body?{method:'POST',headers:{'content-type':'application/json'}}:{})},res=>{
+        const socket=res.socket;
+        let text='';res.setEncoding('utf8');res.on('data',chunk=>{text+=chunk;});
+        res.on('error',reject);
+        res.on('end',()=>resolve({status:res.statusCode,connection:res.headers.connection,socket,text}));
+      });
+      req.on('error',reject);
+      req.end(body);
+    });
+  }
+  const contract=await api('contract'),snapshot=await api('snapshot');
+  const {contractId}=JSON.parse(contract.text);
+  const submissionId=crypto.randomUUID();
+  const execute=await api('actions/execute',JSON.stringify({actor:'maya',action:'leave.request',
+    args:{start:'2026-11-23',end:'2026-11-25'},expectedContractId:contractId,submissionId}));
+  const reconcile=await api('actions/reconcile',JSON.stringify({actor:'maya',expectedContractId:contractId,submissionId}));
+  for(const reply of [contract,snapshot,execute,reconcile]){
+    assert.equal(reply.status,200);
+    assert.equal(reply.connection,'close');
+  }
+  assert.equal(new Set([contract,snapshot,execute,reconcile].map(reply=>reply.socket)).size,4);
+  assert.deepEqual(JSON.parse(reconcile.text),JSON.parse(execute.text));
+});
 
 test('each Exact placeholder follows its view; waiting never suppresses another view',()=>{
   const contract=structuredClone(deriveApplication(loadingFixture).contract),render=()=>generate({contract,contractId:'fixture'}).contract;
