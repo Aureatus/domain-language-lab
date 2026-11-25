@@ -21,7 +21,8 @@ export function generate(rawSource:unknown, law:unknown) {
   try { source=validateModel(rawSource); } catch (e) { fail(`Invalid shared IR: ${errorMessage(e)}`); }
   if (!object(law)||law['format'] !== 'numeric-law/v1') fail('Unsupported law format');
   const actionId=law['action'],lawId=law['id'];
-  const action=typeof actionId==='string'&&Object.hasOwn(source.actions,actionId)?source.actions[actionId]:undefined;
+  if(typeof actionId!=='string')fail('Exactly one static binding required');
+  const action=Object.hasOwn(source.actions,actionId)?source.actions[actionId]:undefined;
   if (!action || action.bindings.length !== 1) fail('Exactly one static binding required');
   const binding = action.bindings[0];
   if (!binding||binding.key.op !== 'literal' || typeof binding.key.value !== 'string') fail('Static literal record key required');

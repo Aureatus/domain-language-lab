@@ -72,7 +72,8 @@ test('references lower lazily, fail closed, retain policy authorization and reco
   const r=deriveApplication(renamed).runtime.execute(renamed.initialState,{...inv,args:{...inv.args,personId:'maya'}});
   // The old employeeId is intentionally not accepted after renaming the schema.
   assert.equal(r.status,'rejected');assert.equal(r.code,'invalid');
-  const args={...inv.args,personId:inv.args.employeeId};delete args.employeeId;
+  const {employeeId,...previousArgs}=inv.args;
+  const args={...previousArgs,personId:present(employeeId)};
   assert.equal(deriveApplication(renamed).runtime.execute(renamed.initialState,{...inv,args}).status,'committed');
 });
 test('real relative graph resolution rejects cycles, duplicate IDs/imports, missing use and domain leakage',()=>{

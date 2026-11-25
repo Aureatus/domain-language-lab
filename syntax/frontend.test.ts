@@ -96,7 +96,7 @@ test('parsed execution keeps grouped prestate inserts, denial, preconditions and
   const g=deriveApplication(modified),r=g.runtime.execute(g.initialState,invocation(g));
   assert.equal(present(present(r.state.records['leave'])[inv.id]).values['days'],5);assert.equal(present(present(r.state.records['employee'])['maya']).values['balance'],4);
   // Invalid create rolls back the update, publishing no facts.
-  const existing={...d.initialState,records:{...d.initialState.records,leave:{...d.initialState.records['leave'],[inv.id]:present(result.state.records['leave'])[inv.id]}}};
+  const existing={...d.initialState,records:{...d.initialState.records,leave:{...d.initialState.records['leave'],[inv.id]:present(present(result.state.records['leave'])[inv.id])}}};
   const failed=d.runtime.execute(existing,inv);assert.equal(failed.status,'rejected');assert.equal(failed.code,'existing-record');assert.equal(present(present(failed.state.records['employee'])['maya']).values['balance'],5);assert.equal('events' in failed?failed.events:undefined,undefined);
 });
 

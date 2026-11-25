@@ -4,14 +4,18 @@ import {viewRecords} from './view-records.ts';
 import {inboxFor} from './client.ts';
 import {acceptsSnapshot} from './snapshot.ts';
 import {buildInvocation,inputDefaults} from './derive.ts';
+import type {deriveApplication} from './derive.ts';
+import type {Value} from '../semantic/v2/types.ts';
 
 // Finite search for a useful *example*, never a claim that approval is unreachable.
-export function exampleArgs({runtime,contract,initialState},action,actor){
+export function exampleArgs({runtime,contract,initialState}:ReturnType<typeof deriveApplication>,action:string,actor:string){
   const defaults=inputDefaults(contract,action,initialState,actor),inputs=[defaults];
-  for(const f of contract.actions[action].fields.filter(f=>!f.hidden)){
-    const x=defaults[f.name];let choices=f.schema.enum??[];
-    if(f.widget==='date'&&Number.isFinite(Date.parse(x)))choices=Array.from({length:10},(_,i)=>new Date(Date.parse(x)+(i+1)*86400000).toISOString().slice(0,10));
-    if(f.schema.type==='integer')choices=[...Array.from({length:10},(_,i)=>(x??0)+i+1),f.schema.max].filter(Number.isSafeInteger);
+  const declaration=Object.hasOwn(contract.actions,action)?contract.actions[action]:undefined;
+  if(!declaration)throw Error('Unknown action.');
+  for(const f of declaration.fields.filter(f=>!f.hidden)){
+    const x=defaults[f.name];let choices:readonly Value[]=f.schema.type==='string'?f.schema.enum??[]:[];
+    if(f.widget==='date'&&typeof x==='string'&&Number.isFinite(Date.parse(x)))choices=Array.from({length:10},(_,i)=>new Date(Date.parse(x)+(i+1)*86400000).toISOString().slice(0,10));
+    if(f.schema.type==='integer')choices=[...Array.from({length:10},(_,i)=>(typeof x==='number'?x:0)+i+1),f.schema.max].filter((value):value is number=>Number.isSafeInteger(value));
     if(f.schema.type==='boolean')choices=[!x];
     for(const value of choices)inputs.push({...defaults,[f.name]:value});
   }

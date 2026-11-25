@@ -8,7 +8,7 @@ import {randomUUID,createHash} from 'node:crypto';
 import {browserBundle} from '../browser-build.ts';
 import {isDeepStrictEqual} from 'node:util';
 import {deriveApplication,buildInvocation,inputDefaults} from './derive.ts';
-import {makeDurableRuntime,makeDurableStore,initializeDurableState,durableState,durableExecute,durableApprove,durableResume,durablePending,closeDurableStore} from '../adapters/effect/durable.ts';
+import {makeDurableStore,initializeDurableState,durableState,durableExecute,durableApprove,durableResume,durablePending,closeDurableStore} from '../adapters/effect/durable.ts';
 import {
   decodeJson,
   decodeStrictJson,
@@ -47,11 +47,11 @@ export function resultMessage(r){
   return ({stale:'Things changed after this request was sent. No changes were made. Please send a new request.',precondition:'This request does not meet the requirements. Check the available balance and inputs.',denied:'You do not have permission for this action.','missing-record':'This person does not have the required record.','unauthorized-approval':'Only a named approver can approve this request.',consumed:'This request has already been completed.'})[r.code]??`Could not complete this request (${r.code??r.status}). No changes were made.`;
 }
 export async function createApplicationServer(declaration,{directory,port=0,database='application.sqlite',staticFiles=browserFiles}: {directory?: string; port?: number; database?: string; staticFiles?: Record<string, URL>}={}) {
-  const derived=deriveApplication(declaration),{model,contract}=derived;
+  const derived=deriveApplication(declaration),{model,contract,runtime}=derived;
   const contractId=createHash('sha256').update(encodeJson({model,contract})).digest('hex');
   if(directory===undefined)throw new TypeError('Application storage directory required.');
   await mkdir(directory,{recursive:true});
-  const runtime=makeDurableRuntime(model),db=run(makeDurableStore(resolve(directory,database),{busyTimeout:250}));
+  const db=run(makeDurableStore(resolve(directory,database),{busyTimeout:250}));
   let server,closed=false;const streams=new Set<ServerResponse>();
   try{
     if(!db.prepare('SELECT value FROM durable_meta WHERE key=?').get('format'))run(initializeDurableState(runtime,db,derived.initialState));else run(durableState(runtime,db));

@@ -6,6 +6,7 @@ import { mkdir, writeFile, readFile } from 'node:fs/promises';
 import assert from 'node:assert/strict';
 import { runDerivedChecks } from './derive.ts';
 import { createApp } from './core.ts';
+import {present} from '../semantic/test-support.ts';
 import type { Result } from 'axe-core';
 
 declare const axe: typeof import('axe-core');
@@ -32,8 +33,8 @@ await page.context().setOffline(true);
 const reports: {name: string; violations: Result[]}[]=[];
 const state=()=>page.evaluate(()=>structuredClone(window.liveWorkspace.core.state));
 const get=()=>page.evaluate(()=>({state:structuredClone(window.liveWorkspace.core.state),model:structuredClone(window.liveWorkspace.core.model)}));
-async function audit(name){await page.addScriptTag({path:axePath});const result=await page.evaluate(async()=>await axe.run(document,{runOnly:{type:'tag',values:['wcag2a','wcag2aa','wcag21aa']}}));reports.push({name,violations:result.violations});assert.deepEqual(result.violations.map(v=>({id:v.id,nodes:v.nodes.map(n=>n.target)})),[],name+' axe')}
-async function tool(action,args){await page.locator('#tool-name').selectOption(action);await page.locator('#tool-args').fill(JSON.stringify(args));await page.locator('#tool-form button').click()}
+async function audit(name:string){await page.addScriptTag({path:axePath});const result=await page.evaluate(async()=>await axe.run(document,{runOnly:{type:'tag',values:['wcag2a','wcag2aa','wcag21aa']}}));reports.push({name,violations:result.violations});assert.deepEqual(result.violations.map(v=>({id:v.id,nodes:v.nodes.map(n=>n.target)})),[],name+' axe')}
+async function tool(action:string,args:unknown){await page.locator('#tool-name').selectOption(action);await page.locator('#tool-args').fill(JSON.stringify(args));await page.locator('#tool-form button').click()}
 const workspace=()=>page.evaluate(()=>window.liveWorkspace.core.exportWorkspace());
 async function declarationChecks(){
   const before=await workspace();const snapshot=await get();const saved=await page.evaluate(()=>localStorage.getItem('relay.workspace.v1'));
@@ -65,18 +66,18 @@ try {
   await audit('create dialog');
   await page.locator('dialog form button').click();
   assert.equal(await page.locator('#new-issue').evaluate(e=>e===document.activeElement),true,'Focus restored after create');
-  let s=await state();const id=s.issues.at(-1).id;
-  assert.equal(s.issues.at(-1).title,'Keep keyboard focus after saving');
-  assert.equal(s.events.at(-1).action,'create');
+  let s=await state();const id=present(s.issues.at(-1)).id;
+  assert.equal(present(s.issues.at(-1)).title,'Keep keyboard focus after saving');
+  assert.equal(present(s.events.at(-1)).action,'create');
   await page.locator('[data-editor=assign]').click();
   await page.locator('dialog select[name=assignee]').selectOption('u2');
   await page.locator('dialog form button').click();
-  assert.equal((await state()).issues.at(-1).assignee,'u2');
+  assert.equal(present((await state()).issues.at(-1)).assignee,'u2');
   await page.locator('form[data-action=comment] textarea').fill('Reproduced with Tab, Enter, then Escape.');
   await page.locator('form[data-action=comment] button').click();
-  s=await state();const historical=JSON.stringify(s.events.at(-1));const historicalId=s.events.at(-1).id;
-  assert.equal(s.issues.at(-1).comments.length,1);
-  assert.equal(s.notifications.at(-1).recipient,'u2');
+  s=await state();const historical=JSON.stringify(s.events.at(-1));const historicalId=present(s.events.at(-1)).id;
+  assert.equal(present(s.issues.at(-1)).comments.length,1);
+  assert.equal(present(s.notifications.at(-1)).recipient,'u2');
   await page.locator('#actor').selectOption('u2');
   assert.equal(await page.locator('[data-run=resolve]').isDisabled(),true);
   const beforeWhy=await workspace();
@@ -121,7 +122,7 @@ try {
   await resolveRule.locator('button').click();
   assert.match(await page.locator('#derived-output').innerText(),/Not run/,'Model changes invalidate checks');
   const changedChecks=await declarationChecks();
-  const roleCases=result=>result.cases.filter(c=>c.action==='resolve' && c.actorId==='u2').map(c=>c.expected);
+  const roleCases=(result:ReturnType<typeof runDerivedChecks>)=>result.cases.filter(c=>c.action==='resolve' && c.actorId==='u2').map(c=>c.expected);
   assert.notDeepEqual(roleCases(changedChecks),roleCases(baselineChecks),'Member expectations derive from toggled roles');
   await page.screenshot({path:resolve('artifacts/live-declaration-checks.png'),fullPage:true});
   assert.equal(await page.locator('[data-run=resolve]').isEnabled(),true);
@@ -129,9 +130,10 @@ try {
   assert.match(await page.locator('#tool-form .availability').innerText(),/Available for current inputs/);
   const tools=await page.locator('#tool-descriptors').textContent();
   assert.ok(tools);
-  assert.equal(JSON.parse(tools).find(t=>t.name==='resolve').allowedRoles.includes('member'),true);
+  const descriptors:{name:string;allowedRoles:string[]}[]=JSON.parse(tools);
+  assert.equal(present(descriptors.find(t=>t.name==='resolve')).allowedRoles.includes('member'),true);
   await tool('resolve',{issueId:id});
-  s=await state();assert.equal(s.issues.at(-1).status,'resolved');assert.equal(s.events.at(-1).recipients.length,0);
+  s=await state();assert.equal(present(s.issues.at(-1)).status,'resolved');assert.equal(present(s.events.at(-1)).recipients.length,0);
   assert.match(await page.locator('#derived-output').innerText(),/Not run/,'State changes invalidate checks');
   // Restrict comments and reroute future comments through opener alone.
   let rule=page.locator('[data-rule=comment]');
@@ -144,13 +146,13 @@ try {
   assert.match(await page.locator('#tool-output').innerText(),/not allowed for member/);
   rule=page.locator('[data-rule=comment]');await rule.locator('[name=allowedRoles][value=member]').check();await rule.locator('button').click();
   await tool('comment',{issueId:id,body:'Verified the fix; opener-only routing now.'});
-  s=await state();assert.deepEqual(s.events.at(-1).recipients.map(r=>r.recipient),['u1']);
-  assert.deepEqual(s.events.at(-1).recipients[0].reasons,['opener']);
+  s=await state();assert.deepEqual(present(s.events.at(-1)).recipients.map(r=>r.recipient),['u1']);
+  assert.deepEqual(present(present(s.events.at(-1)).recipients[0]).reasons,['opener']);
   assert.equal(JSON.stringify(s.events.find(e=>e.id===historicalId)),historical,'Past explanations unchanged');
   await page.locator('#actor').selectOption('u1');
   await page.locator('.inbox [data-why]').first().click();assert.match(await page.locator('dialog').innerText(),/i3 → opener → u1/);await page.locator('dialog details > summary').click();assert.match(await page.locator('#why-data').innerText(),/opener/);await page.keyboard.press('Escape');
   await page.locator('#run-checks').click();
-  const checks=JSON.parse(await page.locator('#check-output').innerText());assert.ok(checks.length>=7 && checks.every(c=>c.ok));
+  const checks:{ok:boolean}[]=JSON.parse(await page.locator('#check-output').innerText());assert.ok(checks.length>=7 && checks.every(c=>c.ok));
   // Editable JSON is validated; invalid JSON is not a dispatch.
   const count=(await state()).events.length;await page.locator('#tool-args').fill('{ broken');await page.locator('#tool-form button').click();
   assert.match(await page.locator('#tool-output').innerText(),/Invalid JSON/);assert.equal((await state()).events.length,count);
@@ -165,8 +167,8 @@ try {
   await page.locator('#new-issue').click();await audit('mobile editor');await page.keyboard.press('Escape');
   await page.screenshot({path:resolve('artifacts/live-issues-mobile.png'),fullPage:true});
   // Watch and reopen use ordinary controls, including related views.
-  await page.locator('[data-run=reopen]').click();assert.equal((await state()).issues.at(-1).status,'open');
-  await page.locator('[data-run=watch]').click();assert.ok((await state()).issues.at(-1).watchers.includes('u1'));
+  await page.locator('[data-run=reopen]').click();assert.equal(present((await state()).issues.at(-1)).status,'open');
+  await page.locator('[data-run=watch]').click();assert.ok(present((await state()).issues.at(-1)).watchers.includes('u1'));
   // Nullable schema input round-trips through the editor, with correct historical diff.
   await page.locator('[data-editor=assign]').click();
   assert.equal(await page.locator('dialog select[name=assignee]').inputValue(),'u2');
@@ -175,8 +177,8 @@ try {
   await page.locator('dialog select[name=assignee]').selectOption('');
   assert.equal(await page.locator('dialog form button').isEnabled(),true,'Null assignment is a valid changed value');
   await page.locator('dialog form button').click();
-  assert.equal((await state()).issues.at(-1).assignee,null);
-  assert.deepEqual((await state()).events.at(-1).changes.find(c=>c.field==='assignee'),{field:'assignee',before:'u2',after:null});
+  assert.equal(present((await state()).issues.at(-1)).assignee,null);
+  assert.deepEqual(present((await state()).events.at(-1)).changes.find(c=>c.field==='assignee'),{field:'assignee',before:'u2',after:null});
   await page.locator('.lab > summary').click();
   assert.match(await page.locator('#check-output').innerText(),/Not run/,'State audit invalidated after mutations');
   await declarationChecks();
@@ -206,7 +208,7 @@ try {
   await page.locator('#tool-name').selectOption('assign');await page.locator('#tool-name').selectOption('comment');
   assert.equal(await page.locator('#tool-args').inputValue(),'{ draft JSON');
   // Compact filters preserve search focus and caret; queue supports arrow navigation and Enter.
-  const title=(await state()).issues[0].title;
+  const title=present((await state()).issues[0]).title;
   await page.locator('#issue-search').fill('no such issue');assert.equal(await page.locator('.issue-row').count(),0);
   assert.equal(await page.locator('#issue-search').evaluate(e=>e===document.activeElement),true);
   await page.locator('#issue-search').fill(title);assert.equal(await page.locator('.issue-row').count(),1);
@@ -225,7 +227,7 @@ try {
   // Export is a live document, not a preview; rejected imports are atomic.
   const downloadPromise=page.waitForEvent('download');await page.locator('#export-workspace').click();
   const download=await downloadPromise;const exported=await readFile(await download.path(),'utf8');
-  const importJSON=async text=>page.locator('#import-workspace').setInputFiles({name:'workspace.json',mimeType:'application/json',buffer:Buffer.from(text)});
+  const importJSON=async (text:string)=>page.locator('#import-workspace').setInputFiles({name:'workspace.json',mimeType:'application/json',buffer:Buffer.from(text)});
   const corruptJournal=JSON.parse(exported);corruptJournal.journal[0]={kind:'unsupported'};
   for (const invalid of ['{ broken',JSON.stringify({format:'unknown',seedVersion:999,journal:[]}),JSON.stringify(corruptJournal)]) {
     await importJSON(invalid);await page.getByText(/Import rejected; workspace unchanged/).waitFor();

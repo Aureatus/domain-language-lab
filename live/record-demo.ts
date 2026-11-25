@@ -8,7 +8,7 @@ import assert from 'node:assert/strict';
 const dir=resolve('artifacts/live-video-v4');await mkdir(dir,{recursive:true});
 const browser=await chromium.launch({headless:true});
 const context=await browser.newContext({viewport:{width:1440,height:940},deviceScaleFactor:1,recordVideo:{dir,size:{width:1440,height:940}}});
-const page=await context.newPage();const video=page.video();const marks: {selector: string; caption: string; seconds: number}[]=[];let started;
+const page=await context.newPage();const video=page.video();const marks: {selector: string; caption: string; seconds: number}[]=[];let started=Date.now();
 try {
   await page.goto(pathToFileURL(resolve('artifacts/live-issues.html')).href);
   await page.locator('#new-issue').waitFor();
@@ -26,16 +26,16 @@ try {
   });
   await installOverlays();
   started=Date.now();let cursor={x:1050,y:100};await page.mouse.move(cursor.x,cursor.y);
-  const wait=ms=>page.waitForTimeout(ms); // Deliberate editorial pacing within continuous recording.
-  const caption=text=>page.locator('#demo-caption').evaluate((el,text)=>el.textContent=text,text);
-  async function click(selector,text,hold=900){
+  const wait=(ms:number)=>page.waitForTimeout(ms); // Deliberate editorial pacing within continuous recording.
+  const caption=(text:string)=>page.locator('#demo-caption').evaluate((el,text)=>el.textContent=text,text);
+  async function click(selector:string,text:string,hold=900){
     await caption(text);const target=page.locator(selector).first();await target.scrollIntoViewIfNeeded();const box=await target.boundingBox();if(!box)throw Error('Invisible '+selector);
     const end={x:box.x+box.width/2,y:box.y+box.height/2};
     for(let i=1;i<=22;i++){const t=i/22;await page.mouse.move(cursor.x+(end.x-cursor.x)*t,cursor.y+(end.y-cursor.y)*t);await wait(14)}cursor=end;
     await wait(180);await page.mouse.down();await wait(100);await page.mouse.up();marks.push({selector,caption:text,seconds:(Date.now()-started)/1000});await wait(hold);
   }
-  async function type(selector,text,captionText){await click(selector,captionText,150);await page.locator(selector).press('ControlOrMeta+A');await page.locator(selector).pressSequentially(text,{delay:16})}
-  async function choose(selector,value,text){await click(selector,text,100);await page.locator(selector).selectOption(value);await page.keyboard.press('Escape');await wait(600)}
+  async function type(selector:string,text:string,captionText:string){await click(selector,captionText,150);await page.locator(selector).press('ControlOrMeta+A');await page.locator(selector).pressSequentially(text,{delay:16})}
+  async function choose(selector:string,value:string,text:string){await click(selector,text,100);await page.locator(selector).selectOption(value);await page.keyboard.press('Escape');await wait(600)}
   await caption('A real local issue workspace. Every change executes the shared core now.');await wait(2200);
   await click('#new-issue','Create an issue, not a precomputed scenario.');
   await type('dialog input[name=title]','Keep focus after saving','Describe the work. Fields and requirements come from the declaration.');
