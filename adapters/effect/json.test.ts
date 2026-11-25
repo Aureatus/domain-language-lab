@@ -60,6 +60,7 @@ test('DurableOutcomeSchema and DurableOperationOutcomeSchema validate discrimina
       receipt: { format: 'semantic-approval-receipt/v2', request: { id: 'r1' }, policyId: 'p1', approver: 'bob', sig: 'ok' },
     }),
   );
+  assert.equal(approved.status, 'approved');
   assert.equal(approved.receipt.sig, 'ok');
   assert.throws(() => decodeJson(DurableReceiptSchema, '{"format":"wrong","request":{},"policyId":"p1","approver":"bob"}'));
 });

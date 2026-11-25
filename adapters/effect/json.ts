@@ -1,6 +1,7 @@
 import * as Schema from 'effect/Schema';
+import type { ParseOptions } from 'effect/SchemaAST';
 
-const openObject = fields => Schema.StructWithRest(
+const openObject = <const Fields extends Schema.Struct.Fields>(fields: Fields) => Schema.StructWithRest(
   Schema.Struct(fields),
   [Schema.Record(Schema.String, Schema.Json)],
 );
@@ -8,7 +9,7 @@ const openObject = fields => Schema.StructWithRest(
 export const JsonValueCodec = Schema.fromJsonString(Schema.Json);
 export const JsonObjectCodec = Schema.fromJsonString(Schema.JsonObject);
 export const StringJsonCodec = Schema.fromJsonString(Schema.String);
-export const UnknownJsonCodec = Schema.UnknownFromJsonString;
+export const UnknownJsonCodec = Schema.fromJsonString(Schema.Unknown);
 export const PrettyUnknownJsonCodec = Schema.fromJsonString(Schema.Unknown, { space: 2 });
 
 const decodeJsonValueSync = Schema.decodeUnknownSync(JsonValueCodec);
@@ -18,22 +19,22 @@ const encodeStringJsonSync = Schema.encodeSync(StringJsonCodec);
 const encodeUnknownJsonSync = Schema.encodeSync(UnknownJsonCodec);
 const encodePrettyUnknownJsonSync = Schema.encodeSync(PrettyUnknownJsonCodec);
 
-export const decodeJson = (schema, text, options) =>
+export const decodeJson = <S extends Schema.ConstraintDecoder<unknown>>(schema: S, text: unknown, options?: ParseOptions): S['Type'] =>
   Schema.decodeUnknownSync(Schema.fromJsonString(schema), options)(text);
 
-export const decodeStrictJson = (schema, text) =>
+export const decodeStrictJson = <S extends Schema.ConstraintDecoder<unknown>>(schema: S, text: unknown): S['Type'] =>
   Schema.decodeUnknownSync(Schema.fromJsonString(schema), { onExcessProperty: 'error' })(text);
 
-export const decodeJsonValue = text => decodeJsonValueSync(text);
+export const decodeJsonValue = (text: unknown) => decodeJsonValueSync(text);
 
-export const decodeJsonObject = text => decodeJsonObjectSync(text);
+export const decodeJsonObject = (text: unknown) => decodeJsonObjectSync(text);
 
-export const encodeJson = (value, schema) =>
-  schema ? Schema.encodeSync(Schema.fromJsonString(schema))(value) : encodeUnknownJsonSync(value);
+export const encodeJson = (value: unknown, schema?: Schema.ConstraintEncoder<unknown>) =>
+  schema ? Schema.encodeUnknownSync(Schema.fromJsonString(schema))(value) : encodeUnknownJsonSync(value);
 
-export const encodeJsonPretty = (value, schema) =>
+export const encodeJsonPretty = (value: unknown, schema?: Schema.ConstraintEncoder<unknown>) =>
   schema
-    ? Schema.encodeSync(Schema.fromJsonString(schema, { space: 2 }))(value)
+    ? Schema.encodeUnknownSync(Schema.fromJsonString(schema, { space: 2 }))(value)
     : encodePrettyUnknownJsonSync(value);
 
 /** Deterministic lexicographic key-sorted JSON encoding via Effect Schema codecs. */
