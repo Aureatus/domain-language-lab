@@ -4,6 +4,7 @@ import {viewRecords} from './view-records.ts';
 import {submissionStep,submissionControls} from './submission.ts';
 import {loadingPlan,loadingPresentation} from './loading.ts';
 import {createApplicationClient,inboxFor} from './client.ts';
+import {ApplicationSavedSubmissionsSchema,ApplicationSnapshotSchema,decodeStrictJson,decodeJson,encodeJson} from '../adapters/effect/json.ts';
 const $=id=>document.getElementById(id),params=new URLSearchParams(location.search);
 const client=createApplicationClient(location.origin);
 const {contract,contractId}=await client.contract().catch(error=>{
@@ -18,12 +19,16 @@ const drafts=new Map(),previews=new Map();
 const submissions=new Map(),storageKey=`submissions/v1/${contractId}`;
 const recovery=document.createElement('section');$('notice').after(recovery);
 // A tab reload interrupts the observation, not necessarily the durable write.
-for(const s of JSON.parse(sessionStorage.getItem(storageKey)??'[]')){
+const savedSubmissions=(()=>{
+  try{return decodeStrictJson(ApplicationSavedSubmissionsSchema,sessionStorage.getItem(storageKey)??'[]');}
+  catch(error){$('connection').textContent='Disconnected';$('actor').disabled=true;notice(`Could not load saved submissions. ${error.message}`,true);throw error;}
+})();
+for(const s of savedSubmissions){
   const k=JSON.stringify([s.body.actor,s.body.action]);submissions.set(k,{...s,phase:'unknown'});drafts.set(k,{...s.body.args});
 }
 function track(k,state){
   if(['known','editing'].includes(state.phase))submissions.delete(k);else submissions.set(k,state);
-  sessionStorage.setItem(storageKey,JSON.stringify([...submissions.values()]));
+  sessionStorage.setItem(storageKey,encodeJson([...submissions.values()],ApplicationSavedSubmissionsSchema));
   return state;
 }
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -140,4 +145,8 @@ function accept(next){if(next.contractId!==contractId){notice('The declaration c
 $('actor').addEventListener('change',()=>{actor=$('actor').value;$('notice').hidden=true;renderForms();renderViews();updateLocks();for(const f of $('forms').querySelectorAll('form'))preview(f.dataset.action);});
 $('actor').disabled=true;showInitialViews();
 try{accept(await client.snapshot());}catch(e){initialLoadError=true;$('summaries').replaceChildren();$('lists').replaceChildren();notice(`Could not load records. ${e.message}`,true);}
-const stream=new EventSource('/api/events');stream.addEventListener('open',()=>{$('connection').textContent='Live';});stream.addEventListener('error',()=>{$('connection').textContent='Reconnecting…';});stream.addEventListener('update',e=>{accept(JSON.parse(e.data));if(initialLoadError&&snapshot){initialLoadError=false;$('notice').hidden=true;}});addEventListener('pagehide',()=>stream.close());
+const stream=new EventSource('/api/events');stream.addEventListener('open',()=>{$('connection').textContent='Live';});stream.addEventListener('error',()=>{$('connection').textContent='Reconnecting…';});stream.addEventListener('update',e=>{
+  try{accept(decodeJson(ApplicationSnapshotSchema,e.data));}
+  catch(error){notice(`Could not load records. ${error.message}`,true);return;}
+  if(initialLoadError&&snapshot){initialLoadError=false;$('notice').hidden=true;}
+});addEventListener('pagehide',()=>stream.close());

@@ -1,11 +1,16 @@
 // Shared, renderer-independent HTTP client. No domain rules or local execution.
 import {submissionWireBody} from './submission.ts';
+import {decodeJsonObject,encodeJson} from '../adapters/effect/json.ts';
 export function createApplicationClient(url,{fetch:transport=globalThis.fetch}={}){
   const base=new URL(url);let contractId;
   async function request(path,body){
-    const wire=body?.submissionId?submissionWireBody(body,contractId):JSON.stringify(body);
+    let wire;
+    if(body!==undefined){
+      try{wire=body?.submissionId?submissionWireBody(body,contractId,encodeJson):encodeJson(body);}
+      catch(error){if(path==='/api/actions/execute')error.notSubmitted=true;throw error;}
+    }
     const response=await transport(new URL(path,base),body===undefined?{}:{method:'POST',headers:{'content-type':'application/json'},body:wire});
-    const value=await response.json();
+    const value=decodeJsonObject(await response.text());
     if(!response.ok){
       const error=Error(value.error??`HTTP ${response.status}`);
       if(path==='/api/actions/execute'&&response.status===400&&contractId&&value.contractId===contractId&&body?.submissionId&&value.submissionId===body.submissionId&&value.disposition==='not-submitted')error.notSubmitted=true;

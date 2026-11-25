@@ -1,5 +1,6 @@
 import { createApp } from './core.ts';
 import { describeChange } from './derive.ts';
+import { decodeJsonValue, decodeStrictJson, encodeJson, encodeJsonPretty, LiveWorkspaceDocumentSchema } from '../adapters/effect/json.ts';
 
 declare const __liveWorkerSource: string;
 
@@ -14,7 +15,7 @@ let savedRaw = null;
 try {
   savedRaw = localStorage.getItem(storageKey);
   if (savedRaw !== null) {
-    const result = core.restoreWorkspace(JSON.parse(savedRaw));
+    const result = core.restoreWorkspace(decodeStrictJson(LiveWorkspaceDocumentSchema,savedRaw));
     if (!result.ok) throw new Error(result.reason);
     saveStatus = 'Recovered saved workspace · this browser only.';
   }
@@ -25,7 +26,7 @@ try {
 function persist() {
   if (storageBlocked) return;
   try {
-    localStorage.setItem(storageKey, JSON.stringify(core.exportWorkspace()));
+    localStorage.setItem(storageKey, encodeJson(core.exportWorkspace(),LiveWorkspaceDocumentSchema));
     saveStatus = 'Saved in this browser · not synced or backed up.';
   } catch (error) {
     saveStatus = `Not saved: ${error.message}. Changes remain in memory; export before leaving.`;
@@ -240,7 +241,7 @@ function updateToolAvailability() {
   const form=root.querySelector('#tool-form');
   let panel=form.querySelector('.availability');
   if(!panel){panel=document.createElement('div');panel.className='availability';form.append(panel)}
-  try {const e=availability(toolName,JSON.parse(root.querySelector('#tool-args').value));panel.innerHTML=`<strong>${e.available?'Available for current inputs':'Why unavailable'}</strong>${availabilityDetails(e)}`}
+  try {const e=availability(toolName,decodeJsonValue(root.querySelector('#tool-args').value));panel.innerHTML=`<strong>${e.available?'Available for current inputs':'Why unavailable'}</strong>${availabilityDetails(e)}`}
   catch {panel.textContent='Why unavailable: enter valid JSON arguments. No policy or precondition result is claimed.'}
 }
 function bind() {
@@ -260,12 +261,12 @@ function bind() {
     };
     modal.showModal();
   };
-  root.querySelector('#export-workspace').onclick=()=>download(JSON.stringify(core.exportWorkspace(),null,2),'relay-workspace.json');
+  root.querySelector('#export-workspace').onclick=()=>download(encodeJsonPretty(core.exportWorkspace(),LiveWorkspaceDocumentSchema),'relay-workspace.json');
   root.querySelector('#export-original')?.addEventListener('click',()=>download(savedRaw,'relay-unreadable-workspace.json'));
   root.querySelector('#import-workspace').onchange=async e=>{
     if (previewStep !== null || !e.target.files[0]) return;
     try {
-      const doc=JSON.parse(await e.target.files[0].text());
+      const doc=decodeStrictJson(LiveWorkspaceDocumentSchema,await e.target.files[0].text());
       if (previewStep !== null) throw new Error('Return to live before importing.');
       const result=core.restoreWorkspace(doc);
       if (!result.ok) throw new Error(result.reason);
@@ -313,7 +314,7 @@ function bind() {
   });
    root.querySelector('#tool-args').oninput=e=>{toolDrafts.set(toolName,e.target.value);updateToolAvailability()};
    root.querySelector('#tool-name').onchange=e=>{toolName=e.target.value;root.querySelector('#tool-args').value=toolDrafts.get(toolName) ?? JSON.stringify(defaultArgs(toolName),null,2);updateToolAvailability()};
-  root.querySelector('#tool-form').onsubmit=e=>{e.preventDefault();try{const args=JSON.parse(root.querySelector('#tool-args').value);toolOutput=JSON.stringify(commit(toolName,args),null,2)}catch(error){failed=true;feedback='Invalid JSON: '+error.message;toolOutput=feedback}labOpen=true;render()};
+  root.querySelector('#tool-form').onsubmit=e=>{e.preventDefault();try{const args=decodeJsonValue(root.querySelector('#tool-args').value);toolOutput=JSON.stringify(commit(toolName,args),null,2)}catch(error){failed=true;feedback='Invalid JSON: '+error.message;toolOutput=feedback}labOpen=true;render()};
   root.querySelector('#run-checks').onclick=()=>{checkOutput=core.check();labOpen=true;render()};
    root.querySelector('#run-derived-checks').disabled=!!derivedJob;
    root.querySelector('#run-derived-checks').onclick=startDerived;
