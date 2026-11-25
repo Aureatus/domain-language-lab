@@ -245,8 +245,9 @@ function operation(runtime:Readonly<V2Runtime>,db:DatabaseSync,command:Operation
   try {
     const previous = db.prepare('SELECT * FROM durable_operations WHERE id=?').get(command.id);
     if (previous) {
-      const result = previous['model_key'] === modelKey && previous['command_key'] === commandKey
-        ? {status: 'duplicate' as const, result: decodeOperation(previous['outcome_json'], runtime)} : conflict();
+      const result: {status:'duplicate';result:ReturnType<typeof decodeOperation>}|ReturnType<typeof conflict> =
+        previous['model_key'] === modelKey && previous['command_key'] === commandKey
+          ? {status:'duplicate',result:decodeOperation(previous['outcome_json'],runtime)} : conflict();
       db.exec('COMMIT'); return result;
     }
     if (db.prepare('SELECT id FROM durable_invocations WHERE id=?').get(command.id)) {

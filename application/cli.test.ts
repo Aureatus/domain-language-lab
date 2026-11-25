@@ -6,6 +6,7 @@ import {mkdtemp,readFile,writeFile,copyFile} from 'node:fs/promises';
 import {createApplicationServer} from './server.ts';
 import {createApplicationClient} from './client.ts';
 import declaration from '../leave/model.ts';
+import {present} from '../semantic/test-support.ts';
 const exec=promisify(execFile);
 export async function cli(url,...args){
   const {stdout}=await exec(process.execPath,['application/cli.ts','--view','leave/cli.domain',...args,'--url',url,'--json']);return JSON.parse(stdout);
@@ -29,9 +30,10 @@ test('spawned CLI advances the same durable HTTP backend; grant/resume, duplicat
     let [p]=await cli(server.url,'inbox','--actor','sam');assert.equal(p.invocation.actor,'maya');
     assert.equal((await cli(server.url,'grant',p.id,'--actor','sam','--policy',p.requirements[0].policyId)).status,'approved');
     const client=createApplicationClient(server.url);await client.contract();
-    assert.equal((await client.snapshot()).state.records.employee.maya.values.balance,5);
+    const balance=async()=>present(present((await client.snapshot()).state.records['employee'])['maya']).values['balance'];
+    assert.equal(await balance(),5);
     assert.equal((await cli(server.url,'resume',p.id,'--actor','sam')).status,'committed');
-    assert.equal((await client.snapshot()).state.records.employee.maya.values.balance,2);
+    assert.equal(await balance(),2);
     assert.equal((await cli(server.url,'resume',p.id,'--actor','sam')).code,'consumed');
     await cli(server.url,'execute','leave.request','--actor','leo','--args',args);
     p=(await cli(server.url,'inbox','--actor','leo')).find(p=>p.status==='pending');

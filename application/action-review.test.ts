@@ -20,5 +20,7 @@ test('new inbox evidence cannot unlock a captured submission; original receipt r
   assert.ok(last);
   assert.deepEqual(last.draft,visible.draft);assert.equal(last.receipt.status,'pending');
   assert.equal(last.evidence.status,'committed');assert.equal(last.inbox.length,0);
-  assert.equal(last.receipt.invocationId,visible.inbox[0].id);
+  const [pending]=visible.inbox;
+  assert.ok(pending);
+  assert.equal(last.receipt.invocationId,pending.id);
 });

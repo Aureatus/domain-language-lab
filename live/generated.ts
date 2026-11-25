@@ -96,7 +96,10 @@ function trial(seed: number, maxSteps: number, wrapper?: Wrapper) {
     if(!result.ok) { coverage.rejections++; if(app.state!==before || app.model!==modelBefore) return {failed:true as const,history,why:'rejected operation changed state/model'}; continue; }
     coverage.acceptedActions[action]=(coverage.acceptedActions[action]??0)+1;
     const expectedIssue=issueAfter(before,action,args,actor,1700000000000+before.events.length);
-    if(!expectedIssue)return {failed:true as const,history,why:'missing independently predicted issue'};
+    if(!expectedIssue){
+      const failed:true=true;
+      return {failed,history,why:'missing independently predicted issue'};
+    }
     const now=app.state,actual=now.issues.find(x=>x.id===expectedIssue.id),rule=modelBefore.actions[action];
     if(!rule)throw Error(`Missing generated action rule: ${action}`);
     if(JSON.stringify(actual)!==JSON.stringify(expectedIssue)) return {failed:true as const,history,why:'issue transition differs from independent oracle'};

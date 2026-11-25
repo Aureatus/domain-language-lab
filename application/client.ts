@@ -1,32 +1,55 @@
 // Shared, renderer-independent HTTP client. No domain rules or local execution.
 import {submissionWireBody} from './submission.ts';
+import type {SubmissionBody,SubmissionReceipt} from './submission.ts';
 import type {ApplicationContract} from './derive.ts';
+import type {ApprovalRequest, Grant, State, Value} from '../semantic/v2/types.ts';
+
+type PendingEntry={
+  id:string;status:'pending'|'consumed';invocation:ApprovalRequest['invocation'];requirements:ApprovalRequest['requirements'];
+  grants:readonly Grant[];stale:boolean;
+};
+export type ApplicationSnapshot={
+  contractId:string;snapshotVersion:number;state:State;pending:readonly PendingEntry[];
+  defaults:Record<string,Record<string,Record<string,Value|undefined>>>;availability:Record<string,Record<string,boolean>>;
+};
+export type ApplicationReceipt=SubmissionReceipt&{
+  contractId:string;submissionId?:string;code?:string;args?:unknown;requirements?:ApprovalRequest['requirements'];
+  evidence?:{phase:string;invocation:{id:string;actor:string;action:string;args:unknown};outcome:{status:string}};
+  snapshot?:ApplicationSnapshot;
+};
+type ExecuteBody=SubmissionBody&{submissionId?:string};
+type ReconcileBody={actor:string;submissionId:string};
+type ResumeBody={actor:string;requestId:string};
+type GrantBody=ResumeBody&{policyId:string};
+type RequestBody=ExecuteBody|ReconcileBody|GrantBody|ResumeBody;
+
 export function createApplicationClient(url: string | URL,{fetch:transport=globalThis.fetch}={}){
-  const base=new URL(url);let contractId;
-  async function request(path: string,body?){
-    const wire=body?.submissionId?submissionWireBody(body,contractId):JSON.stringify(body);
+  const base=new URL(url);let contractId:string|undefined;
+  async function request(path: string,body?:RequestBody){
+    const submissionId=body&&'submissionId' in body?body.submissionId:undefined;
+    const wire=body&&submissionId?submissionWireBody(body,contractId):JSON.stringify(body);
     const response=await transport(new URL(path,base),body===undefined?{}:{method:'POST',headers:{'content-type':'application/json'},body:wire});
     const value=await response.json();
     if(!response.ok){
       const error=Error(value.error??`HTTP ${response.status}`);
-      if(path==='/api/actions/execute'&&response.status===400&&contractId&&value.contractId===contractId&&body?.submissionId&&value.submissionId===body.submissionId&&value.disposition==='not-submitted')Object.assign(error,{notSubmitted:true});
+      if(path==='/api/actions/execute'&&response.status===400&&contractId&&value.contractId===contractId&&submissionId&&value.submissionId===submissionId&&value.disposition==='not-submitted')Object.assign(error,{notSubmitted:true});
       throw error;
     }
     if(contractId&&value.contractId!==contractId)throw Error('Application contract changed; reconnect before continuing.');
-    if(body?.submissionId&&value.submissionId!==body.submissionId)throw Error('Submission receipt identity mismatch.');
+    if(submissionId&&value.submissionId!==submissionId)throw Error('Submission receipt identity mismatch.');
     if(path==='/api/actions/reconcile'&&value.message)return {...value,message:`Original submission outcome: ${value.message}`};
     return value;
   }
   return {
     async contract(): Promise<{contract:ApplicationContract;contractId:string}>{const value=await request('/api/contract');contractId=value.contractId;return value;},
-    snapshot:()=>request('/api/snapshot'),
-    preview:body=>request('/api/actions/preview',body),
-    execute:body=>request('/api/actions/execute',body),
-    reconcile:body=>request('/api/actions/reconcile',body),
-    grant:body=>request('/api/approvals/grant',body),
-    resume:body=>request('/api/approvals/resume',body)
+    snapshot:():Promise<ApplicationSnapshot>=>request('/api/snapshot'),
+    preview:(body:SubmissionBody):Promise<ApplicationReceipt>=>request('/api/actions/preview',body),
+    execute:(body:ExecuteBody):Promise<ApplicationReceipt>=>request('/api/actions/execute',body),
+    reconcile:(body:ReconcileBody):Promise<ApplicationReceipt>=>request('/api/actions/reconcile',body),
+    grant:(body:GrantBody):Promise<ApplicationReceipt>=>request('/api/approvals/grant',body),
+    resume:(body:ResumeBody):Promise<ApplicationReceipt>=>request('/api/approvals/resume',body)
   };
 }
 
 // Display projection only; server/core always authorize grants/resumptions.
-export const inboxFor=(snapshot,actor)=>snapshot.pending.filter(p=>!actor||p.invocation.actor===actor||p.requirements.some(r=>r.approvers.includes(actor)));
+export const inboxFor=(snapshot:Pick<ApplicationSnapshot,'pending'>,actor?:string)=>snapshot.pending.filter(p=>!actor||p.invocation.actor===actor||p.requirements.some(r=>r.approvers.includes(actor)));

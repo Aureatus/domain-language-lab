@@ -14,7 +14,7 @@ export type SubmissionEvent<R extends SubmissionReceipt=SubmissionReceipt> =
   | {type:'invalid';message:string}
   | {type:'lost'|'check'|'missing'|'retry'};
 
-export function submissionWireBody(body:object,contractId:string){
+export function submissionWireBody(body:object,contractId:string|undefined){
   const json=JSON.stringify({...body,expectedContractId:contractId});
   let bytes=0;
   for(const c of json){const n=c.codePointAt(0)!;bytes+=n<128?1:n<2048?2:n<65536?3:4;}

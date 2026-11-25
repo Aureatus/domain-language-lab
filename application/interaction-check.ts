@@ -2,7 +2,7 @@ import {errorMessage} from '../errors.ts';
 import {isDeepStrictEqual as equal} from 'node:util';
 import {actionReview} from './action-review.ts';
 import {walkthrough} from './action-walkthrough.ts';
-type WalkthroughEvent = Awaited<ReturnType<typeof walkthrough> extends AsyncIterable<infer Event> ? Event : never>;
+import type {WalkthroughEvent} from './action-walkthrough.ts';
 type ReviewEvent = WalkthroughEvent | {type:'switch'; actor:string} | {type:'refresh-start'} | {type:'refresh-end'; snapshot: Extract<WalkthroughEvent,{snapshot:unknown}>['snapshot']};
 type Observation = ReturnType<ReturnType<typeof actionReview>>;
 
@@ -28,7 +28,8 @@ function* schedules(events: WalkthroughEvent[],peer: string | undefined): Genera
   if(peer){
     const draft=base.find(e=>e.type==='draft');if(!draft?.body||!draft.id)throw Error('Missing recorded draft');
     const {body,id}=draft;
-    const peerDraft: ReviewEvent[]=snap.snapshot.availability[peer][body.action]?[{type:'draft',body:{actor:peer,action:body.action,args:snap.snapshot.defaults[peer][body.action]},id:`peer-${id}`}]:[];
+    const peerArgs=snap.snapshot.defaults[peer]?.[body.action];
+    const peerDraft: ReviewEvent[]=snap.snapshot.availability[peer]?.[body.action]&&peerArgs?[{type:'draft',body:{actor:peer,action:body.action,args:peerArgs},id:`peer-${id}`}]:[];
     yield {name:'late owner receipt',events:[...base,lost,check,{type:'switch',actor:peer},...peerDraft,receipt,{type:'switch',actor:body.actor},...tail]};
   }
 }
