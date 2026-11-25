@@ -51,19 +51,25 @@ export async function runCLI(argv: string[],{stdout=console.log}={}){
   }else if(command==='inspect'){
     if(id&&!Object.hasOwn(contract.actions,id))throw Error(`Unknown action '${id}'.`);result=id?contract.actions[id]:contract;
   }else if(command==='inbox')result=inboxFor(await client.snapshot(),options.actor);
-  else if(command==='preview'||command==='execute'){
-    if(!Object.hasOwn(contract.actions,id))throw Error(`Unknown action '${id}'. Use list or inspect.`);
-    let args;try{args=decodeJsonObject(options.args??'{}');}catch{throw Error('--args must be a JSON object.');}
-    if(command==='preview')result=await client.preview({actor:options.actor,action:id,args});
-    else{
-      const submissionId=options['submission-id']??randomUUID();
-      try{result={...await client.execute({actor:options.actor,action:id,args,submissionId}),submissionId};}
-      catch(e){if(e.notSubmitted)throw e;throw Error(`${e.message} Check submission ${submissionId} with reconcile before retrying.`);}
-    }
-  }else if(command==='reconcile'){
-    result=await client.reconcile({actor:options.actor,submissionId:id});
-  }else if(command==='grant')result=await client.grant({actor:options.actor,requestId:id,policyId:options.policy});
-  else result=await client.resume({actor:options.actor,requestId:id});
+  else {
+    const actor=options.actor;
+    if(!actor||!id)throw Error(`${command} requires an ID and explicit --actor.\n${usage}`);
+    if(command==='preview'||command==='execute'){
+      if(!Object.hasOwn(contract.actions,id))throw Error(`Unknown action '${id}'. Use list or inspect.`);
+      let args;try{args=decodeJsonObject(options.args??'{}');}catch{throw Error('--args must be a JSON object.');}
+      if(command==='preview')result=await client.preview({actor,action:id,args});
+      else{
+        const submissionId=options['submission-id']??randomUUID();
+        try{result={...await client.execute({actor,action:id,args,submissionId}),submissionId};}
+        catch(e){if(e.notSubmitted)throw e;throw Error(`${e.message} Check submission ${submissionId} with reconcile before retrying.`);}
+      }
+    }else if(command==='reconcile'){
+      result=await client.reconcile({actor,submissionId:id});
+    }else if(command==='grant'){
+      if(!options.policy)throw Error('grant requires --policy POLICY.');
+      result=await client.grant({actor,requestId:id,policyId:options.policy});
+    }else result=await client.resume({actor,requestId:id});
+  }
   if(options.json)stdout(encodeJson(result));
   else if(result.message)stdout(`${result.message}\nStatus: ${result.status}${result.code?` (${result.code})`:''}${result.submissionId?`\nSubmission: ${result.submissionId}`:''}${result.snapshot?`\nRevision: ${result.snapshot.state.revision}`:''}`);
   else if(command==='list'&&!id)stdout(result.map(a=>`${a.id} — ${a.label}\n  arguments: ${a.arguments.map(f=>`${f.name}: ${f.schema.type}`).join(', ')||'(none)'}\n  inspect: inspect ${a.id}`).join('\n'));

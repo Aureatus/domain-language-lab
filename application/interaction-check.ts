@@ -18,7 +18,7 @@ function* schedules(events: WalkthroughEvent[],peer: string | undefined): Genera
   yield {name:'recorded',events};
   const base=events.slice(0,at+1),tail=events.slice(receiptAt+1),snap=events.slice(at+1).find(e=>e.type==='snapshot');
   const lost=events.find(e=>e.type==='lost'),check=events.find(e=>e.type==='check'),receipt=events.find(e=>e.type==='receipt');
-  if(!lost||!check||!receipt||!snap)throw Error('Incomplete recorded recovery');
+  if(!lost||!check||!receipt||!snap?.snapshot)throw Error('Incomplete recorded recovery');
   const recovery=[lost,check,receipt];
   for(const seq of orders([recovery,[snap]]))yield {name:'snapshot / recovery',events:[...base,...seq,...tail]};
   // Refresh starts after loss; its result cannot precede the refresh request.
@@ -96,5 +96,5 @@ export async function checkInteractions(declaration,contract,command,options={})
     }
   }
   const exercised=events.some(e=>e.type==='receipt')&&!events.some(e=>e.type==='blocked');
-  return {status:shortest?'failed':exercised?'bounded-pass':'not-exercised',schedules:count,observations,families:[...families],approval:events.some(e=>e.type==='grant'&&e.result.status==='approved'),grantAttempted:events.some(e=>e.type==='grant'),completed:events.some(e=>e.type==='complete'&&e.result.status==='committed'),counterexample:shortest};
+  return {status:shortest?'failed':exercised?'bounded-pass':'not-exercised',schedules:count,observations,families:[...families],approval:events.some(e=>e.type==='grant'&&e.result?.status==='approved'),grantAttempted:events.some(e=>e.type==='grant'),completed:events.some(e=>e.type==='complete'&&e.result?.status==='committed'),counterexample:shortest};
 }

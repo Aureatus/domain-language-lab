@@ -15,7 +15,7 @@ This document records the audit of `JSON.parse` and `JSON.stringify` boundaries 
 | 2 | HTTP request/response & SSE server boundaries | `application/server.ts`, `workspace/server.ts`, `adapters/exact/serve.ts` | Migrated |
 | 3 | Node CLIs, replay traces & verification tools | `application/cli.ts`, `application/inspect-action.ts`, `application/check-interactions.ts`, `application/inspect-submission.ts`, `application/count.ts`, `application/inspect-loading.ts`, `adapters/lean/check.ts`, `adapters/lean/inventory.ts`, `inventory/v2/generated.ts`, `inventory/v2/demo.ts`, `syntax/lint.ts` | Migrated |
 | 4 | Bundled Effect UI browser storage boundary | `adapters/effect-ui/browser.ts` | Migrated |
-| 5 | Unbundled static browser scripts & zero-dependency cores | See below | Deferred (explicit boundary) |
+| 5 | Vite-bundled browser JSON boundaries | `application/{browser,client,submission}.ts`, `workspace/app.ts`, `live/app.ts`, `inventory/app.ts` | Migrated |
 
 ## What each migrated tier enforces
 
@@ -23,12 +23,10 @@ This document records the audit of `JSON.parse` and `JSON.stringify` boundaries 
 2. **Tier 2 (HTTP & SSE servers):** Replaces raw `JSON.parse` and hand-rolled `exact(...)` / type checks on `application/server.ts` (`/api/actions/{preview,execute,reconcile}`, `/api/approvals/{grant,resume}`) and `workspace/server.ts` (`/api/{execute,approve,resume}`) with strict Effect Schema request codecs (`onExcessProperty: 'error'`, bounded identities, safe nonnegative integer clocks). Encodes HTTP JSON responses, SSE `data:` frames, `application_submissions` rows, and `adapters/exact/serve.ts` error responses with Effect Schema encoders.
 3. **Tier 3 (CLIs, replay & verification tools):** Validates CLI `--args` JSON objects (`decodeJsonObject`), `action-events/v1` replay traces (`ActionEventsTraceSchema`), submission traces (`SubmissionTraceSchema`), Lean CLI JSON inputs, and generated-history replay inputs, and encodes CLI/report JSON output via `encodeJson` / `encodeJsonPretty`.
 4. **Tier 4 (Bundled Effect UI spike):** Replaces raw `sessionStorage` `JSON.parse` / `JSON.stringify` in `adapters/effect-ui/browser.ts` with `StorageKeyCodec` and `SavedSubmissionCodec` using the package's bundled `effect` `Schema`.
+5. **Tier 5 (Vite-bundled browsers):** Uses the shared codecs for HTTP JSON bodies, SSE snapshots and change envelopes, saved application submissions, Live workspace storage and imports/exports, Inventory replay files, and editable tool JSON. Workspace's editable commands still reach the server's strict request validator unchanged; Live and Inventory still validate and replay imported artifacts in their respective cores. The Live worker uses structured clone, not JSON.
 
-## Remaining Tier 5 sites (explicitly outside this migration)
+## Remaining sites (outside the Vite browser migration)
 
-These modules currently run either directly in browsers without a JS bundler or as zero-dependency pure-JS cores/build scripts:
-
-- **Unbundled browser modules served as static `.ts` / `.html`:** `application/browser.ts`, `application/client.ts`, `application/submission.ts`, `workspace/app.ts`, `workspace/derive.ts`, `live/app.ts`, `live/core.ts`, `live/derive.ts`, `live/build.ts`, `live/generated.ts`, `inventory/app.ts`, `inventory/host.ts`, `inventory/build.ts`, `workbench/template.html`, `workbench/build.ts`, `workbench/presentation.ts`, `adapters/exact/client.ts`, `adapters/exact/generate.ts`.
-- **Zero-dependency semantic cores, parser & prototype scripts:** `semantic/core.ts`, `semantic/v2/core.ts`, `adapters/lean/generate.ts`, `syntax/frontend.ts`, `prototype/engine.ts`, `prototype/demo.ts`, `prototype/property.ts`, `proof/check.ts`.
-
-**Next step for Tier 5:** Migrating unbundled browser modules (`application/browser.ts`, `application/client.ts`, `workspace/app.ts`) requires either bundling them (as `adapters/effect-ui` already does with esbuild) or serving an import-mapped browser bundle for `effect/Schema`. Migrating `semantic/core.ts` / `semantic/v2/core.ts` requires deciding whether the semantic cores should take a dependency on `effect` or stay zero-dependency with `adapters/effect/json.ts` wrapping their boundaries.
+- **Separate browser build paths:** Workbench's static HTML and presentation scripts do not use Vite. The Exact generator copies its client and submission helpers into the generated app; Exact compiles that app through its own toolchain, not the Premise Vite build.
+- **Zero-dependency cores and derivations:** `live/{core,derive}.ts`, `inventory/host.ts`, `workspace/derive.ts`, and `semantic/{core,v2/core}.ts` remain independent of Effect. Internal copies, equality comparisons, map keys, and display-only JSON are not boundary migrations.
+- **Build and verification tooling:** Remaining JSON in the build scripts, `live/generated.ts`, `adapters/{exact,lean}/generate.ts`, `syntax/frontend.ts`, `prototype/` and `proof/check.ts` is outside the browser runtime.

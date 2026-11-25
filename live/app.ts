@@ -1,5 +1,6 @@
 import { createApp } from './core.ts';
 import { describeChange } from './derive.ts';
+import { decodeJsonValue, decodeStrictJson, encodeJson, encodeJsonPretty, LiveWorkspaceDocumentSchema } from '../adapters/effect/json.ts';
 import type { runDerivedChecks } from './derive.ts';
 
 declare const __liveWorkerSource: string;
@@ -15,7 +16,7 @@ let savedRaw: string | null = null;
 try {
   savedRaw = localStorage.getItem(storageKey);
   if (savedRaw !== null) {
-    const result = core.restoreWorkspace(JSON.parse(savedRaw));
+    const result = core.restoreWorkspace(decodeStrictJson(LiveWorkspaceDocumentSchema,savedRaw));
     if (!result.ok) throw new Error(result.reason);
     saveStatus = 'Recovered saved workspace · this browser only.';
   }
@@ -26,7 +27,7 @@ try {
 function persist() {
   if (storageBlocked) return;
   try {
-    localStorage.setItem(storageKey, JSON.stringify(core.exportWorkspace()));
+    localStorage.setItem(storageKey, encodeJson(core.exportWorkspace(),LiveWorkspaceDocumentSchema));
     saveStatus = 'Saved in this browser · not synced or backed up.';
   } catch (error) {
     saveStatus = `Not saved: ${error.message}. Changes remain in memory; export before leaving.`;
@@ -252,7 +253,7 @@ function updateToolAvailability() {
   const form=requiredElement('#tool-form', HTMLFormElement, root);
   let panel=form.querySelector('.availability');
   if(!panel){panel=document.createElement('div');panel.className='availability';form.append(panel)}
-  try {const e=availability(toolName,JSON.parse(requiredElement('#tool-args', HTMLTextAreaElement, root).value));panel.innerHTML=`<strong>${e.available?'Available for current inputs':'Why unavailable'}</strong>${availabilityDetails(e)}`}
+  try {const e=availability(toolName,decodeJsonValue(requiredElement('#tool-args', HTMLTextAreaElement, root).value));panel.innerHTML=`<strong>${e.available?'Available for current inputs':'Why unavailable'}</strong>${availabilityDetails(e)}`}
   catch {panel.textContent='Why unavailable: enter valid JSON arguments. No policy or precondition result is claimed.'}
 }
 function bind() {
@@ -273,14 +274,14 @@ function bind() {
     };
     modal.showModal();
   };
-  requiredElement('#export-workspace', HTMLButtonElement, root).onclick=()=>download(JSON.stringify(core.exportWorkspace(),null,2),'relay-workspace.json');
+  requiredElement('#export-workspace', HTMLButtonElement, root).onclick=()=>download(encodeJsonPretty(core.exportWorkspace(),LiveWorkspaceDocumentSchema),'relay-workspace.json');
   root.querySelector('#export-original')?.addEventListener('click',()=>{if(savedRaw !== null) download(savedRaw,'relay-unreadable-workspace.json')});
   const importInput = requiredElement('#import-workspace', HTMLInputElement, root);
   importInput.onchange=async ()=>{
     const file = importInput.files?.[0];
     if (previewStep !== null || !file) return;
     try {
-      const doc=JSON.parse(await file.text());
+      const doc=decodeStrictJson(LiveWorkspaceDocumentSchema,await file.text());
       if (previewStep !== null) throw new Error('Return to live before importing.');
       const result=core.restoreWorkspace(doc);
       if (!result.ok) throw new Error(result.reason);
@@ -336,7 +337,7 @@ function bind() {
    const toolSelect = requiredElement('#tool-name', HTMLSelectElement, root);
    toolArgs.oninput=()=>{toolDrafts.set(toolName,toolArgs.value);updateToolAvailability()};
    toolSelect.onchange=()=>{toolName=toolSelect.value;toolArgs.value=toolDrafts.get(toolName) ?? JSON.stringify(defaultArgs(toolName),null,2);updateToolAvailability()};
-  requiredElement('#tool-form', HTMLFormElement, root).onsubmit=e=>{e.preventDefault();try{const args=JSON.parse(requiredElement('#tool-args', HTMLTextAreaElement, root).value);toolOutput=JSON.stringify(commit(toolName,args),null,2)}catch(error){failed=true;feedback='Invalid JSON: '+error.message;toolOutput=feedback}labOpen=true;render()};
+  requiredElement('#tool-form', HTMLFormElement, root).onsubmit=e=>{e.preventDefault();try{const args=decodeJsonValue(requiredElement('#tool-args', HTMLTextAreaElement, root).value);toolOutput=JSON.stringify(commit(toolName,args),null,2)}catch(error){failed=true;feedback='Invalid JSON: '+error.message;toolOutput=feedback}labOpen=true;render()};
   requiredElement('#run-checks', HTMLButtonElement, root).onclick=()=>{checkOutput=core.check();labOpen=true;render()};
    requiredElement('#run-derived-checks', HTMLButtonElement, root).disabled=!!derivedJob;
    requiredElement('#run-derived-checks', HTMLButtonElement, root).onclick=startDerived;

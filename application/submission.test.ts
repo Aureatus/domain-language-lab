@@ -4,7 +4,7 @@ import {submissionStep as step,submissionControls} from './submission.ts';
 import type {SubmissionEvent} from './submission.ts';
 import {createApplicationClient} from './client.ts';
 test('oversized UTF-8 payloads never dispatch; wrong receipt IDs never resolve the draft',async()=>{
-  let calls=0;const client=createApplicationClient('http://localhost',{fetch:async()=>{calls++;return Response.json({contractId:'c',submissionId:'wrong',status:'committed'});}});
+  let calls=0;const client=createApplicationClient('http://localhost',{fetch:async()=>Response.json(++calls===1?{contractId:'c',contract:{}}:{contractId:'c',submissionId:'wrong',status:'committed'})});
   await client.contract();const body={actor:'person',action:'reserve',args:{note:'❄'.repeat(6000)},submissionId:'expected'};
   await assert.rejects(client.execute(body),e=>e instanceof Error&&'notSubmitted' in e&&e.notSubmitted===true);assert.equal(calls,1);
   body.args.note='ok';await assert.rejects(client.execute(body),/identity mismatch/);assert.equal(calls,2);

@@ -40,6 +40,7 @@ export async function* walkthrough(declaration, {action, actor, args, submission
     yield {type: 'receipt', result: structuredClone(result)};
     if (result.status !== 'pending') return;
 
+    if(!result.evidence||!result.requirements)throw Error('Missing pending receipt evidence.');
     const requestId = result.evidence.invocation.id;
     for (const {policyId, approvers} of result.requirements) {
       const [approver] = approvers.filter(id => contract.actors.some(a => a.id === id)).sort();
