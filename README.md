@@ -4,6 +4,36 @@ Premise is an experimental, Ash-inspired domain language: state the premises, an
 
 **Status:** executable action IRs, inventory/reservation consumers, Effect execution with SQLite persistence and policy-derived approval/resumption, and generated v1 Lean numeric proofs, alongside the earlier live issue workspace. Language syntax and wider contracts remain proposals. No production compiler, runtime correspondence proof, or semantic video generator is implemented; the MP4s are actual browser recordings.
 
+## What Premise infers
+
+Here is the start of `leave.request` from [the time-away domain](leave/time-away.domain):
+
+```domain
+action "leave.request" identity request
+  inputs
+    employeeId reference employee as employee
+    leaveId string
+    start like leave.start
+    end like leave.end
+    days like leave.days
+  end
+
+  preconditions
+    days <= employee.balance id "leave.enough-days"
+  end
+  policies
+    deny when not actor == employeeId id "leave.owner-only"
+    allow when days < settings.threshold id "leave.short-break"
+    approve by employee.manager when days >= settings.threshold id "leave.manager-approval"
+  end
+```
+
+In the [time-off prototype](docs/time-off-demo.md), the reusable runtime derives:
+
+- **An input contract and request form.** `days like leave.days` reuses the resource field's integer type and minimum of one without repeating them. The [browser view](leave/browser.domain) supplies labels, date controls via a named adapter, and the saved-leave list layout; the [renderer](docs/model-derived-application.md) builds the form and list.
+- **A balance check and an approval inbox.** The precondition checks available days. For an eligible request at or above the threshold, the policy resolves the employee's manager and the [inbox](docs/model-derived-application.md#generic-http-and-durable-workflow) shows that manager the pending request. That leave is saved only after approval and resumption.
+- **Action and change events.** The rest of the action groups the balance deduction and leave creation. When they commit, the runtime emits the [action, field-change, and record-creation events](semantic/v2/CONTRACT.md) without separate event declarations.
+
 ## Start here
 
 **Fresh clone:** use Node 22.18+ with npm (CI pins Node 24.22.3). Run `npm run adapters:install` to install the locked Effect dependencies, then `npm run check:interactions -- leave/browser.domain leave.request --actor maya`. The checker and offline replay need no browser or native builds. See [Chromium/Exact setup](docs/exact-adapter.md#chromiumexact-conformance) for separate renderer conformance. `artifacts/` is local generated output; the historical media and report links below are not part of the public source checkout.
