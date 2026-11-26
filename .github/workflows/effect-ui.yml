@@ -1,29 +1,135 @@
-name: Effect UI spike
+name: Browser tests
 
-on:
-  pull_request:
-    paths:
-      - ".github/workflows/effect-ui.yml"
-      - "adapters/effect-ui/**"
-      - "adapters/effect/**"
-      - "application/**"
-      - "leave/**"
-      - "semantic/**"
-      - "syntax/**"
-      - "package.json"
+on: [pull_request]
 
 permissions:
   contents: read
 
 jobs:
   chromium:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
         with:
           node-version: 24.22.3
       - uses: pnpm/action-setup@v4
       - run: pnpm install --frozen-lockfile
-      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm exec playwright install --with-deps chromium-headless-shell
       - run: pnpm --filter premise-effect-ui-spike test
+
+  browser:
+    name: Browser (${{ matrix.suite }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - suite: Live
+            build: live:build
+            test: live:test
+          - suite: Inventory
+            build: inventory:build
+            test: inventory:test
+          - suite: Workspace
+            test: workspace:test
+          - suite: Application
+            test: application:test
+          - suite: Application submission
+            test: application:submission:test
+          - suite: Application CLI
+            test: application:cli:test
+          - suite: Syntax
+            test: syntax:browser
+          - suite: Syntax reader
+            test: syntax:reader:test
+          - suite: Leave
+            test: leave:test
+          - suite: Workbench
+            build: workbench
+            test: test:browser
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24.22.3
+      - uses: pnpm/action-setup@v4
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps chromium-headless-shell
+      - run: mkdir -p /tmp/opencode artifacts
+      - name: Build browser artifact
+        if: matrix.build
+        env:
+          BUILD_SCRIPT: ${{ matrix.build }}
+        run: pnpm run "$BUILD_SCRIPT"
+      - name: Run browser suite
+        env:
+          TEST_SCRIPT: ${{ matrix.test }}
+        run: pnpm run "$TEST_SCRIPT"
+
+  exact:
+    name: Browser (Exact)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      EXACT_FEEDBACK: "0"
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24.22.3
+      - uses: pnpm/action-setup@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+      - run: pnpm install --frozen-lockfile
+      - name: Install the pinned Exact web toolchain
+        run: |
+          export EXACT_ROOT="$RUNNER_TEMP/exact"
+          export EXACT_TEMPLATE="$RUNNER_TEMP/exact-template"
+          printf 'EXACT_ROOT=%s\nEXACT_TEMPLATE=%s\n' "$EXACT_ROOT" "$EXACT_TEMPLATE" >> "$GITHUB_ENV"
+          git init "$EXACT_ROOT"
+          git -C "$EXACT_ROOT" fetch --depth=1 https://github.com/expo/exact d8863f736172954b605c3bff22f51337c6983170
+          git -C "$EXACT_ROOT" checkout --detach FETCH_HEAD
+          env -u ANDROID_HOME -u ANDROID_SDK_ROOT bun "$EXACT_ROOT/scripts/exact.mjs" setup
+          bun "$EXACT_ROOT/scripts/exact.mjs" setup --check --platform web
+          node "$EXACT_ROOT/node_modules/playwright-core/cli.js" install --with-deps chromium-headless-shell
+          bun "$EXACT_ROOT/scripts/exact.mjs" new "$EXACT_TEMPLATE" --name Derived --bundle-id research.derived.exact
+      - name: Run Exact web, loading and submission suites
+        shell: bash
+        run: |
+          mkdir -p artifacts
+          export EXACT="$EXACT_ROOT"
+
+          run_fixture() (
+            local declaration="$1" suite="$2" fixture gateway url
+            fixture=$(mktemp -d "$RUNNER_TEMP/exact-browser.XXXXXX")
+            cp "$EXACT_TEMPLATE"/{exact.mjs,package.json} "$fixture"
+            node adapters/exact/serve.ts "$declaration" "$fixture/dist" 0 "$fixture/data" > "$fixture/gateway.log" 2>&1 &
+            gateway=$!
+            trap 'kill "$gateway" 2>/dev/null || true; wait "$gateway" || true; rm -rf "$fixture"' EXIT
+
+            for attempt in {1..100}; do
+              url=$(sed -n 's/^Exact adapter \(http:\/\/127\.0\.0\.1:[0-9]*\);.*/\1/p' "$fixture/gateway.log")
+              if [[ -n "$url" ]] || ! kill -0 "$gateway" 2>/dev/null; then break; fi
+              sleep 0.1
+            done
+            if [[ -z "$url" ]]; then
+              cat "$fixture/gateway.log" >&2
+              return 1
+            fi
+            node adapters/exact/generate.ts "$url" "$fixture"
+            (
+              cd "$fixture"
+              bun ./exact.mjs contract build app.contract --json --errors-only
+              bun ./exact.mjs web-build --out dist
+            )
+            EXACT_URL="$url" node "adapters/exact/$suite.ts" "$url"
+          )
+
+          run_fixture leave/model.ts web-test
+          run_fixture adapters/exact/loading-fixture.ts loading-web-test
+          run_fixture leave/model.ts submission-web-test
+      - run: pnpm application:review:test
