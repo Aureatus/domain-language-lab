@@ -6,7 +6,7 @@ import { tokenize, parseSource } from "./frontend.ts";
 import { loadSource } from "./load.ts";
 
 const keywords = new Set(
-  "module import use singleton identity domain resource fields field relationships relationship from action inputs input bindings bind key id preconditions requires require policies policy deny allow when approve by changes update set end create as observations observe through initial revision records record version application title eyebrow subtitle scope loading actor label name present description default adapter output view summary list format type like min max enum ownerField reference widget constant source".split(
+  "module import use singleton identity domain resource fields field relationships relationship from action inputs input bindings bind key id preconditions requires require policies policy deny allow when approve by changes update set end create as observations observe through initial revision records record version application title eyebrow subtitle scope loading actor label name present description default adapter output view summary list format type like infer min max enum ownerField reference widget constant source".split(
     " "
   )
 );
@@ -120,7 +120,7 @@ export function highlight(source: string, { quietIds = false } = {}) {
       if (
         head &&
         typeof next === "string" &&
-        ["string", "integer", "boolean", "like", "from"].includes(next)
+        ["string", "integer", "boolean", "like", "infer", "from"].includes(next)
       ) {
         cls = "";
       }

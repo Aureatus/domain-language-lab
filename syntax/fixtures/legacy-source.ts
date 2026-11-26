@@ -23,6 +23,10 @@ export default [
       'action "settings.change"'
     )
     .replace("employeeId reference employee as employee", "employeeId string")
+    .replace("    start infer", "    start like leave.start")
+    .replace("    end infer", "    end like leave.end")
+    .replace("    days infer", "    days like leave.days")
+    .replace("    threshold infer", "    threshold like settings.threshold")
     .replace(
       "  preconditions",
       '  bindings\n    employee from employee key employeeId id "request.employee"\n    settings from settings key "leave-rule" id "request.settings"\n  end\n\n  preconditions'

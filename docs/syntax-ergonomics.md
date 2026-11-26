@@ -57,19 +57,25 @@ This exact excerpt is in the migrated time-away action:
 
 ```domain
   inputs
-    employeeId string
+    employeeId reference employee as employee
     leaveId string
-    start like leave.start
-    end like leave.end
-    days like leave.days
+    start infer
+    end infer
+    days infer
   end
 ```
 
-`like` copies schema, never values or intent. `days like employee.balance` would
-copy min 0, not the required min 1: therefore it is not inferred. Likewise
-`threshold like settings.threshold` copies its min 1. Caller inputs and computed
-insert/update expressions are different categories; not every field becomes an
-input. Actor, operation-ID and clock host bindings already hide server-owned
+`days infer` replaces `days like leave.days`: the direct insert assignment
+`days = input.days` identifies the field whose schema (integer, min 1) is copied.
+Likewise, `threshold infer` copies the schema from a direct update of
+`settings.threshold`. Inference copies schemas, not values, and uses every direct
+write of the input within the action. If there is no such write, or the target
+schemas differ, use `like` or declare an explicit input schema. References in
+guards, keys or arithmetic do not count. A bare input name would conflict with
+expanded schemas and the `end` terminator, so the input row says `infer`.
+
+The caller's inputs remain declared; not every field becomes an input.
+Actor, operation-ID and clock host bindings already hide server-owned
 inputs when explicitly configured. Time-away explicitly maps actor and operation
 ID; its named `utc-weekday-range/v1` adapter computes days from dates and hides it.
 The adapter's real-calendar/weekdays/range rules are trusted framework behavior,
@@ -109,7 +115,9 @@ Policy/precondition/change IDs remain explicit to avoid inventing durable identi
 
 Full deep equality against `syntax/fixtures/prior-leave.ts` covers domain, initial
 state and presentation, including ordering and IDs. A persisted prior-model pending
-request reopens/grants/resumes under the migrated source. Source mutation tests now
+request reopens/grants/resumes under the migrated source. The input inference tests
+also check the pre-inference model and contract hashes for all three leave views
+and the supply fixture. Source mutation tests now
 target the real grouped syntax and retain their original assertions. Browser mapping
 tests still add a real enum input and change threshold 3→2, then check generated
 form, captured invocation, pending, grant/resume and balance 5→3. Reader tests assert

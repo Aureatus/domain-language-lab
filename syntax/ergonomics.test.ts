@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
+import { encodeJson } from "../adapters/effect/json.ts";
 import { deriveApplication } from "../application/derive.ts";
 import { present } from "../semantic/test-support.ts";
 import legacy from "./fixtures/legacy-source.ts";
@@ -17,7 +19,11 @@ const text = readFileSync(
 
 const parse = (s: string) => parseSource(s, { filename: "groups.domain" });
 
-test("expanded bounds and multi-enum, schema reuse and safe derived IDs execute", () => {
+const explicitSchemas = text
+  .replace("    balance infer", "    balance like supply.balance")
+  .replace("    status infer", "    status like supply.status");
+
+test("expanded bounds and multi-enum, inferred input schemas and safe derived IDs execute", () => {
   const { declaration, sourceMap } = parse(text);
   const model = declaration.domain;
 
@@ -74,7 +80,7 @@ test("expanded bounds and multi-enum, schema reuse and safe derived IDs execute"
 });
 
 test("inline and expanded schemas are exact sugar; legacy singular forms remain accepted", () => {
-  const inline = text
+  const inline = explicitSchemas
     .replace(
       "balance\n      type integer\n      min 0\n      max 30\n    end",
       "balance integer min 0 max 30"
@@ -85,6 +91,13 @@ test("inline and expanded schemas are exact sugar; legacy singular forms remain 
     );
 
   assert.deepEqual(parse(inline).declaration, parse(text).declaration);
+
+  const expandedInput = inline.replace(
+    "    balance like supply.balance",
+    "    balance\n      type integer\n      min 0\n      max 30\n    end"
+  );
+
+  assert.deepEqual(parse(expandedInput).declaration, parse(text).declaration);
 
   const legacyText = inline
     .replace("  fields\n", "")
@@ -123,6 +136,86 @@ test("inline and expanded schemas are exact sugar; legacy singular forms remain 
     );
 
   assert.deepEqual(parse(legacyText).declaration, parse(text).declaration);
+});
+
+test("migrated sources retain their pre-inference serialized model and contract IDs", () => {
+  const contractIds = {
+    "../leave/browser.domain":
+      "136de0f000fc5aed5febb25583ca25c9ecdacb562bd42b50b54124f2c92d4144",
+    "../leave/cli.domain":
+      "87fca2c2e3c492e811ad09aa5863d8f9f8d0f7ab0c432b38ceb0a8f22376f37c",
+    "../leave/mobile.domain":
+      "fa0f34bc60cb868dc2c28a6394775fef3748ce93761ef0da73d6716ad815116b",
+    "fixtures/schema-groups.domain":
+      "b3500080a845bcf8cca4baccd698781096aa7ec6a30ba21ad5ca47c098f0f2ee",
+  };
+
+  for (const [path, expected] of Object.entries(contractIds)) {
+    const { model, contract } = deriveApplication(
+      loadSource(new URL(path, import.meta.url)).declaration
+    );
+
+    const id = createHash("sha256")
+      .update(encodeJson({ model, contract }))
+      .digest("hex");
+
+    assert.equal(id, expected, path);
+  }
+});
+
+test("inferred schemas accept agreeing direct writes and reject conflicting bounds at the input", () => {
+  const secondTarget = text
+    .replace(
+      "    manager string",
+      "    reserve integer min 0 max 30\n    manager string"
+    )
+    .replace(
+      '      set item.status = status id "supply.status"',
+      '      set item.status = status id "supply.status"\n      set item.reserve = input.balance id "supply.reserve"'
+    )
+    .replace(
+      '      manager = "sam"',
+      '      reserve = 5\n      manager = "sam"'
+    );
+
+  const { declaration } = parse(secondTarget);
+
+  assert.deepEqual(
+    present(declaration.domain.actions["supply.adjust"]).inputs["balance"],
+    { type: "integer", min: 0, max: 30 }
+  );
+
+  const conflicting = secondTarget.replace(
+    "reserve integer min 0",
+    "reserve integer min 1"
+  );
+
+  const line = conflicting.split("\n").indexOf("    balance infer") + 1;
+
+  assert.throws(() => parse(conflicting), {
+    message: `groups.domain:${line}:5: Cannot infer input 'balance': 'supply.balance' and 'supply.reserve' have different schemas. Declare the input schema explicitly.`,
+  });
+
+  assert.doesNotThrow(() =>
+    parse(conflicting.replace("balance infer", "balance integer min 1 max 30"))
+  );
+});
+
+test("guards, keys and arithmetic do not supply a direct write schema", () => {
+  const missingWrite = text.replace(
+    "item.balance = balance",
+    "item.balance = balance + 0"
+  );
+
+  const line = missingWrite.split("\n").indexOf("    balance infer") + 1;
+
+  assert.throws(() => parse(missingWrite), {
+    message: `groups.domain:${line}:5: Cannot infer input 'balance': no direct write to a resource field.`,
+  });
+  assert.throws(
+    () => parse(text.replace("key string", "key infer")),
+    /Cannot infer input 'key': no direct write/u
+  );
 });
 
 for (const [label, from, to, pattern] of [
@@ -198,10 +291,12 @@ for (const [label, from, to, pattern] of [
   test(`group validation rejects ${label}`, () => {
     const changed =
       label === "inverted bounds"
-        ? text.replace("      min 0", "      min 1").replace(from, to)
-        : text.replace(from, to);
+        ? explicitSchemas
+            .replace("      min 0", "      min 1")
+            .replace(from, to)
+        : explicitSchemas.replace(from, to);
 
-    assert.notEqual(changed, text);
+    assert.notEqual(changed, explicitSchemas);
     assert.throws(() => parse(changed), pattern);
   });
 }
@@ -224,12 +319,13 @@ test("grouped input lint locations and keyword-looking identifiers are contextua
   assert.equal(warning.column, 5);
 
   const html = highlight(
-    "fields\n  name string\n  end like supply.title\nend\n"
+    "fields\n  name string\n  end like supply.title\nend\ninputs\n  end infer\nend\n"
   );
 
   assert.match(html, />fields<\/span>/u);
   assert.doesNotMatch(html, /class="keyword">name/u);
   assert.doesNotMatch(html, /class="keyword">end<\/span> like/u);
+  assert.match(html, /\n {2}end <span class="keyword">infer<\/span>/u);
 });
 
 test("quoted end supports an expanded field without ambiguity with block termination", () => {

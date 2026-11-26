@@ -1,6 +1,7 @@
 import { deriveApplication, loadingModes } from "../application/derive.ts";
 // Experimental closed text frontend. Module resolution lives in load.ts.
 import { errorMessage } from "../errors.ts";
+import { canonical, ownValue } from "../semantic/primitives.ts";
 import { createInterpreter, validateState } from "../semantic/v2/core.ts";
 import type {
   Action,
@@ -41,6 +42,8 @@ type Token = Point & { start: number; end: number } & (
   );
 
 type MutableAction = Mutable<Action>;
+
+type InputSchema = MutableAction["inputs"][string];
 
 type Binding = Pick<MutableAction["bindings"][number], "id" | "resource">;
 
@@ -316,7 +319,7 @@ export function parseSource(
   const bindings = new Map<string, Binding>();
 
   const sections: Section[] = [];
-  let inputs: MutableAction["inputs"] = {};
+  let inputs: Record<string, InputSchema | Token> = {};
 
   const domain: Mutable<Model> = {
     format: "semantic-core/v2",
@@ -797,12 +800,41 @@ export function parseSource(
     currentAction = a;
     identity = accept("identity") ? name() : id;
     const locations: Record<string, Point> = Object.create(null);
-    ({ inputs } = a);
+    inputs = {};
     inputLocations[id] = locations;
     bindings.clear();
     references.clear();
     const observed = new Map<string, string>();
+
+    const directWrites = new Map<
+      string,
+      { path: string; schema: InputSchema }[]
+    >();
+
     let sawUpdate = false;
+
+    const noteWrite = (resource: string, field: string, value: Expr) => {
+      if (value.op !== "input") {
+        return;
+      }
+
+      const declared = ownValue(inputs, value.name);
+
+      if (!declared || "type" in declared) {
+        return;
+      }
+
+      const target = ownValue(
+        ownValue(domain.resources, resource)?.fields,
+        field
+      );
+
+      if (target) {
+        const writes = directWrites.get(value.name) ?? [];
+        writes.push({ path: `${resource}.${field}`, schema: target });
+        directWrites.set(value.name, writes);
+      }
+    };
 
     function row(group?: string | number) {
       const t = peek();
@@ -820,7 +852,7 @@ export function parseSource(
         const n = name();
 
         currentInput = n;
-        unique(inputs, n, schema(true));
+        unique(inputs, n, accept("infer") ? nt : schema(true));
         locations[n] = { line: nt.line, column: nt.column };
         nl();
       } else if (group === "bindings" || (!group && accept("bind"))) {
@@ -929,6 +961,7 @@ export function parseSource(
 
           mark(uid, u);
           a.updates.push({ id: uid, target: b.id, field, value });
+          noteWrite(b.resource, field, value);
           nl();
         });
         nl();
@@ -961,7 +994,8 @@ export function parseSource(
         block(() => {
           const n = name();
           expect("=");
-          unique(values, n, expression());
+          const value = unique(values, n, expression());
+          noteWrite(resource, n, value);
           nl();
         });
         mark(iid, t);
@@ -999,6 +1033,37 @@ export function parseSource(
     }
 
     block(() => row());
+    a.inputs = Object.fromEntries(
+      Object.entries(inputs).map(([n, declared]) => {
+        if ("type" in declared) {
+          return [n, declared];
+        }
+
+        const [first, ...rest] = directWrites.get(n) ?? [];
+
+        if (!first) {
+          fail(
+            `Cannot infer input '${n}': no direct write to a resource field.`,
+            declared
+          );
+        }
+
+        const expected = canonical(first.schema);
+
+        const conflicting = rest.find(
+          (target) => canonical(target.schema) !== expected
+        );
+
+        if (conflicting) {
+          fail(
+            `Cannot infer input '${n}': '${first.path}' and '${conflicting.path}' have different schemas. Declare the input schema explicitly.`,
+            declared
+          );
+        }
+
+        return [n, structuredClone(first.schema)];
+      })
+    );
     closeSpan(id);
     nl();
   }

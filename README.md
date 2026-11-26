@@ -13,9 +13,9 @@ action "leave.request" identity request
   inputs
     employeeId reference employee as employee
     leaveId string
-    start like leave.start
-    end like leave.end
-    days like leave.days
+    start infer
+    end infer
+    days infer
   end
 
   preconditions
@@ -30,7 +30,7 @@ action "leave.request" identity request
 
 In the [time-off prototype](docs/time-off-demo.md), the reusable runtime derives:
 
-- **An input contract and request form.** `days like leave.days` reuses the resource field's integer type and minimum of one without repeating them. The [browser view](leave/browser.domain) supplies labels, date controls via a named adapter, and the saved-leave list layout; the [renderer](docs/model-derived-application.md) builds the form and list.
+- **An input contract and request form.** `days infer` replaces `days like leave.days`: the later `days = input.days` write identifies the resource field, so its integer type and minimum of one need not be repeated. The [browser view](leave/browser.domain) supplies labels, date controls via a named adapter, and the saved-leave list layout; the [renderer](docs/model-derived-application.md) builds the form and list.
 - **A balance check and an approval inbox.** The precondition checks available days. For an eligible request at or above the threshold, the policy resolves the employee's manager and the [inbox](docs/model-derived-application.md#generic-http-and-durable-workflow) shows that manager the pending request. That leave is saved only after approval and resumption.
 - **Action and change events.** The rest of the action groups the balance deduction and leave creation. When they commit, the runtime emits the [action, field-change, and record-creation events](semantic/v2/CONTRACT.md) without separate event declarations.
 

@@ -67,9 +67,9 @@ create IDs remain explicit: changing their identity is not a formatting operatio
 
 - One statement per line; whitespace indentation is visual, not grammar. Blocks
   close with `end` alone on a line. Blank lines and `#` comments are ignored outside
-  strings; CRLF is supported. `end string`, `end like leave.end`, `end = input.end`
-  and adapter `end end` are not terminators. A field literally named `end` must use
-  inline schema syntax (its name alone would close the containing block).
+  strings; CRLF is supported. `end string`, `end infer`, `end = input.end`
+  and adapter `end end` are not terminators. Quote `"end"` to use it as the name
+  of an expanded schema.
 - Names are ASCII letters/underscore/dollar followed by these or digits. Quote
   IDs containing dots/hyphens. Reference dots are punctuation. Double-quoted strings
   support escaped quote, slash, newline, carriage return and tab. Numeric literals
@@ -83,6 +83,12 @@ create IDs remain explicit: changing their identity is not a formatting operatio
 - `NAME like RESOURCE.FIELD` copies that declared schema, not its stored value.
   Resources must already be declared. No implicit fields/inputs or narrowing based
   on cross-field intent. Schema overrides after `like` are unsupported.
+- `NAME infer` on an action input copies the full schema from its direct
+  insert or update targets (for example, `days = input.days`). A bare input
+  reference on the right-hand side is equivalent. If there are no direct targets,
+  or their schemas disagree, the declaration fails at the input. Guards, keys
+  and compound expressions do not supply schemas. The marker distinguishes the
+  row from an expanded schema and, for `end infer`, from a block terminator.
 - Binding rows: `ALIAS from RESOURCE key EXPR [id ID]`. Input and binding names
   must be declared before expression use. Insert aliases are observation-only.
 - Preconditions: `EXPR id ID` (optional leading `require` inside the group).
@@ -157,7 +163,7 @@ metadata—not a regenerated output snapshot. The SQLite test creates an old-mod
 pending request, reopens with migrated text and successfully grants/resumes. This
 exact syntactic migration preserves durable binding; actual semantic edits do not.
 `syntax/fixtures/schema-groups.domain` exercises both bounds, three enum values,
-schema reuse, derived binding IDs and explicit relationship overrides without
+input schema inference, derived binding IDs and explicit relationship overrides without
 inventing leave states. Tests also cover rollback, group prestate, invalid names,
 types, bounds, grouping, source spans, lint locations and source-only form edits.
 
