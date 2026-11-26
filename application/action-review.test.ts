@@ -72,7 +72,10 @@ test('bounded search can find an approval controlled by a checkbox or enum',()=>
   const action='supply.take',actor='nora';
   for(const [name,value] of [['tracked',true],['reason','Repair']] as const){
     const model=structuredClone(fixture);
-    const [direct,approval]=model.domain.actions[action].policies;
+    const take=model.domain.actions[action];
+    assert.ok(take);
+    const [direct,approval]=take.policies;
+    assert.ok(direct&&approval);
     direct.when={op:'literal',value:false};
     approval.when={op:'eq',left:{op:'input',name},right:{op:'literal',value}};
     const selected=exampleArgs(deriveApplication(model),action,actor);
@@ -83,7 +86,9 @@ test('bounded search can find an approval controlled by a checkbox or enum',()=>
 
 test('no candidate found is reported as a bounded search, not as unreachable approval',()=>{
   const model=structuredClone(fixture),action='supply.take';
-  model.domain.actions[action].policies.pop();
+  const take=model.domain.actions[action];
+  assert.ok(take);
+  take.policies.pop();
   const {args,selection}=exampleArgs(deriveApplication(model),action,'nora');
   assert.match(selection,/bounded preview did not find an approval example/);
   assert.deepEqual(args,{cabinetKey:'tools',quantity:1,reason:'Workshop',tracked:false});
@@ -94,12 +99,13 @@ test('walkthrough unlocks an invalid draft without creating an execution receipt
   const fold=actionReview(deriveApplication(declaration).contract,actor,action),steps=[];
   for await(const event of walkthrough(declaration,{action,actor,args}))steps.push(fold(event));
   assert.deepEqual(steps.map(s=>s.event),['snapshot','draft','submit','invalid']);
-  const last=steps.at(-1);
+  const first=steps[0],last=steps.at(-1);
+  assert.ok(first&&last?.message);
   assert.match(last.message,/at least one weekday/);
   assert.equal(last.submission,'editing');
   assert.equal(last.controls.submit,true);
   assert.equal(last.receipt,null);
-  assert.equal(last.snapshotVersion,steps[0].snapshotVersion);
+  assert.equal(last.snapshotVersion,first.snapshotVersion);
 });
 
 test('walkthrough stops at the original pending receipt when no approver is selectable',async()=>{
@@ -109,10 +115,13 @@ test('walkthrough stops at the original pending receipt when no approver is sele
   const fold=actionReview(deriveApplication(model).contract,actor,action),steps=[];
   for await(const event of walkthrough(model,{action,actor,args}))steps.push(fold(event));
   const last=steps.at(-1);
+  assert.ok(last?.message&&last.receipt);
   assert.equal(last.event,'blocked');
   assert.match(last.message,/No selectable approver for supply\.review/);
   assert.equal(last.receipt.status,'pending');
-  assert.equal(last.inbox[0].id,last.receipt.invocationId);
-  assert.deepEqual(last.inbox[0].grants,[]);
-  assert.equal(last.views[0].records[0].fields.stock,8);
+  const pending=last.inbox[0],record=last.views[0]?.records[0];
+  assert.ok(pending&&record);
+  assert.equal(pending.id,last.receipt.invocationId);
+  assert.deepEqual(pending.grants,[]);
+  assert.equal(record.fields['stock'],8);
 });
