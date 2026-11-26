@@ -75,6 +75,17 @@ test('oracle independently detects bad stock and lost reservations',()=>{
   assert.equal(inspectInventory(bad,[]).ok,false);
   assert.equal(inspectInventory(initialState,[invocation('promise','reserve')]).ok,false);
 });
+test('the inventory oracle distinguishes incomplete evidence from unsupported and duplicate commands',()=>{
+  const accepted=invocation('accepted','reserve');
+  const missingCounts=structuredClone(initialState);
+  Reflect.deleteProperty(present(present(missingCounts.records['stock'])['camera']).values,'available');
+  assert.throws(()=>inspectInventory(missingCounts,[]),/safe integer/);
+  assert.throws(()=>inspectInventory({...initialState,records:{}},[]),/Missing inventory resource collection/);
+  assert.throws(()=>inspectInventory(initialState,[{...accepted,args:{}}]),/Missing reservation slot ID/);
+  const report=inspectInventory(initialState,[accepted,{...accepted,id:'duplicate'},{...accepted,action:'reservation.adjust'}]);
+  assert.ok(report.failures.some(failure=>failure.includes('accepted twice')));
+  assert.ok(report.failures.includes('Unsupported oracle action: reservation.adjust'));
+});
 test('host snapshots declarations and initial state; duplicate IDs do not publish',()=>{
   const m=structuredClone(inventoryModel), s=structuredClone(initialState), h=createHost(m,s);
   m.id='edited';present(present(s.records['stock'])['camera']).values['available']=0;

@@ -202,3 +202,30 @@ test('startup port failure cleans databases; close is idempotent and terminates 
   await assert.rejects(createWorkspaceServer({directory: f.directory, port: Number(new URL(f.url).port)}), /EADDRINUSE/);
   await f.close(); await f.close(); await f.restart(); assert.equal((await get(f)).state.revision, 0);
 });
+
+test('snapshot selection is exact and rejected commands leave the profile unchanged', async t => {
+  await assert.rejects(createWorkspaceServer({port:65536}), /Invalid port/);
+  const f=await fixture(t);
+  for(const [path,method,status,message] of [
+    ['/api/snapshot','GET',400,/Unexpected query members/],
+    ['/api/events?profile=v1&profile=v2','GET',400,/Unexpected query members/],
+    ['/api/snapshot?profile=v2&actor=alice&actor=bob','GET',400,/Unexpected query members/],
+    ['/api/snapshot?profile=v2&extra=yes','GET',400,/Unexpected query members/],
+    ['/api/snapshot?profile=v2','POST',405,/Method not allowed/],
+    ['/api/execute?profile=v2','POST',400,/Unexpected query members/],
+    ['/index.html','POST',405,/Method not allowed/],
+  ] as const){
+    const response=await fetch(f.url+path,{method});
+    assert.equal(response.status,status,path);
+    assert.match((await response.json()).error,message);
+  }
+  const defaultViewer=await fetch(f.url+'/api/snapshot?profile=v2');
+  assert.equal(defaultViewer.status,200);
+  assert.deepEqual(await defaultViewer.json(),await get(f));
+  assert.equal((await get(f)).state.revision,0);
+  for(const path of ['/index.html','/app.js']){
+    const head=await fetch(f.url+path,{method:'HEAD'});
+    assert.equal(head.status,200);
+    assert.equal(await head.text(),'');
+  }
+});

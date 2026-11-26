@@ -16,3 +16,7 @@ test('record views intersect literal or viewer keys with the declared owner filt
   assert.deepEqual(viewRecords(snapshot,{resource,key:'tools',ownerField},'maya'),[['tools',records.tools]]);
   assert.deepEqual(viewRecords(snapshot,{resource,key:'$actor',ownerField},'maya'),[]);
 });
+
+test('record projection rejects an incomplete snapshot rather than showing a false empty view',()=>{
+  assert.throws(()=>viewRecords({state:{records:{}}},{resource:'cabinet'},'maya'),/Missing view resource: cabinet/);
+});

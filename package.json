@@ -10,7 +10,7 @@
     "dup": "jscpd .",
     "typecheck": "effect-language-service patch && tsc -p tsconfig.json && effect-tsgo tsc@7.0.2 -p tsconfig.json",
     "test": "node test-runner.ts",
-    "test:coverage": "node test-runner.ts --experimental-test-coverage --test-coverage-lines=97 --test-coverage-branches=89 --test-coverage-functions=97 --test-coverage-include=\"**/*.ts\" --test-coverage-exclude=\"**/*.test.ts\" --test-coverage-exclude=adapters/exact/test.ts --test-coverage-exclude=\"**/test-output/**\" --test-coverage-exclude=\"artifacts/**\" --test-coverage-exclude=\"**/*browser-test.ts\" --test-coverage-exclude=\"**/video.ts\" --test-coverage-exclude=\"**/record-demo.ts\"",
+    "test:coverage": "node test-runner.ts --experimental-test-coverage --test-coverage-lines=97 --test-coverage-branches=91 --test-coverage-functions=98 --test-coverage-include=\"**/*.ts\" --test-coverage-exclude=\"**/*.test.ts\" --test-coverage-exclude=adapters/exact/test.ts --test-coverage-exclude=\"**/test-output/**\" --test-coverage-exclude=\"artifacts/**\" --test-coverage-exclude=\"**/*browser-test.ts\" --test-coverage-exclude=\"**/video.ts\" --test-coverage-exclude=\"**/record-demo.ts\"",
     "syntax:check": "node syntax/cli.ts check",
     "syntax:lint": "node syntax/lint.ts",
     "syntax:reader:test": "node syntax/reader-browser-test.ts",

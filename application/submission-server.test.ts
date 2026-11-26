@@ -21,6 +21,50 @@ async function setup(t:TestContext){
   return {directory,start,server:await start()};
 }
 
+test('HTTP command validation cannot publish an update or change the durable snapshot',async t=>{
+  await assert.rejects(createApplicationServer(fixture),/storage directory required/);
+  const {server:{url}}=await setup(t);
+  const snapshot=async()=>await (await fetch(url+'/api/snapshot')).json();
+  const before=await snapshot();
+  for(const [init,status,message] of [
+    [{method:'POST',body:'{}'},415,/Expected JSON/],
+    [{method:'POST',headers:{'content-type':'application/json'},body:'x'.repeat(17000)},413,/Request too large/],
+    [{method:'POST',headers:{origin:'http://localhost:2'}},403,/Cross-origin/],
+    [{method:'POST',headers:{'sec-fetch-site':'cross-site'}},403,/Cross-site/],
+  ] satisfies [RequestInit,number,RegExp][]){
+    const response=await fetch(url+'/api/actions/execute',init);
+    assert.equal(response.status,status);
+    assert.match((await response.json()).error,message);
+  }
+  const invalid=await post(url,'execute',{actor,action,args:{...args,notAnInput:true}},400);
+  assert.match(invalid.error,/Unsupported or missing configuration members/);
+  const absent=await post(url,'approvals/resume',{actor,requestId:'missing'},404);
+  assert.match(absent.error,/Request not found/);
+  assert.deepEqual(await snapshot(),before);
+});
+
+test('application serves the built assets and ends its event stream on idempotent close',async t=>{
+  const {server}=await setup(t);
+  for(const [path,type] of [['/','text/html'],['/style.css','text/css'],['/app.js','text/javascript']] as const){
+    const response=await fetch(server.url+path);
+    assert.equal(response.status,200);
+    assert.ok(response.headers.get('content-type')?.startsWith(type));
+    assert.equal(response.headers.get('x-content-type-options'),'nosniff');
+    assert.ok((await response.text()).length>0);
+  }
+  const response=await fetch(server.url+'/api/events');
+  assert.equal(response.status,200);
+  assert.match(response.headers.get('content-type')??'',/^text\/event-stream/);
+  const reader=response.body?.getReader();
+  assert.ok(reader);
+  const first=await reader.read();
+  assert.match(new TextDecoder().decode(first.value),/^event: update\ndata: /);
+  await server.close();
+  await server.close();
+  const ended=await reader.read().then(result=>result.done,()=>true);
+  assert.equal(ended,true);
+});
+
 test('pending and rejected submissions survive restart; reconcile returns original evidence with current snapshot',async t=>{
   const {start,server}=await setup(t),id={actor,submissionId:'pending'},body={...id,action,args:{...args,quantity:2}};
   const missing=await post(server.url,'reconcile',id);

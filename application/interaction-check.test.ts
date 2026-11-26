@@ -1,6 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {spawnSync} from 'node:child_process';
+import {mkdtemp,readFile,rm} from 'node:fs/promises';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
 import {deriveApplication} from './derive.ts';
 import {checkInteractions} from './interaction-check.ts';
 import {fixture} from './fixture.ts';
@@ -24,4 +27,30 @@ test('interaction-check CLI rejects an explicitly empty mutant name',()=>{
   assert.equal(result.status,1);
   assert.match(result.stderr,/Error: Unknown test mutant\./);
   assert.equal(result.stdout,'');
+});
+
+test('interaction-check CLI resolves defaults and writes a standalone counterexample only on failure',async t=>{
+  const directory=await mkdtemp(join(tmpdir(),'premise-interaction-cli-'));
+  t.after(()=>rm(directory,{recursive:true,force:true}));
+  const trace=join(directory,'trace.json'),entry='leave/browser.domain',action='leave.request';
+  const run=(...args:string[])=>spawnSync(process.execPath,['application/check-interactions.ts',...args],{encoding:'utf8'});
+  const missing=run(entry);
+  assert.equal(missing.status,1);
+  assert.match(missing.stderr,/Usage:/);
+  const unknown=run(entry,action,'--actor','unknown');
+  assert.equal(unknown.status,1);
+  assert.match(unknown.stderr,/Unknown action or actor/);
+  const pass=run(entry,action,'--out',trace);
+  assert.equal(pass.status,0,pass.stderr);
+  assert.equal(JSON.parse(pass.stdout).status,'bounded-pass');
+  await assert.rejects(readFile(trace),{code:'ENOENT'});
+  const args={start:'2026-11-23',end:'2026-11-25'};
+  const failed=run(entry,action,'--args',JSON.stringify(args),'--mutant','snapshot-unlocks','--out',trace);
+  assert.equal(failed.status,1,failed.stderr);
+  const summary=JSON.parse(failed.stdout),replay=JSON.parse(await readFile(trace,'utf8'));
+  assert.equal(summary.rule,'submission.no-fresh-submit-before-receipt');
+  assert.equal(summary.trace,trace);
+  assert.equal(replay.actor,'maya');
+  assert.deepEqual(replay.args,args);
+  assert.deepEqual(replay.events.map((event:{type:string})=>event.type),summary.sequence);
 });
