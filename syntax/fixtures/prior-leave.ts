@@ -7,7 +7,7 @@ const field=(binding:string,name:string)=>({op:'field',binding,field:name});
 const bin=<L,R>(op:string,left:L,right:R)=>({op,left,right});
 const actor={op:'actor'},string={type:'string'},integer=(min:number)=>({type:'integer',min});
 const e=(name:string)=>field('request.employee',name),threshold=field('request.settings','threshold');
-export const domain={
+const domain={
   format:'semantic-core/v2',id:'time-away',
   resources:{employee:{fields:{name:string,balance:integer(0),manager:string}},settings:{fields:{threshold:integer(1),manager:string}},leave:{fields:{owner:string,manager:string,start:string,end:string,days:integer(1),status:{type:'string',enum:['approved']}}}},
   relationships:[{id:'employee.manager',resource:'employee',field:'manager'},{id:'leave.owner',resource:'leave',field:'owner'},{id:'leave.manager',resource:'leave',field:'manager'},{id:'settings.manager',resource:'settings',field:'manager'}],
@@ -32,8 +32,8 @@ export const domain={
     },
   },
 };
-export const initialState={revision:0,records:{employee:{maya:{version:0,values:{name:'Maya Chen',balance:5,manager:'sam'}},leo:{version:0,values:{name:'Leo Martin',balance:5,manager:'sam'}}},settings:{'leave-rule':{version:0,values:{threshold:3,manager:'sam'}}},leave:{}}};
-export const application={
+const initialState={revision:0,records:{employee:{maya:{version:0,values:{name:'Maya Chen',balance:5,manager:'sam'}},leo:{version:0,values:{name:'Leo Martin',balance:5,manager:'sam'}}},settings:{'leave-rule':{version:0,values:{threshold:3,manager:'sam'}}},leave:{}}};
+const application={
   version:'model-application/v1',title:'Time away',eyebrow:'A little room for what matters',subtitle:'Plan a break. We’ll take care of the paperwork.',scope:'Local identity simulation · Monday–Friday only · no holiday calendar',
   actors:[{id:'maya',label:'Maya Chen · employee',name:'Maya Chen'},{id:'leo',label:'Leo Martin · employee',name:'Leo Martin'},{id:'sam',label:'Sam Rivera · manager',name:'Sam Rivera'}],
   actions:{

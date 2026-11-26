@@ -5,13 +5,13 @@ import {fileURLToPath} from 'node:url';
 import {createRequire} from 'node:module';
 import {makeDurableRuntime, makeDurableStore, initializeDurableState, durableExecute,
   durableApprove, durableResume, durablePending, durableState, pullOutbox, closeDurableStore} from '../../adapters/effect/durable.ts';
+import {Effect} from '../../adapters/effect/index.ts';
 import {encodeJsonPretty} from '../../adapters/effect/json.ts';
 import {inventoryV2Model, initialState, invocation} from './model.ts';
 
 const here = dirname(fileURLToPath(import.meta.url));
 // Effect is intentionally installed in the adapter package, not at repository root.
 const adapterRequire = createRequire(new URL('../../adapters/effect/package.json', import.meta.url));
-const Effect: typeof import('../../adapters/effect/node_modules/effect/dist/Effect.js') = await import(adapterRequire.resolve('effect/Effect'));
 const run = Effect.runPromise;
 export const durableApprovalFixture = Object.freeze({
   modelId: 'inventory.v2', initialRevision: 0,

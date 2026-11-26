@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import type { Actor, Decision, Model, Priority, Role, Ticket } from './model.ts';
 
 // Hash semantic JSON independent of object-key insertion order. Arrays retain order.
-export function canonical(value: unknown): string {
+function canonical(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`;
   if (value !== null && typeof value === 'object') {
     return `{${Object.entries(value).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)

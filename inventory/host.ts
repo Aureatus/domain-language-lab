@@ -2,7 +2,7 @@ import {createInterpreter,validateState} from '../semantic/core.ts';
 import type {Committed, Event, Invocation, Preparation, Prepared, State} from '../semantic/core.ts';
 import {inventoryModel,initialState,invocation} from './model.ts';
 import {inspectInventory} from './oracle.ts';
-export const HOST_VERSION='inventory-host/v1';
+const HOST_VERSION='inventory-host/v1';
 type Operation = {type:'prepare'; token:string; invocation:Invocation}
   | {type:'commit'; token:string; mutant?:boolean}
   | {type:'execute'; invocation:Invocation};

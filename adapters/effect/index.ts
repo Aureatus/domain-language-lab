@@ -35,5 +35,6 @@ export const execute = (runtime: Interpreter, store: SynchronizedRef.Synchronize
     return [result, { state: result.state, events: [...current.events, ...result.events], invocations }];
   }));
 
+/** @public */
 export const makeRuntime = createInterpreter;
-export { Effect };
+export { Effect, SynchronizedRef };

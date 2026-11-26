@@ -6,11 +6,11 @@ const openObject = <const Fields extends Schema.Struct.Fields>(fields: Fields) =
   [Schema.Record(Schema.String, Schema.Json)],
 );
 
-export const JsonValueCodec = Schema.fromJsonString(Schema.Json);
-export const JsonObjectCodec = Schema.fromJsonString(Schema.JsonObject);
-export const StringJsonCodec = Schema.fromJsonString(Schema.String);
-export const UnknownJsonCodec = Schema.fromJsonString(Schema.Unknown);
-export const PrettyUnknownJsonCodec = Schema.fromJsonString(Schema.Unknown, { space: 2 });
+const JsonValueCodec = Schema.fromJsonString(Schema.Json);
+const JsonObjectCodec = Schema.fromJsonString(Schema.JsonObject);
+const StringJsonCodec = Schema.fromJsonString(Schema.String);
+const UnknownJsonCodec = Schema.fromJsonString(Schema.Unknown);
+const PrettyUnknownJsonCodec = Schema.fromJsonString(Schema.Unknown, { space: 2 });
 
 const decodeJsonValueSync = Schema.decodeUnknownSync(JsonValueCodec);
 const decodeJsonObjectSync = Schema.decodeUnknownSync(JsonObjectCodec);
@@ -50,7 +50,7 @@ export const encodeCanonicalJson = (value:unknown):string => {
 
 // --- Common domain primitives ---
 
-export const BoundedIdentity = Schema.String.pipe(
+const BoundedIdentity = Schema.String.pipe(
   Schema.check(Schema.isMinLength(1), Schema.isMaxLength(1000)),
 );
 
@@ -64,7 +64,7 @@ export const SimulationIdentity = Schema.String.pipe(
   ),
 );
 
-export const SubmissionId = Schema.String.pipe(
+const SubmissionId = Schema.String.pipe(
   Schema.check(
     Schema.isMinLength(1),
     Schema.isMaxLength(200),
@@ -74,7 +74,7 @@ export const SubmissionId = Schema.String.pipe(
   ),
 );
 
-export const SafeClock = Schema.Number.pipe(
+const SafeClock = Schema.Number.pipe(
   Schema.check(
     Schema.isInt(),
     Schema.isGreaterThanOrEqualTo(0),
@@ -89,11 +89,6 @@ export const SafeClock = Schema.Number.pipe(
 
 export const DurableEventSchema = openObject({ id: Schema.String });
 
-export const DurableStateSchema = openObject({
-  revision: SafeClock,
-  records: Schema.JsonObject,
-});
-
 export const DurableInvocationSchema = openObject({
   id: Schema.String,
   action: Schema.String,
@@ -102,19 +97,19 @@ export const DurableInvocationSchema = openObject({
   clock: Schema.Finite,
 });
 
-export const DurableCommittedOutcomeSchema = openObject({
+const DurableCommittedOutcomeSchema = openObject({
   status: Schema.Literal('committed'),
   state: Schema.JsonObject,
   events: Schema.Array(DurableEventSchema),
 });
 
-export const DurablePendingOutcomeSchema = openObject({
+const DurablePendingOutcomeSchema = openObject({
   status: Schema.Literal('pending'),
   state: Schema.JsonObject,
   policyIds: Schema.Array(Schema.String),
 });
 
-export const DurableRejectedOutcomeSchema = openObject({
+const DurableRejectedOutcomeSchema = openObject({
   status: Schema.Literal('rejected'),
   state: Schema.JsonObject,
   code: Schema.String,
@@ -126,7 +121,7 @@ export const DurableOutcomeSchema = Schema.Union([
   DurableRejectedOutcomeSchema,
 ]);
 
-export const DurableOperationRejectedSchema = openObject({
+const DurableOperationRejectedSchema = openObject({
   status: Schema.Literal('rejected'),
   code: Schema.String,
   reason: Schema.String,
@@ -139,7 +134,7 @@ export const DurableReceiptSchema = openObject({
   approver: Schema.String,
 });
 
-export const DurableOperationApprovedSchema = openObject({
+const DurableOperationApprovedSchema = openObject({
   status: Schema.Literal('approved'),
   receipt: DurableReceiptSchema,
 });
@@ -153,18 +148,6 @@ export const DurableOperationOutcomeSchema = Schema.Union([
 export const DurablePendingRequestSchema = openObject({
   invocation: DurableInvocationSchema,
   prestate: Schema.JsonObject,
-});
-
-export const DurableApproveCommandSchema = Schema.Struct({
-  id: BoundedIdentity,
-  invocationId: BoundedIdentity,
-  policyId: BoundedIdentity,
-});
-
-export const DurableResumeCommandSchema = Schema.Struct({
-  id: BoundedIdentity,
-  invocationId: BoundedIdentity,
-  clock: SafeClock,
 });
 
 // --- Application HTTP & trace schemas ---
@@ -209,7 +192,7 @@ export const ActionEventsTraceSchema = openObject({
   events: Schema.Array(Schema.JsonObject),
 });
 
-export const SubmissionEventSchema = Schema.Union([
+const SubmissionEventSchema = Schema.Union([
   openObject({ type: Schema.Literal('submit'), id: Schema.String, body: Schema.JsonObject }),
   openObject({ type: Schema.Literal('lost') }),
   openObject({ type: Schema.Literal('invalid') }),
@@ -223,7 +206,7 @@ export const SubmissionTraceSchema = Schema.Array(SubmissionEventSchema);
 
 // --- Workspace HTTP schemas ---
 
-export const WorkspaceProfileSchema = Schema.Literals(['v1', 'v2']);
+const WorkspaceProfileSchema = Schema.Literals(['v1', 'v2']);
 
 export const WorkspaceExecuteRequestSchema = Schema.Struct({
   profile: WorkspaceProfileSchema,
@@ -267,18 +250,18 @@ const stringMap = <S extends Schema.Constraint>(value:S) => Schema.Record(Schema
 const ScalarSchema = Schema.Union([Schema.String,Schema.Finite,Schema.Boolean]);
 const ValueSchema = Schema.Union([ScalarSchema,Schema.Array(Schema.String)]);
 const ValueMapSchema = stringMap(ValueSchema);
-export const SemanticStateSchema = openObject({
+const SemanticStateSchema = openObject({
   revision: SafeClock, records: stringMap(stringMap(openObject({version:SafeClock,values:ValueMapSchema}))),
 });
-export const SemanticInvocationSchema = openObject({
+const SemanticInvocationSchema = openObject({
   id:Schema.String,action:Schema.String,actor:Schema.String,args:ValueMapSchema,clock:Schema.Finite,
 });
-export const ApprovalRequirementSchema = openObject({
+const ApprovalRequirementSchema = openObject({
   policyId:Schema.String,approvers:Schema.Array(Schema.String),allowSelfApproval:Schema.Boolean,
 });
-export const ApprovalGrantSchema = openObject({policyId:Schema.String,approver:Schema.String});
+const ApprovalGrantSchema = openObject({policyId:Schema.String,approver:Schema.String});
 const PendingStatus = Schema.Literals(['pending','consumed']);
-export const FieldSchemaCodec = Schema.Union([
+const FieldSchemaCodec = Schema.Union([
   openObject({type:Schema.Literal('integer'),min:Schema.optionalKey(Schema.Finite),max:Schema.optionalKey(Schema.Finite)}),
   openObject({type:Schema.Literal('string'),enum:Schema.optionalKey(Schema.Array(Schema.String))}),
   openObject({type:Schema.Literal('boolean')}),

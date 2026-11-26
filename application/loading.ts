@@ -12,7 +12,7 @@ function observation(term:Term):Observation {
     default:return term;
   }
 }
-export function lifecyclePhase(facts:Facts){return Object.entries(phases).find(([,terms])=>terms.every(term=>term.startsWith('!')?!facts[observation(term)]:facts[observation(term)]))?.[0];}
+function lifecyclePhase(facts:Facts){return Object.entries(phases).find(([,terms])=>terms.every(term=>term.startsWith('!')?!facts[observation(term)]:facts[observation(term)]))?.[0];}
 export function lifecycleGuard(phase:string,bindings:Readonly<Partial<Record<Observation,string>>>){
   const terms=Object.hasOwn(phases,phase)?phases[phase]:undefined;
   if(!terms)throw Error(`Unknown loading phase: ${phase}`);

@@ -3,14 +3,12 @@ import assert from 'node:assert/strict';
 import {mkdtemp, mkdir, readFile, writeFile} from 'node:fs/promises';
 import {join, resolve, dirname} from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {createRequire} from 'node:module';
 import {makeDurableRuntime, makeDurableStore, initializeDurableState, durableExecute, durableApprove, durableResume, durablePending, durableState, pullOutbox, acknowledgeOutbox, closeDurableStore} from '../../adapters/effect/durable.ts';
+import {Effect} from '../../adapters/effect/index.ts';
 import {decodeJsonObject, encodeJson, encodeJsonPretty, encodeCanonicalJson as canonical} from '../../adapters/effect/json.ts';
 import {inventoryV2Model, initialState, invocation} from './model.ts';
 import type {ApprovalReceipt, ApprovalRequest, Grant, Value} from '../../semantic/v2/types.ts';
 
-const require = createRequire(new URL('../../adapters/effect/package.json', import.meta.url));
-const Effect: typeof import('../../adapters/effect/node_modules/effect/dist/Effect.js') = await import(require.resolve('effect/Effect'));
 const run = Effect.runPromise;
 const copy = structuredClone;
 const policyId = 'reserve.warehouse-approval';

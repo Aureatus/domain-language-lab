@@ -7,7 +7,7 @@ import type {Committed,Preparation,State} from '../semantic/v2/types.ts';
 import type {buildInvocation} from '../application/derive.ts';
 import {leaveModel,sourceMap} from './model.ts';
 
-export function declaration<T>(id:string,value:T,path:string){
+function declaration<T>(id:string,value:T,path:string){
   const span=sourceMap[id];if(!span)throw Error(`Missing declaration ${id}`);
   const source=readFileSync(span.filename,'utf8').split('\n');
   const line=span.start.line;

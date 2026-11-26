@@ -4,7 +4,7 @@ export function isNotSubmittedError(value:unknown):value is Error&{notSubmitted:
   return value instanceof Error&&'notSubmitted' in value&&value.notSubmitted===true;
 }
 export interface SubmissionReceipt {status:string;message?:string}
-export type SubmissionPhase='editing'|'submitting'|'unknown'|'checking'|'retryable'|'known';
+type SubmissionPhase='editing'|'submitting'|'unknown'|'checking'|'retryable'|'known';
 export type SubmissionState<R extends SubmissionReceipt=SubmissionReceipt> = {
   phase:SubmissionPhase;id?:string;body?:SubmissionBody;result?:R;message?:string;
 };
