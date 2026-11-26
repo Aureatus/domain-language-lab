@@ -1,7 +1,7 @@
 // Independent generic fixture using the shared semantic-core/v1 declarations.
-const lit = value => ({op: 'literal', value});
-const field = name => ({op: 'field', binding: 'capacity.record', field: name});
-const input = name => ({op: 'input', name});
+const lit = (value:string|number|boolean) => ({op: 'literal', value});
+const field = (name:string) => ({op: 'field', binding: 'capacity.record', field: name});
+const input = (name:string) => ({op: 'input', name});
 export const model = {
   format: 'semantic-core/v1', id: 'numeric-capacity.v1',
   resources: {capacity: {fields: {remaining: {type: 'integer', min: 0}, previous: {type: 'integer', min: 0}}}},

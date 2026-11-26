@@ -1,3 +1,4 @@
+import {errorMessage} from '../../errors.ts';
 import {mkdirSync, readFileSync, writeFileSync} from 'node:fs';
 import {resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
@@ -30,17 +31,19 @@ function ids(source: Model) {
 }
 
 export function projectInventory(source: Model = inventoryModel) {
-  try { validateModel(source); } catch (error) { fail(`Invalid inventory source: ${error.message}`); }
+  try { validateModel(source); } catch (error) { fail(`Invalid inventory source: ${errorMessage(error)}`); }
   const original = source.actions[ACTION];
   const retainedGuard = original?.preconditions.find(x => x.id === GUARD);
   const retainedUpdate = original?.updates.find(x => x.id === UPDATE);
-  if (!retainedGuard || !retainedUpdate) fail('Missing retained inventory declarations');
+  if (!original||!retainedGuard||!retainedUpdate) fail('Missing retained inventory declarations');
   const skeleton = {...source, actions: {...source.actions, [ACTION]: {...original,
     preconditions: original.preconditions.map(x => x===retainedGuard ? {...x,when:null} : x),
     updates: original.updates.map(x => x===retainedUpdate ? {...x,value:null} : x),
   }}};
   if (hash(skeleton) !== STRUCTURE) fail('Inventory structural drift: versioned projection review required');
-  const fields = Object.fromEntries(Object.entries(source.resources.stock.fields).filter(([, s]) => s.type === 'integer'));
+  const stock=source.resources['stock'],quantity=original.inputs['quantity'];
+  if(!stock||!quantity)fail('Missing stock resource or quantity input');
+  const fields = Object.fromEntries(Object.entries(stock.fields).filter(([, s]) => s.type === 'integer'));
   function dependency(e: Expr): void {
     switch (e.op) {
       case 'literal': if (typeof e.value === 'number' || typeof e.value === 'boolean') return; break;
@@ -56,7 +59,7 @@ export function projectInventory(source: Model = inventoryModel) {
   if (!binding) fail('Missing stock binding');
   const model: Model = {
     format: source.format, id: 'inventory.stock-capacity.v1', resources: {stock: {fields: structuredClone(fields)}}, relationships: [],
-    actions: {[ACTION]: {inputs: {quantity: structuredClone(original.inputs.quantity)},
+    actions: {[ACTION]: {inputs: {quantity: structuredClone(quantity)},
       bindings: [{...structuredClone(binding), key: lit('camera')}],
       preconditions: [structuredClone(retainedGuard)], updates: [structuredClone(retainedUpdate)], policies: [], observe: []}},
   };
@@ -84,7 +87,7 @@ export function generateInventory(source: Model = inventoryModel, law = obligati
   return {...generate(projected.model, law), inventory: projected.metadata};
 }
 
-export function checkInventory(directory, source: Model = inventoryModel, law = obligation) {
+export function checkInventory(directory:string, source: Model = inventoryModel, law = obligation) {
   const {model, metadata} = projectInventory(source);
   mkdirSync(directory, {recursive: true});
   const report = {...check(model, law, directory), inventory: metadata,

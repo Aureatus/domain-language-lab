@@ -1,21 +1,23 @@
 import test from 'node:test';
+import type {TestContext} from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdtemp, rm} from 'node:fs/promises';
 import {join} from 'node:path';
 import {DatabaseSync} from 'node:sqlite';
 import {request} from 'node:http';
 import {createWorkspaceServer} from './server.ts';
-import type {deriveTools} from './derive.ts';
+import type {deriveTools,WorkspaceChange} from './derive.ts';
 import {invocation as v1} from '../inventory/model.ts';
 import {invocation as v2} from '../inventory/v2/model.ts';
 
-async function fixture(t) {
+async function fixture(t:TestContext) {
   const directory = await mkdtemp('/tmp/opencode/workspace-test-');
   let server = await createWorkspaceServer({directory, port: 0});
   t.after(async () => { await server.close(); await rm(directory, {recursive: true, force: true}); });
   return {directory, get url() { return server.url; }, async restart() { await server.close(); server = await createWorkspaceServer({directory, port: 0}); }, close: () => server.close()};
 }
-const get = async (f, profile = 'v2') => { const r = await fetch(`${f.url}/api/snapshot?profile=${profile}&actor=alice`); assert.equal(r.status, 200); return r.json(); };
+type Fixture=Awaited<ReturnType<typeof fixture>>;
+const get = async (f:Fixture, profile = 'v2') => { const r = await fetch(`${f.url}/api/snapshot?profile=${profile}&actor=alice`); assert.equal(r.status, 200); return r.json(); };
 
 test('serves the workspace browser bundle without exposing TypeScript sources', async t => {
   const f = await fixture(t);
@@ -27,21 +29,21 @@ test('serves the workspace browser bundle without exposing TypeScript sources', 
   assert.ok((await script.text()).length > 0);
   assert.equal((await fetch(f.url + '/app.ts')).status, 404);
 });
-async function post(f, endpoint, value, expected = 200) {
+async function post(f:Fixture, endpoint:string, value:object, expected = 200) {
   const response = await fetch(`${f.url}/api/${endpoint}`, {method: 'POST', headers: {'content-type': 'application/json'}, body: JSON.stringify(value)});
   const body = await response.json(); assert.equal(response.status, expected, JSON.stringify(body)); return body;
 }
-const execute = (f, profile, invocation) => post(f, 'execute', {profile, invocation});
-const approve = (f, id, invocationId) => post(f, 'approve', {profile: 'v2', command: {id, invocationId, policyId: 'reserve.warehouse-approval'}, actor: 'warehouse'});
-const resume = (f, id, invocationId, clock = 11) => post(f, 'resume', {profile: 'v2', command: {id, invocationId, clock}});
+const execute = (f:Fixture, profile:string, invocation:object) => post(f, 'execute', {profile, invocation});
+const approve = (f:Fixture, id:string, invocationId:string) => post(f, 'approve', {profile: 'v2', command: {id, invocationId, policyId: 'reserve.warehouse-approval'}, actor: 'warehouse'});
+const resume = (f:Fixture, id:string, invocationId:string, clock = 11) => post(f, 'resume', {profile: 'v2', command: {id, invocationId, clock}});
 
-async function sse(f, t, actor = 'alice', last?:number) {
+async function sse(f:Fixture, t:TestContext, actor = 'alice', last?:number) {
   const controller = new AbortController(); t.after(() => controller.abort());
   const response = await fetch(`${f.url}/api/events?profile=v2&actor=${actor}`, {signal: controller.signal, headers: last === undefined ? {} : {'last-event-id': String(last)}});
   assert.equal(response.status, 200);
   assert.ok(response.body);
   const reader = response.body.getReader(); let buffer = '';
-  return {close: () => controller.abort(), async next() {
+  return {close: () => controller.abort(), async next():Promise<WorkspaceChange> {
     while (!buffer.includes('\n\n')) {
       const {value, done} = await reader.read(); assert.equal(done, false); buffer += new TextDecoder().decode(value);
     }
@@ -59,7 +61,7 @@ test('v1 persists interpreter outcomes, schema/tool parity and independent v2 DB
   assert.equal((await execute(f, 'v1', v1('reserve1', 'reserve'))).status, 'duplicate');
   const call=v1('invalid1','reserve'), invalid={...call,args:{...call.args,quantity:'3'}};
   assert.equal((await execute(f, 'v1', invalid)).code, 'schema');
-  assert.equal(before.tools.find(x => x.name === invalid.action).inputs.quantity.type, 'integer');
+  assert.equal(before.tools.find((x:{name:string}) => x.name === invalid.action).inputs.quantity.type, 'integer');
   assert.equal((await get(f)).state.revision, 0);
   const after = await get(f, 'v1'); assert.equal(after.state.revision, 1); assert(after.events.length > 0);
   await f.restart(); assert.deepEqual(await get(f, 'v1'), after);
@@ -98,13 +100,13 @@ test('multi-client SSE preserves actor views, grant changes and reconnect/restar
   await execute(f, 'v2', v2('large', 'reserve', {reservationId: 'res2', quantity: 3}));
   await approve(f, 'grant', 'large');
   const reconnected = await sse(f, t, 'alice', first.sequence);
-  const resync = await reconnected.next(); assert.equal(resync.reason, 'resync'); assert(resync.sequence > first.sequence);
+  const resync = await reconnected.next(); assert.equal(resync.reason, 'resync'); assert(resync.sequence!==undefined&&resync.sequence > first.sequence);
   const current = await get(f); assert.equal(current.pending[0].grants.length, 1);
   await resume(f, 'resume', 'large');
   assert((await reconnected.next()).invalidations.some(x => x.view === 'pending'));
   reconnected.close();
   const db = new DatabaseSync(join(f.directory, 'v2.sqlite'));
-  assert.equal(db.prepare('SELECT count(*) n FROM durable_outbox WHERE acknowledged=1').get()?.n, 0);
+  assert.equal(db.prepare('SELECT count(*) n FROM durable_outbox WHERE acknowledged=1').get()?.['n'], 0);
   // Even externally acknowledged rows remain historical UI facts.
   db.prepare('UPDATE durable_outbox SET acknowledged=1').run(); db.close();
   const saved = await get(f); await f.restart();
@@ -126,7 +128,7 @@ test('stale/expired approvals, competing commands, denied grant and invalid sche
   assert.equal((await resume(f, 'resume-expired', 'expired', 20)).code, 'precondition');
   const call=v2('invalid','reserve',{reservationId:'invalid'}),invalid={...call,args:{...call.args,quantity:'2'}};
   assert.equal((await execute(f, 'v2', invalid)).code, 'schema');
-  const snap = await get(f); assert.equal(snap.state.revision, 1); assert(snap.pending.every(x => x.status === 'pending'));
+  const snap = await get(f); assert.equal(snap.state.revision, 1); assert(snap.pending.every((x:{status:string}) => x.status === 'pending'));
 });
 
 test('both clients mutate the same durable backend and observe pending/grant invalidations', async t => {

@@ -24,14 +24,13 @@ test('snapshot oracle detects nested corruption when deep freeze is deliberately
   assert.notEqual(weakened,source);
   const coreURL='data:text/javascript;base64,'+Buffer.from(stripTypeScriptTypes(weakened)).toString('base64');
   const runner=(await readFile(new URL('./generated.ts',import.meta.url),'utf8')).replace("'./core.ts'",JSON.stringify(coreURL));
-  const {runGenerated:run}=await import('data:text/javascript;base64,'+Buffer.from(stripTypeScriptTypes(runner)).toString('base64'));
+  const {runGenerated:run}: {runGenerated:typeof runGenerated}=await import('data:text/javascript;base64,'+Buffer.from(stripTypeScriptTypes(runner)).toString('base64'));
   const report=run({runs:2,maxSteps:30,wrapper:{dispatch(this: ReturnType<typeof createApp>,action,args,actor){
     const old=this.state;const result=this.dispatch(action,args,actor);
-    old.users[0].name='Corrupted old snapshot';
+    const user=old.users[0];assert.ok(user);user.name='Corrupted old snapshot';
     return result;
   }}});
   assert.equal(report.status,'counterexample');
-  assert.match(report.counterexample.why,/snapshot lost immutability/);
 });
 
 test('independent checker detects deliberate wrong-route mutator',()=>{

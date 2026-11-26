@@ -1,6 +1,8 @@
 // Replay from repository root: node application/action-review-browser-test.ts [counterexample.json]
 // Uses the installed Exact SDK/launcher and Chromium. Builds into a new directory;
 // never points either renderer at an existing app or writes a shared dist.
+import type {Browser,Locator,Page} from 'playwright';
+import type {ApplicationReceipt} from './client.ts';
 import assert from 'node:assert/strict';
 import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
@@ -19,10 +21,11 @@ declare global {
 
 const exec=promisify(execFile);
 const exactRevision='d8863f736172954b605c3bff22f51337c6983170';
-async function readSchedule(path){
+type RecordedDraft={actor:string;action:string;args:Record<string,string>};
+async function readSchedule(path:string){
   const {format,actor,action,args,contractId,events}=JSON.parse(await readFile(path,'utf8'));
   assert.equal(format,'action-events/v1','Unsupported trace format');
-  assert.deepEqual(events?.map(e=>e.type),['snapshot','draft','submit','lost','snapshot'],'Unsupported renderer replay ordering');
+  assert.deepEqual(events?.map((e:{type:string})=>e.type),['snapshot','draft','submit','lost','snapshot'],'Unsupported renderer replay ordering');
   assert.equal(actor,'maya','Unsupported renderer replay actor');
   assert.equal(action,'leave.request','Unsupported renderer replay action');
   assert.deepEqual(Object.keys(args).sort(),['end','start'],'Unsupported draft fields');
@@ -32,12 +35,14 @@ async function readSchedule(path){
   assert.equal(initial.contractId,contractId);
   assert.equal(update.contractId,contractId);
   assert.equal(update.pending.length,1,'Only a single pending inbox update is supported');
-  return {command:{...body,submissionId:id},initial,update};
+  const command:RecordedDraft&{submissionId:string}={...body,submissionId:id};
+  const first:DeliverySnapshot=initial,next:DeliverySnapshot=update;
+  return {command,initial:first,update:next};
 }
 
 // Install before application startup. Delay observation, not the actual
 // write, poll, or EventSource connection. Never fabricate an update payload.
-function installDeliveryGate(exact){
+function installDeliveryGate(exact:boolean){
   const gate=Promise.withResolvers<void>();
   const probe: Window['deliveryGate']=window.deliveryGate={held:null,release:gate.resolve};
   async function wait(snapshot: DeliverySnapshot){
@@ -52,24 +57,24 @@ function installDeliveryGate(exact){
     };
   }else{
     const add=EventSource.prototype.addEventListener;
-    EventSource.prototype.addEventListener=function(type,listener,...rest){
-      if(type!=='update')return add.call(this,type,listener,...rest);
+    EventSource.prototype.addEventListener=function(this:EventSource,type:string,listener:EventListenerOrEventListenerObject|((this:EventSource,event:MessageEvent)=>unknown)|null,options?:boolean|AddEventListenerOptions){
+      if(type!=='update')return Reflect.apply(add,this,[type,listener,options]);
       return add.call(this,type,async event=>{
         if(event instanceof MessageEvent)await wait(JSON.parse(event.data));
-        if(typeof listener==='function')listener.call(this,event);
+        if(typeof listener==='function')Reflect.apply(listener,this,[event]);
         else listener?.handleEvent(event);
-      },...rest);
+      },options);
     };
   }
 }
-function normalizedUpdate(snapshot){
+function normalizedUpdate(snapshot:DeliverySnapshot){
   const copy=structuredClone(snapshot);
   // The fresh server samples its own clock when executing the command.
   for(const p of copy.pending){assert.ok(Number.isSafeInteger(p.invocation.clock));delete p.invocation.clock;}
   return copy;
 }
 
-async function mountExact(page,url,dir){
+async function mountExact(page:Page,url:string,dir:string){
   await writeAdapter(await (await fetch(url+'/api/contract')).json(),dir,{api:url});
   for(const file of ['exact.mjs','package.json'])await copyFile(join(template,file),join(dir,file));
   for(const args of [['contract','build','app.contract','--json','--errors-only'],['web-build','--out','dist']])
@@ -82,7 +87,7 @@ async function mountExact(page,url,dir){
   });
 }
 
-async function trace(browser,exact,dir,schedule){
+async function trace(browser:Browser,exact:boolean,dir:string,schedule:Awaited<ReturnType<typeof readSchedule>>|null){
   const server=await createApplicationServer(declaration,{directory:join(dir,'db')});
   const page=await browser.newPage();
   const release=Promise.withResolvers<void>();
@@ -95,15 +100,15 @@ async function trace(browser,exact,dir,schedule){
     if(exact)await mountExact(page,url,dir);
     if(schedule)await page.addInitScript(installDeliveryGate,exact);
     // Explicit identity-allocation input, not a rewritten POST or canned receipt.
-    await page.addInitScript(id=>{crypto.randomUUID=()=>id;},submissionId);
+    await page.addInitScript(id=>{Object.defineProperty(crypto,'randomUUID',{configurable:true,writable:true,value:()=>id});},submissionId);
     await page.goto(url);
     const form=page.locator(`[data-action="${action}"]`);
-    const field=name=>exact?page.getByTestId(`${actor}:${action}:${name}`):form.locator(`[name="${name}"]`);
+    const field=(name:string)=>exact?page.getByTestId(`${actor}:${action}:${name}`):form.locator(`[name="${name}"]`);
     const submit=exact?page.getByTestId(`${actor}:${action}:execute`):form.locator('[type=submit]');
-    const button=name=>page.getByRole('button',{name,exact:true});
+    const button=(name:string)=>page.getByRole('button',{name,exact:true});
     const check=button('Check submission');
     const select=exact?page.getByTestId('actor'):page.locator('#actor');
-    const balance=n=>exact?page.getByTestId(`view:0:${actor}`).filter({hasText:`Days remaining: ${n}`}):
+    const balance=(n:number)=>exact?page.getByTestId(`view:0:${actor}`).filter({hasText:`Days remaining: ${n}`}):
       page.locator(`[data-record="${actor}"] [data-field="balance"]`).filter({hasText:new RegExp(`^${n}$`)});
     const snapshot=async()=>await (await fetch(url+'/api/snapshot')).json();
     const initialSnapshot=await snapshot(),initial=initialSnapshot.state;
@@ -112,7 +117,7 @@ async function trace(browser,exact,dir,schedule){
     for(const [key,value] of Object.entries(args))await field(key).fill(value);
     if(!exact)await form.locator('[data-preview]').filter({hasText:'Needs Sam'}).waitFor();
 
-    let posted,receipt;
+    let posted:unknown,receipt:ApplicationReceipt|undefined;
     await page.route('**/api/actions/execute',async route=>{
       posted=route.request().postDataJSON();
       const response=await route.fetch({maxRetries:0});
@@ -124,6 +129,7 @@ async function trace(browser,exact,dir,schedule){
     if(schedule){
       await page.waitForFunction(()=>!!window.deliveryGate.held);
       const held=await page.evaluate(()=>window.deliveryGate.held);
+      assert.ok(held);
       assert.deepEqual(normalizedUpdate(held),normalizedUpdate(schedule.update),'Actual held update differs from the recorded update');
       assert.equal(await pending.count(),0,'Inbox update arrived before loss');
       assert.equal(await check.count(),0,'Loss was observed before releasing the writer');
@@ -138,11 +144,13 @@ async function trace(browser,exact,dir,schedule){
       await page.evaluate(()=>window.deliveryGate.release());
       await pending.waitFor();
     }
+    assert.ok(receipt?.snapshot);
     assert.deepEqual(posted,{...command,expectedContractId:receipt.contractId});
     assert.equal(receipt.status,'pending');
     assert.equal(receipt.snapshot.pending.length,1);
-    const original=receipt.snapshot.pending[0],{leaveId}=original.invocation.args;
-    if(!schedule)assert.equal(original.invocation.args.days,3);
+    const [original]=receipt.snapshot.pending;assert.ok(original);
+    const leaveId=original.invocation.args['leaveId'];
+    if(!schedule)assert.equal(original.invocation.args['days'],3);
     assert.equal(receipt.submissionId,submissionId);
     assert.deepEqual(receipt.snapshot.state,initial);
     assert.equal(await submit.isDisabled(),true);
@@ -159,7 +167,7 @@ async function trace(browser,exact,dir,schedule){
       console.log(`${exact?'Compiled Exact web / poll':'Generic browser / SSE'}: ${submissionId}, lost → inbox update; no receipt, draft retained, Submit disabled, Check enabled.`);
       return;
     }
-    const press=async(control,path)=>{
+    const press=async(control:Locator,path:string)=>{
       const [reply]=await Promise.all([page.waitForResponse(r=>r.url()===url+'/api/'+path&&r.request().method()==='POST'),control.click()]);
       assert.equal(reply.ok(),true);
       return {body:reply.request().postDataJSON(),result:await reply.json()};
@@ -203,14 +211,14 @@ async function trace(browser,exact,dir,schedule){
 
 if(process.argv.length>3)throw Error('Usage: node application/action-review-browser-test.ts [counterexample.json]');
 const schedule=process.argv[2]?await readSchedule(process.argv[2]):null;
-if(!process.env.EXACT_ROOT||!process.env.EXACT_TEMPLATE)
+if(!process.env['EXACT_ROOT']||!process.env['EXACT_TEMPLATE'])
   throw Error('Set EXACT_ROOT and EXACT_TEMPLATE as described in docs/exact-adapter.md.');
-const template=resolve(process.env.EXACT_TEMPLATE);
-const env={...process.env,EXACT:resolve(process.env.EXACT_ROOT),BUN:process.env.BUN??'bun',EXACT_FEEDBACK:'0'};
+const template=resolve(process.env['EXACT_TEMPLATE']);
+const env={...process.env,EXACT:resolve(process.env['EXACT_ROOT']),BUN:process.env['BUN']??'bun',EXACT_FEEDBACK:'0'};
 assert.equal((await exec('git',['-C',env.EXACT,'rev-parse','HEAD'])).stdout.trim(),exactRevision,'Unsupported Exact revision');
 const require=createRequire(join(env.EXACT,'package.json'));
 const {chromium}=require('playwright-core');
-const browser=await chromium.launch({headless:true});
+const browser:Browser=await chromium.launch({headless:true});
 try{
   for(const exact of [false,true]){
     const dir=await mkdtemp(join(tmpdir(),'action-review-'));

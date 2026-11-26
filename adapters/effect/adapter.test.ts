@@ -5,6 +5,7 @@ import * as SynchronizedRef from 'effect/SynchronizedRef';
 import { createInterpreter } from '../../semantic/core.ts';
 import { issueModel, issueState } from '../../semantic/issues.ts';
 import { execute, makeStore } from './index.ts';
+import {present} from '../../semantic/test-support.ts';
 
 const invocation = { id: 'effect1', action: 'issue.resolve', args: { issueId: 'i1' }, actor: 'maya', clock: 1730000000000 };
 const run = Effect.runPromise;
@@ -36,7 +37,7 @@ test('real Effect execution publishes interpreter state and events atomically', 
 
 test('pending publishes nothing; failure before publication leaves both unchanged', async () => {
   const pendingModel = structuredClone(issueModel);
-  pendingModel.actions['issue.resolve'].policies[0].effect = 'approval-required';
+  present(present(pendingModel.actions['issue.resolve']).policies[0]).effect = 'approval-required';
   const runtime = createInterpreter(pendingModel), store = await run(makeStore(issueState));
   const pending = { ...invocation, id: 'pending' };
   const before = await run(SynchronizedRef.get(store));

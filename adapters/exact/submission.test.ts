@@ -1,11 +1,15 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
+import {deriveApplication} from '../../application/derive.ts';
+import {fixture} from '../../application/fixture.ts';
 import {createClient,submissionDriver} from './client.ts';
+
+const {contract}=deriveApplication(fixture);
 
 test('only a bound 400 no-write disposition unlocks an Exact submission',async()=>{
   for(const fault of ['none','http','contract','id','disposition','json']){
     let calls=0;
-    const client=createClient({contract:{},contractId:'c'},'http://127.0.0.1:1',async(_,options)=>{
+    const client=createClient({contract,contractId:'c'},'http://127.0.0.1:1',async(_,options)=>{
       calls++;
       assert.ok(typeof options?.body==='string');
       const {submissionId}=JSON.parse(options.body);

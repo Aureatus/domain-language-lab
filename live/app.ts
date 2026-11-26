@@ -1,3 +1,4 @@
+import {errorMessage} from '../errors.ts';
 import { createApp } from './core.ts';
 import { describeChange } from './derive.ts';
 import { decodeJsonValue, decodeStrictJson, encodeJson, encodeJsonPretty, LiveWorkspaceDocumentSchema } from '../adapters/effect/json.ts';
@@ -22,7 +23,7 @@ try {
   }
 } catch (error) {
   storageBlocked = savedRaw !== null;
-  saveStatus = storageBlocked ? `Saved document could not be recovered: ${error.message}. Original retained; export it, import a valid workspace, or explicitly reset. Automatic saving paused.` : `Storage unavailable: ${error.message}. Changes remain in memory; export before leaving.`;
+  saveStatus = storageBlocked ? `Saved document could not be recovered: ${errorMessage(error)}. Original retained; export it, import a valid workspace, or explicitly reset. Automatic saving paused.` : `Storage unavailable: ${errorMessage(error)}. Changes remain in memory; export before leaving.`;
 }
 function persist() {
   if (storageBlocked) return;
@@ -30,7 +31,7 @@ function persist() {
     localStorage.setItem(storageKey, encodeJson(core.exportWorkspace(),LiveWorkspaceDocumentSchema));
     saveStatus = 'Saved in this browser · not synced or backed up.';
   } catch (error) {
-    saveStatus = `Not saved: ${error.message}. Changes remain in memory; export before leaving.`;
+    saveStatus = `Not saved: ${errorMessage(error)}. Changes remain in memory; export before leaving.`;
   }
 }
 const commentDrafts = new Map();
@@ -89,7 +90,7 @@ function startDerived() {
     worker.postMessage({id,workspace:core.exportWorkspace()});
   } catch(error) {
     stopDerived(); worker?.terminate(); if(url)URL.revokeObjectURL(url);
-    derivedOutput=derivedUnknown(String(error.message ?? error));
+    derivedOutput=derivedUnknown(String(errorMessage(error) ?? error));
   }
   render();
 }
@@ -101,33 +102,34 @@ function requiredElement<T extends Element>(selector: string, kind: new () => T,
 const root = requiredElement('#app', HTMLDivElement);
 const modal = requiredElement('#modal', HTMLDialogElement);
 const escapes: Record<string, string> = {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'};
-const esc = value => String(value ?? '').replace(/[&<>"']/g, c => escapes[c] ?? c);
-const user = id => view.state.users.find(u => u.id === id);
-const name = id => user(id)?.name || 'Unassigned';
-const availability = (action, args) => previewStep === null ? core.explainAction(action,args,actorId) : {available:false,category:'preview',reason:'Current availability explanations are disabled in read-only history. Return to live first.'};
-const allowed = action => {const e=availability(action,action==='create'?{}:{issueId:selected});return e.available || e.category==='missing-input'};
-const availabilityDetails = e => `<p>${esc(e.reason)}</p><details><summary>Availability details</summary><pre>${esc(JSON.stringify(e,null,2))}</pre></details>`;
-const unavailableButton = action => previewStep === null ? `<button class="link" data-unavailable="${action}">Why unavailable<span class="sr-only"> · ${esc(label(action))}</span></button>` : '';
+const esc = (value:unknown) => String(value ?? '').replace(/[&<>"']/g, c => escapes[c] ?? c);
+const user = (id:string|null|undefined) => view.state.users.find(u => u.id === id);
+const name = (id:string|null|undefined) => user(id)?.name || 'Unassigned';
+const availability = (action:unknown,args:unknown) => previewStep === null ? core.explainAction(action,args,actorId) : {available:false,category:'preview',reason:'Current availability explanations are disabled in read-only history. Return to live first.'};
+const allowed = (action:string) => {const e=availability(action,action==='create'?{}:{issueId:selected});return e.available || e.category==='missing-input'};
+const availabilityDetails = (e:ReturnType<typeof availability>) => `<p>${esc(e.reason)}</p><details><summary>Availability details</summary><pre>${esc(JSON.stringify(e,null,2))}</pre></details>`;
+const unavailableButton = (action:string) => previewStep === null ? `<button class="link" data-unavailable="${action}">Why unavailable<span class="sr-only"> · ${esc(label(action))}</span></button>` : '';
 function formArgs(form: HTMLFormElement) {
   const args: Record<string, FormDataEntryValue | null | undefined>=Object.fromEntries(new FormData(form));
-  if(form.dataset.action!=='create') args.issueId=selected;
-  if(form.dataset.action==='assign' && args.assignee==='') args.assignee=null;
+  if(form.dataset['action']!=='create') args['issueId']=selected;
+  if(form.dataset['action']==='assign' && args['assignee']==='') args['assignee']=null;
   return args;
 }
 function updateFormAvailability(form: HTMLFormElement) {
-  const e=availability(form.dataset.action,formArgs(form));
+  const e=availability(form.dataset['action'],formArgs(form));
   requiredElement('.primary', HTMLButtonElement, form).disabled=!e.available;
   requiredElement('.availability', HTMLElement, form).innerHTML=e.available ? '' : `<p>${esc(e.reason)}</p><details><summary>Why unavailable</summary><pre>${esc(JSON.stringify(e,null,2))}</pre></details>`;
 }
-const label = action => view.model.actions[action]?.label || action;
+const label = (action:unknown) => typeof action==='string'?(view.model.actions[action]?.label||action):String(action);
 const issue = () => view.state.issues.find(i => i.id === selected);
-const option = (value, text, current) => `<option value="${esc(value)}" ${value === current ? 'selected' : ''}>${esc(text)}</option>`;
-const whyButton = eventId => `<button class="link" data-why="${esc(eventId)}">Why<span class="sr-only"> event ${esc(eventId)}</span></button>`;
+const option = (value:unknown,text:unknown,current:unknown) => `<option value="${esc(value)}" ${value === current ? 'selected' : ''}>${esc(text)}</option>`;
+const whyButton = (eventId:string) => `<button class="link" data-why="${esc(eventId)}">Why<span class="sr-only"> event ${esc(eventId)}</span></button>`;
 function fields(action: string, values: Record<string, unknown> = {}, omit: string[] = []) {
-  const schema = view.model.actions[action].inputs;
+  const schema=view.model.actions[action]?.inputs;
+  if(!schema)throw Error(`Unknown action: ${action}`);
   return Object.entries(schema.properties).filter(([key]) => !omit.includes(key)).map(([key, def]) => {
     const titles: Record<string, string> = {issueId:'Issue',body:'Comment',assignee:'Assign to'};
-    const title = def.title || def.label || titles[key] || key[0].toUpperCase()+key.slice(1);
+    const title = def.title || def.label || titles[key] || key.charAt(0).toUpperCase()+key.slice(1);
     const required = schema.required?.includes(key) ? 'required' : '';
     let input;
     if (key === 'assignee') input = `<select name="${key}">${option('', 'Unassigned', values[key] ?? '')}${view.state.users.map(u=>option(u.id,u.name,values[key])).join('')}</select>`;
@@ -152,11 +154,11 @@ function renderDetail() {
     ${previewStep === null ? actionForm('comment',{body:commentDrafts.get(draftKey()) || ''},['issueId']) : '<p class="scope">Read-only history. Current availability explanations are disabled here. Return to live to act or continue your draft.</p>'}
     <details class="activity"><summary>Activity & explanations · ${events.length}</summary>${events.map(e=>`<div class="event-row"><span>${esc(name(e.actorId))} · ${esc(e.action)}</span><small>r${e.revision}</small>${whyButton(e.id)}</div>`).join('')}</details>`;
 }
-function ruleEditor(action) {
+function ruleEditor(action:string) {
   const d = ruleDrafts.get(action) || core.model.actions[action];
   return `<form class="rule-row" data-rule="${action}"><h3>${esc(label(action))} <small>(${action})</small></h3><fieldset><legend>Allowed roles</legend>${['member','lead'].map(r=>`<label><input type="checkbox" name="allowedRoles" value="${r}" ${d.allowedRoles.includes(r)?'checked':''}>${r}</label>`).join('')}</fieldset><fieldset><legend>Notify through relationships</legend>${['opener','assignee','watchers'].map(p=>`<label><input type="checkbox" name="notify" value="${p}" ${d.notify.includes(p)?'checked':''}>${p}</label>`).join('')}</fieldset><div class="rule-impact" role="status">${ruleImpact(action,d)}</div><div><button>Apply ${action} rule</button></div></form>`;
 }
-function ruleImpact(action, patch) {
+function ruleImpact(action:unknown,patch:{allowedRoles:readonly unknown[];notify:readonly unknown[]}) {
   const diff=describeChange(core.model,action,{allowedRoles:patch.allowedRoles,notify:patch.notify});
   if (!diff.ok) return `<p>Cannot apply: ${esc(diff.reason)}</p>`;
   const changes=[...(diff.roleChanges || []).map(c=>`${c.after ? 'Added' : 'Removed'} role: ${c.role}`),...(diff.routes?.added || []).map(p=>`Added route: ${p}`),...(diff.routes?.removed || []).map(p=>`Removed route: ${p}`)];
@@ -167,27 +169,27 @@ function renderDerivedChecks() {
   if (!derivedOutput) return '<p id="derived-output" role="status">Not run for this live workspace. Results clear when state or model changes.</p>';
   const counts={passed:0,failed:0,unknown:0,skipped:0};
   for (const c of derivedOutput.cases) counts[c.status]=(counts[c.status] || 0)+1;
-  const cell=value=>esc(typeof value==='string' ? value : JSON.stringify(value) ?? '—');
+  const cell=(value:unknown)=>esc(typeof value==='string' ? value : JSON.stringify(value) ?? '—');
   return `<div id="derived-output"><p role="status"><strong>${esc(derivedOutput.result)} · r${esc(derivedOutput.revision)}</strong> · ${derivedOutput.cases.length} cases · ${Object.entries(counts).map(([k,v])=>`${v} ${k}`).join(' · ')}</p><p class="scope">${esc(derivedOutput.scope)}</p><div class="check-table-wrap" tabindex="0" role="region" aria-label="Declaration check cases"><table><caption>Actual isolated dispatch cases</caption><thead><tr>${['Case','Action','Actor','Expected','Actual','Status / reason'].map(s=>`<th scope="col">${s}</th>`).join('')}</tr></thead><tbody>${derivedOutput.cases.map(c=>`<tr data-case="${esc(c.id)}"><td>${cell(c.id)}</td><td>${cell(c.action)}</td><td>${cell(c.actorId)}</td><td>${cell(c.expected)}</td><td>${cell(c.actual)}</td><td>${cell(c.status)}${c.reason ? `<br>${esc(c.reason)}` : ''}</td></tr>`).join('')}</tbody></table></div></div>`;
 }
 function renderLab() {
   const tools=core.tools();
   return `<details class="lab" ${labOpen?'open':''}><summary>Development lab · declaration r${core.model.revision}</summary><p class="scope">Local development controls, not a production permission. Rule changes affect future actions; historical explanations retain their captured revision.</p><div class="lab-layout"><section><h2>Action rules</h2>${['comment','resolve'].map(ruleEditor).join('')}</section><section><h2>Generated tools</h2><p class="scope">Editable arguments enter the same dispatch as the workspace. Policy is enforced even when called directly.</p><div class="tool-fields"><label>Tool<select id="tool-name">${Object.keys(core.model.actions).map(a=>option(a,label(a),toolName)).join('')}</select></label><details><summary>Current descriptors · r${core.model.revision}</summary><pre id="tool-descriptors">${esc(JSON.stringify(tools,null,2))}</pre></details><form id="tool-form" class="tool-fields"><label>JSON arguments<textarea id="tool-args" class="mono" spellcheck="false">${esc(JSON.stringify(defaultArgs(toolName),null,2))}</textarea></label><div><button>Invoke tool</button></div></form><pre id="tool-output" role="status">${esc(toolOutput)}</pre></div><h2>State checks</h2><p class="scope">Executable invariants over this in-memory state only. Not a proof, browser security boundary, or distributed delivery guarantee.</p><button id="run-checks">Run current-state checks</button><pre id="check-output">${checkOutput ? esc(JSON.stringify(checkOutput,null,2)) : 'Not run in this session.'}</pre></section></div></details>`;
 }
-function defaultArgs(a) {
-  return ({create:{title:'Keyboard focus is lost after saving',description:'Keep focus on the updated issue.',priority:'normal'},assign:{issueId:selected,assignee:core.state.users[1]?.id},comment:{issueId:selected,body:'Reproduced in the keyboard flow.'},resolve:{issueId:selected},reopen:{issueId:selected},watch:{issueId:selected}})[a] || {};
+function defaultArgs(a:string) {
+  const defaults:Record<string,Record<string,unknown>>={create:{title:'Keyboard focus is lost after saving',description:'Keep focus on the updated issue.',priority:'normal'},assign:{issueId:selected,assignee:core.state.users[1]?.id},comment:{issueId:selected,body:'Reproduced in the keyboard flow.'},resolve:{issueId:selected},reopen:{issueId:selected},watch:{issueId:selected}}; return defaults[a]??{};
 }
 function render() {
   const active=document.activeElement instanceof HTMLElement ? document.activeElement : null;
   const selection = (active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement) && active.selectionStart !== null && active.selectionEnd !== null
     ? {start: active.selectionStart, end: active.selectionEnd}
     : null;
-  const focusIssue = active?.dataset?.issue;
+  const focusIssue = active?.dataset?.['issue'];
   const focusId=active?.id;
-  const focusRule=active?.closest<HTMLFormElement>('[data-rule]')?.dataset.rule;
-  const focusAction=active?.closest<HTMLFormElement>('form[data-action]')?.dataset.action;
-  const focusRun=active?.dataset?.run;
-  const focusEditor=active?.dataset?.editor;
+  const focusRule=active?.closest<HTMLFormElement>('[data-rule]')?.dataset['rule'];
+  const focusAction=active?.closest<HTMLFormElement>('form[data-action]')?.dataset['action'];
+  const focusRun=active?.dataset?.['run'];
+  const focusEditor=active?.dataset?.['editor'];
   const notices=view.state.notifications.filter(n=>n.recipient===actorId).slice().reverse();
   root.innerHTML=`<header><strong>Relay<span style="color:#83a9e7"> /</span></strong><span class="divider"></span><small>Product engineering</small><label>Working as<select id="actor" aria-label="Working as">${view.state.users.map(u=>option(u.id,`${u.name} · ${u.role}`,actorId)).join('')}</select></label></header>
     <main><div class="toolbar"><h1>Issues</h1><small>${view.state.issues.filter(i=>i.status==='open').length} open</small><span class="spacer"></span><button id="new-issue" class="primary" ${allowed('create')?'':'disabled'}>${esc(label('create'))}</button><button id="reset" ${previewStep !== null ? 'disabled' : ''}>Reset</button></div>
@@ -208,7 +210,7 @@ function render() {
   root.querySelectorAll<HTMLFormElement>('form[data-action]').forEach(updateFormAvailability);
   if (previewStep === null) updateToolAvailability();
   if (!allowed('create') && previewStep === null) requiredElement('#new-issue', HTMLButtonElement, root).insertAdjacentHTML('afterend',unavailableButton('create'));
-  root.querySelectorAll<HTMLButtonElement>('[data-unavailable]').forEach(b=>b.onclick=()=>showUnavailable(b.dataset.unavailable));
+  root.querySelectorAll<HTMLButtonElement>('[data-unavailable]').forEach(b=>b.onclick=()=>showUnavailable(b.dataset['unavailable']));
   const target=(focusId && root.querySelector<HTMLElement>(`#${focusId}`)) || (focusRule && root.querySelector<HTMLElement>(`[data-rule="${focusRule}"] button`)) || (focusAction && root.querySelector<HTMLElement>(`form[data-action="${focusAction}"] textarea`)) || (focusRun && root.querySelector<HTMLElement>(`[data-run="${focusRun}"]`)) || (focusEditor && root.querySelector<HTMLElement>(`[data-editor="${focusEditor}"]`));
   const restored = target || (focusIssue && root.querySelector<HTMLElement>(`[data-issue="${focusIssue}"]`));
   if (restored) restored.focus({preventScroll:true});
@@ -216,7 +218,7 @@ function render() {
     restored.setSelectionRange(selection.start, selection.end);
   }
 }
-function commit(action,args) {
+function commit(action:unknown,args:unknown) {
   if (previewStep !== null) return {ok:false,reason:'Read-only preview; return to live first.'};
   const result=core.dispatch(action,args,actorId);
    if(result.ok) invalidateChecks();
@@ -226,8 +228,8 @@ function commit(action,args) {
   if(result.ok && action==='create') selected=result.value?.id || result.event?.issueId || core.state.issues.at(-1)?.id;
   return result;
 }
-function showEditor(action) {
-  if (previewStep !== null) return;
+function showEditor(action:string|undefined) {
+  if (previewStep !== null || action===undefined) return;
   modal.innerHTML=`<div class="dialog-head"><h2 id="modal-title">${esc(label(action))}</h2><button data-close aria-label="Close dialog">×</button></div>${actionForm(action,action==='assign'?{assignee:issue()?.assignee}:{},action==='create'?[]:['issueId'])}`;
   requiredElement('[data-close]', HTMLButtonElement, modal).onclick=()=>modal.close();
   const form=requiredElement('form', HTMLFormElement, modal);
@@ -237,13 +239,13 @@ function showEditor(action) {
   form.onsubmit=e=>{e.preventDefault();const result=commit(action,formArgs(form));if(result.ok)modal.close();else {let p=modal.querySelector('.dialog-error');if(!p){p=document.createElement('p');p.className='dialog-error fail';modal.append(p)}p.textContent=result.reason ?? ''}render()};
   modal.showModal();
 }
-function showWhy(eventId) {
+function showWhy(eventId:string|undefined) {
   const e=view.state.events.find(e=>e.id===eventId);
   const data=previewStep === null ? core.explain(eventId) : e;
   modal.innerHTML=`<div class="dialog-head"><h2 id="modal-title">Why this update?</h2><button data-close aria-label="Close dialog">×</button></div><div class="why-flow"><p><strong>${esc(name(e?.actorId))}</strong> invoked <strong>${esc(e?.action)}</strong> on ${esc(e?.issueId)}.</p><p>Captured declaration <strong>r${esc(e?.revision)}</strong> — not today's rule.</p><p>The captured policy allowed <strong>${esc(e?.actor?.role)}</strong>. Changed: ${e?.changes?.map(c=>esc(c.field)).join(', ') || 'none'}.</p></div><h3>Who received it, and through which relationship?</h3>${e?.recipients?.length ? e.recipients.map(r=>`<div class="notice"><strong>${esc(name(r.recipient))}</strong><span class="mono">${esc(e.issueId)} → ${r.reasons.map(esc).join(' + ')} → ${esc(r.recipient)}</span></div>`).join('') : '<p class="empty">No recipients matched the captured routing rule.</p>'}<p class="scope">The actor is excluded; overlapping paths produce one inbox item per recipient. These are event-time relationships, not a recalculation using today’s rule.</p><details><summary>Stored event JSON</summary><pre id="why-data">${esc(JSON.stringify(data,null,2))}</pre></details><p class="scope">Historical local execution record. No external delivery or authentication is asserted.</p>`;
   requiredElement('[data-close]', HTMLButtonElement, modal).onclick=()=>modal.close();modal.showModal();
 }
-function showUnavailable(action) {
+function showUnavailable(action:string|undefined) {
   if (previewStep !== null) return;
   const e=availability(action,action==='create'?{}:{issueId:selected});
   modal.innerHTML=`<div class="dialog-head"><h2 id="modal-title">Why unavailable · ${esc(label(action))}</h2><button data-close aria-label="Close dialog">×</button></div>${availabilityDetails(e)}<p class="scope">Current pre-execution query · not a historical event or an execution guarantee.</p>`;
@@ -287,7 +289,7 @@ function bind() {
       if (!result.ok) throw new Error(result.reason);
       storageBlocked=false;savedRaw=null;selected=core.state.issues[0]?.id;invalidateChecks();ruleDrafts.clear();
       persist();feedback='Imported workspace after core validation.';failed=false;
-    } catch(error) {feedback=`Import rejected; workspace unchanged: ${error.message}`;failed=true}
+    } catch(error) {feedback=`Import rejected; workspace unchanged: ${errorMessage(error)}`;failed=true}
     render();
   };
   const history = requiredElement('#history', HTMLDetailsElement, root);
@@ -314,30 +316,30 @@ function bind() {
     const next=e.key==='Home'?0:e.key==='End'?rows.length-1:Math.max(0,Math.min(rows.length-1,index+(e.key==='ArrowDown'?1:-1)));
     rows[next]?.focus();
   };
-  root.querySelectorAll<HTMLButtonElement>('[data-issue]').forEach(b=>b.onclick=()=>{selected=b.dataset.issue;render()});
-  root.querySelectorAll<HTMLButtonElement>('[data-editor]').forEach(b=>b.onclick=()=>showEditor(b.dataset.editor));
-  root.querySelectorAll<HTMLButtonElement>('[data-run]').forEach(b=>b.onclick=()=>{commit(b.dataset.run,{issueId:selected});render()});
-  root.querySelectorAll<HTMLButtonElement>('[data-why]').forEach(b=>b.onclick=()=>showWhy(b.dataset.why));
+  root.querySelectorAll<HTMLButtonElement>('[data-issue]').forEach(b=>b.onclick=()=>{selected=b.dataset['issue'];render()});
+  root.querySelectorAll<HTMLButtonElement>('[data-editor]').forEach(b=>b.onclick=()=>showEditor(b.dataset['editor']));
+  root.querySelectorAll<HTMLButtonElement>('[data-run]').forEach(b=>b.onclick=()=>{commit(b.dataset['run'],{issueId:selected});render()});
+  root.querySelectorAll<HTMLButtonElement>('[data-why]').forEach(b=>b.onclick=()=>showWhy(b.dataset['why']));
   root.querySelectorAll<HTMLFormElement>('form[data-action]').forEach(f=>{
     f.addEventListener('input',()=>updateFormAvailability(f));
     f.addEventListener('change',()=>updateFormAvailability(f));
     const body = f.querySelector<HTMLTextAreaElement>('textarea[name=body]');
     body?.addEventListener('input',()=>commentDrafts.set(draftKey(),body.value));
-    f.onsubmit=e=>{e.preventDefault();const result=commit(f.dataset.action,{...Object.fromEntries(new FormData(f)),issueId:selected});if(result.ok && f.dataset.action==='comment')commentDrafts.delete(draftKey());render()};
+    f.onsubmit=e=>{e.preventDefault();const result=commit(f.dataset['action'],{...Object.fromEntries(new FormData(f)),issueId:selected});if(result.ok && f.dataset['action']==='comment')commentDrafts.delete(draftKey());render()};
   });
   if (previewStep !== null) return;
   const lab = requiredElement('.lab', HTMLDetailsElement, root);
   lab.ontoggle=()=>{labOpen=lab.open};
   root.querySelectorAll<HTMLFormElement>('[data-rule]').forEach(f=>{
     const patch=()=>{const data=new FormData(f);return {allowedRoles:data.getAll('allowedRoles'),notify:data.getAll('notify')}};
-    f.onchange=()=>{ruleDrafts.set(f.dataset.rule,patch());requiredElement('.rule-impact', HTMLElement, f).innerHTML=ruleImpact(f.dataset.rule,patch())};
-    f.onsubmit=e=>{e.preventDefault();if(previewStep!==null)return;const result=core.setRule(f.dataset.rule,patch());if(result.ok){invalidateChecks();ruleDrafts.delete(f.dataset.rule);persist()}failed=!result.ok;feedback=result.ok?`${f.dataset.rule} rule updated to r${core.model.revision}. Future actions use this declaration; past records are unchanged.`:result.reason;labOpen=true;render()};
+    f.onchange=()=>{ruleDrafts.set(f.dataset['rule'],patch());requiredElement('.rule-impact', HTMLElement, f).innerHTML=ruleImpact(f.dataset['rule'],patch())};
+    f.onsubmit=e=>{e.preventDefault();if(previewStep!==null)return;const result=core.setRule(f.dataset['rule'],patch());if(result.ok){invalidateChecks();ruleDrafts.delete(f.dataset['rule']);persist()}failed=!result.ok;feedback=result.ok?`${f.dataset['rule']} rule updated to r${core.model.revision}. Future actions use this declaration; past records are unchanged.`:result.reason;labOpen=true;render()};
   });
    const toolArgs = requiredElement('#tool-args', HTMLTextAreaElement, root);
    const toolSelect = requiredElement('#tool-name', HTMLSelectElement, root);
    toolArgs.oninput=()=>{toolDrafts.set(toolName,toolArgs.value);updateToolAvailability()};
    toolSelect.onchange=()=>{toolName=toolSelect.value;toolArgs.value=toolDrafts.get(toolName) ?? JSON.stringify(defaultArgs(toolName),null,2);updateToolAvailability()};
-  requiredElement('#tool-form', HTMLFormElement, root).onsubmit=e=>{e.preventDefault();try{const args=decodeJsonValue(requiredElement('#tool-args', HTMLTextAreaElement, root).value);toolOutput=JSON.stringify(commit(toolName,args),null,2)}catch(error){failed=true;feedback='Invalid JSON: '+error.message;toolOutput=feedback}labOpen=true;render()};
+  requiredElement('#tool-form', HTMLFormElement, root).onsubmit=e=>{e.preventDefault();try{const args=decodeJsonValue(requiredElement('#tool-args', HTMLTextAreaElement, root).value);toolOutput=JSON.stringify(commit(toolName,args),null,2)}catch(error){failed=true;feedback='Invalid JSON: '+errorMessage(error);toolOutput=feedback}labOpen=true;render()};
   requiredElement('#run-checks', HTMLButtonElement, root).onclick=()=>{checkOutput=core.check();labOpen=true;render()};
    requiredElement('#run-derived-checks', HTMLButtonElement, root).disabled=!!derivedJob;
    requiredElement('#run-derived-checks', HTMLButtonElement, root).onclick=startDerived;
@@ -346,7 +348,7 @@ function bind() {
      requiredElement('#cancel-derived-checks', HTMLButtonElement, root).onclick=()=>{stopDerived();derivedOutput=derivedUnknown('Cancelled; no completed result.');render()};
    }
 }
-function download(text, filename) {
+function download(text:string,filename:string) {
   const url=URL.createObjectURL(new Blob([text],{type:'application/json'}));
   const a=document.createElement('a');a.href=url;a.download=filename;a.click();
   setTimeout(()=>URL.revokeObjectURL(url),1000);

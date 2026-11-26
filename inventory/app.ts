@@ -1,3 +1,4 @@
+import {errorMessage} from '../errors.ts';
 import {createHost,competition,replay} from './host.ts';
 import {invocation} from './model.ts';
 import {decodeJson,encodeJsonPretty,InventoryReplaySchema} from '../adapters/effect/json.ts';
@@ -10,19 +11,22 @@ function $(id: string, constructor: new () => HTMLElement = HTMLElement) {
   return element;
 }
 const escapes: Record<string, string>={'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'};
-const escape=value=>String(value).replace(/[&<>"']/g,c=>escapes[c]??c);
+const escape=(value:unknown)=>String(value).replace(/[&<>"']/g,c=>escapes[c]??c);
 type Step = ReturnType<typeof createHost>['steps'][number];
 const isMutant = (operation: Step['operation'])=>operation.type==='commit'&&operation.mutant;
 function render() {
   $('replay-result').textContent='';
   const state=selected<0?host.state:stateAt(selected);
-  const {available, capacity}=state.records.stock.camera.values;
+  const camera=state.records['stock']?.['camera'],reservations=state.records['reservation'];
+  if(!camera||!reservations)throw Error('Missing inventory records');
+  const {available,capacity}=camera.values;
   if(typeof available!=='number'||typeof capacity!=='number') throw Error('Inventory stock counts must be numbers');
   $('available').textContent=String(available);
   $('revision').textContent=`Snapshot r${state.revision} · ${selected<0?'latest':'history / read only'}`;
   $('allocation').innerHTML=Array.from({length:capacity},(_,i)=>`<span class="unit ${i<available?'free':'held'}">${i<available?'AVAILABLE':'HELD'}</span>`).join('');
-  $('reservations').innerHTML=Object.entries(state.records.reservation).map(([key,{version,values:r}])=>`<tr><th>${key}</th><td>${escape(r.owner)}</td><td><span class="status ${r.status}">${r.status}</span></td><td>${r.quantity}</td><td>${r.expiresAt||'—'}</td><td>v${version}</td></tr>`).join('');
-  const oracle=selected<0?host.oracle:host.steps[selected].observation.oracle;
+  $('reservations').innerHTML=Object.entries(reservations).map(([key,{version,values:r}])=>`<tr><th>${key}</th><td>${escape(r['owner'])}</td><td><span class="status ${r['status']}">${r['status']}</span></td><td>${r['quantity']}</td><td>${r['expiresAt']||'—'}</td><td>v${version}</td></tr>`).join('');
+  const oracle=selected<0?host.oracle:host.steps[selected]?.observation.oracle;
+  if(!oracle)throw Error('Missing selected inventory step');
   $('health').className=oracle.ok?'health':'health failed';
   $('health').textContent=oracle.ok?'Conservation holds · accepted ledger agrees':`INVARIANT FAILURE · ${oracle.failures.join(' · ')}`;
   $('steps').innerHTML=host.steps.map(({operation:o,observation:r},i)=>`<button class="step ${selected===i?'selected':''}" data-step="${i}"><span>${i+1}. ${escape(o.type)} ${escape(o.type==='execute'?o.invocation.action.split('.')[1]:o.token)}${isMutant(o)?' · MUTANT':''}</span><strong class="${r.status==='rejected'?'rejected':''}">${escape(r.code??r.status)}</strong></button>`).join('')||'<p class="muted">No operations yet. Reserve stock or run a competing schedule.</p>';
@@ -34,7 +38,7 @@ function render() {
   $('actions', HTMLFieldSetElement).disabled=selected>=0;
   $('mutant-label').hidden=!host.steps.some(s=>isMutant(s.operation));
 }
-function stateAt(index) {
+function stateAt(index:number) {
   const bundle=host.export(), h=createHost(bundle.model,bundle.initial);
   for(const {operation} of host.steps.slice(0,index+1)) h.step(operation);
   return h.state;
@@ -57,11 +61,11 @@ $('correct').onclick=()=>{host=competition(false);selected=-1;render();};
 $('broken').onclick=()=>{host=competition(true);selected=-1;render();};
 $('reset').onclick=()=>{host=createHost();selected=-1;render();};
 $('live').onclick=()=>{selected=-1;render();};
-$('steps').onclick=event=>{const button=event.target instanceof Element && event.target.closest<HTMLButtonElement>('[data-step]');if(button){selected=Number(button.dataset.step);render();}};
-$('replay').onclick=()=>{try {host=replay(JSON.parse(JSON.stringify(host.export())));selected=-1;render();$('replay-result').textContent='Exact replay matched every observation, event and final record.';}catch(error){$('replay-result').textContent=error.message;}};
+$('steps').onclick=event=>{const button=event.target instanceof Element && event.target.closest<HTMLButtonElement>('[data-step]');if(button){selected=Number(button.dataset['step']);render();}};
+$('replay').onclick=()=>{try {host=replay(JSON.parse(JSON.stringify(host.export())));selected=-1;render();$('replay-result').textContent='Exact replay matched every observation, event and final record.';}catch(error){$('replay-result').textContent=errorMessage(error);}};
 $('export').onclick=()=>{const url=URL.createObjectURL(new Blob([encodeJsonPretty(host.export(),InventoryReplaySchema)],{type:'application/json'}));const a=document.createElement('a');a.href=url;a.download='inventory-replay.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);};
 const importInput=$('import', HTMLInputElement);
-importInput.onchange=async()=>{try {const file=importInput.files?.[0];if(!file)return;host=replay(decodeJson(InventoryReplaySchema,await file.text()));selected=-1;render();$('replay-result').textContent='Imported replay verified.';}catch(error){$('replay-result').textContent=`Import rejected: ${error.message}`;}};
+importInput.onchange=async()=>{try {const file=importInput.files?.[0];if(!file)return;host=replay(decodeJson(InventoryReplaySchema,await file.text()));selected=-1;render();$('replay-result').textContent='Imported replay verified.';}catch(error){$('replay-result').textContent=`Import rejected: ${errorMessage(error)}`;}};
 render();
 declare global {
   interface Window {

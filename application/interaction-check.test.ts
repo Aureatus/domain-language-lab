@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {spawnSync} from 'node:child_process';
 import {deriveApplication} from './derive.ts';
 import {checkInteractions} from './interaction-check.ts';
 import {fixture} from './fixture.ts';
@@ -14,6 +15,13 @@ test('interaction laws distinguish a fresh snapshot from a receipt across ordere
   assert.equal(bad.status,'failed');assert.ok(bad.counterexample);assert.equal(bad.counterexample.rule,'submission.no-fresh-submit-before-receipt');
   const {events}=bad.counterexample;
   assert.deepEqual(events.map(e=>e.type),['snapshot','draft','submit','lost','snapshot']);
-  const replay=opts=>{const fold=actionReview(contract,command.actor,command.action,opts);return events.map(fold).at(-1);};
+  const replay=(opts:Parameters<typeof actionReview>[3])=>{const fold=actionReview(contract,command.actor,command.action,opts);return events.map(fold).at(-1);};
   assert.equal(replay(mutant)?.controls.submit,true);assert.equal(replay({})?.controls.submit,false);
+});
+
+test('interaction-check CLI rejects an explicitly empty mutant name',()=>{
+  const result=spawnSync(process.execPath,['application/check-interactions.ts','leave/browser.domain','leave.request','--actor','maya','--mutant',''],{encoding:'utf8'});
+  assert.equal(result.status,1);
+  assert.match(result.stderr,/Error: Unknown test mutant\./);
+  assert.equal(result.stdout,'');
 });

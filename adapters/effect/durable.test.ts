@@ -6,11 +6,17 @@ import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import * as Effect from 'effect/Effect';
 import { issueModel, issueState } from '../../semantic/issues.ts';
-import { inventoryModel, initialState } from '../../inventory/model.ts';
+import { inventoryModel } from '../../inventory/model.ts';
 import { makeDurableRuntime, makeDurableStore, initializeDurableState, durableExecute, durableState, pullOutbox, acknowledgeOutbox, closeDurableStore, DurableStore, durableStoreLayer } from './durable.ts';
+import {present} from '../../semantic/test-support.ts';
 
-const invoke = (id, args = { issueId: 'i1' }) => ({ id, action: 'issue.resolve', args, actor: 'maya', clock: 1730000000000 });
+const invoke = (id:string, args = { issueId: 'i1' }) => ({ id, action: 'issue.resolve', args, actor: 'maya', clock: 1730000000000 });
 const run = Effect.runPromise;
+function withStatus<T extends {status:string},S extends T['status']>(value:T,status:S):Extract<T,{status:S}> {
+  const matches=(candidate:T):candidate is Extract<T,{status:S}>=>candidate.status===status;
+  assert.ok(matches(value),`Expected ${status}, got ${value.status}`);
+  return value;
+}
 const temp = () => mkdtempSync(join(tmpdir(), 'effect-durable-'));
 const worker = new URL('./durable-worker.ts', import.meta.url).pathname;
 const child = (path: string, mode: string, id?: string) => spawnSync(process.execPath, [worker, path, mode, ...(id===undefined?[]:[id])], { encoding: 'utf8' });
@@ -34,22 +40,22 @@ test('restart keeps outcomes and immutable command identity', async t => {
   assert.equal(replay.status, 'duplicate'); assert.equal(replay.result.status, 'committed');
   const reordered = { clock: 1730000000000, actor: 'maya', args: { issueId: 'i1' }, action: 'issue.resolve', id: 'durable1' };
   assert.equal((await run(durableExecute(runtime, db, reordered))).status, 'duplicate');
-  assert.equal((await run(durableExecute(runtime, db, invoke('durable1', { issueId: 'i2' })))).code, 'invocation-conflict');
+  assert.equal(withStatus(await run(durableExecute(runtime, db, invoke('durable1', { issueId: 'i2' }))),'rejected').code, 'invocation-conflict');
   await run(closeDurableStore(db));
 });
 
 test('pending and rejected outcomes reserve IDs; changed model/input conflicts after reopen', async t => {
   const dir = temp(), path = join(dir, 'store.sqlite'); t.after(() => rmSync(dir, { recursive: true, force: true }));
   const db = await run(makeDurableStore(path)), rt = makeDurableRuntime(issueModel);
-  const pendingModel = structuredClone(issueModel); pendingModel.actions['issue.resolve'].policies[0].effect = 'approval-required';
+  const pendingModel = structuredClone(issueModel); present(present(pendingModel.actions['issue.resolve']).policies[0]).effect = 'approval-required';
   const pendingRuntime = makeDurableRuntime(pendingModel);
   await run(initializeDurableState(pendingRuntime, db, issueState));
   const p = await run(durableExecute(pendingRuntime, db, invoke('p')));
   assert.equal(p.status, 'pending');
-  assert.equal((await run(durableExecute(rt, db, invoke('p')))).code, 'invocation-conflict');
+  assert.equal(withStatus(await run(durableExecute(rt, db, invoke('p'))),'rejected').code, 'invocation-conflict');
   const denied = await run(durableExecute(pendingRuntime, db, invoke('bad', { issueId: 'missing' })));
   assert.equal(denied.status, 'rejected');
-  assert.equal((await run(durableExecute(pendingRuntime, db, invoke('bad')))).code, 'invocation-conflict');
+  assert.equal(withStatus(await run(durableExecute(pendingRuntime, db, invoke('bad'))),'rejected').code, 'invocation-conflict');
   await run(closeDurableStore(db));
 });
 
@@ -70,7 +76,7 @@ test('outbox pull is ordered and ack is explicit at-least-once', async t => {
   await run(initializeDurableState(rt, db, issueState)); await run(durableExecute(rt, db, invoke('outbox')));
   const first = await run(pullOutbox(db)); assert.ok(first.length > 0);
   assert.deepEqual(await run(pullOutbox(db)), first);
-  assert.equal(await run(acknowledgeOutbox(db, first[0].sequence)), true);
+  assert.equal(await run(acknowledgeOutbox(db, present(first[0]).sequence)), true);
   await run(closeDurableStore(db));
 });
 
@@ -83,7 +89,7 @@ test('separate processes serialize contenders against one SQLite state', async t
   assert.ok(outcomes.every(x => x.status === 0), outcomes.map(x => x.stderr).join('\n'));
   const db = await run(makeDurableStore(path));
   const state = await run(durableState(makeDurableRuntime(issueModel), db));
-  assert.equal(state.records.issues.i1.values.status, 'resolved');
+  assert.equal(present(present(state.records['issues'])['i1']).values['status'], 'resolved');
   assert.equal((await run(pullOutbox(db))).length, 4);
   await run(closeDurableStore(db));
 });
@@ -93,11 +99,11 @@ test('two processes competing to reserve 3 from stock 5 admit only one', async t
   assert.equal(child(path, 'init-stock').status, 0);
   const contenders = ['stock-a', 'stock-b'].map(id => spawnSync(process.execPath, [worker, path, 'stock', id], { encoding: 'utf8' }));
   assert.ok(contenders.every(x => x.status === 0), contenders.map(x => x.stderr).join('\n'));
-  assert.equal(contenders[0].stdout.trim(), 'committed:');
+  assert.equal(present(contenders[0]).stdout.trim(), 'committed:');
   const db = await run(makeDurableStore(path)), rt = makeDurableRuntime(inventoryModel);
   const state = await run(durableState(rt, db));
-  assert.equal(state.records.stock.camera.values.available, 2, JSON.stringify(contenders.map(x => ({ status: x.status, stdout: x.stdout, stderr: x.stderr }))));
-  assert.equal(Object.values(state.records.reservation).filter(x => x.values.status === 'active').length, 1);
+  assert.equal(present(present(state.records['stock'])['camera']).values['available'], 2, JSON.stringify(contenders.map(x => ({ status: x.status, stdout: x.stdout, stderr: x.stderr }))));
+  assert.equal(Object.values(present(state.records['reservation'])).filter(x => x.values['status'] === 'active').length, 1);
   assert.equal((await run(pullOutbox(db))).length, 5);
   await run(closeDurableStore(db));
 });

@@ -1,4 +1,6 @@
 // Tiny non-leave MODEL TEST fixture; not another shipped application.
+import {validateModel,validateState} from '../semantic/v2/core.ts';
+import {ownValue} from '../semantic/core.ts';
 import type {Expr, Model, Scalar} from '../semantic/v2/types.ts';
 const literal=(value: Scalar): Expr=>({op:'literal',value}),input=(name: string): Expr=>({op:'input',name}),field=(name: string): Expr=>({op:'field',binding:'selected',field:name});
 type Mutable<T> = T extends object ? {-readonly [K in keyof T]: Mutable<T[K]>} : T;
@@ -14,16 +16,23 @@ export const fixture={
   application:{version:'model-application/v1',title:'Supply fixture',actors:[{id:'nora',label:'Nora'},{id:'quinn',label:'Quinn'}],actions:{'supply.take':{fields:{cabinetKey:{reference:{resource:'cabinet',labelField:'caption'}},quantity:{default:1}}}}},
 };
 export function renamedFixture(){
-  const names={cabinet:'rack',caption:'description',stock:'remaining',reviewer:'checker',selected:'chosen','supply.take':'kit.issue',cabinetKey:'rackId',quantity:'units',reason:'purpose',tracked:'logged',nora:'ari',quinn:'devon',tools:'parts','supply.review':'kit.authorization','supply.small':'kit.direct','supply.available':'kit.available','supply.spend':'kit.spend'};
-  const rename=x=>Array.isArray(x)?x.map(rename):x&&typeof x==='object'?Object.fromEntries(Object.entries(x).map(([k,v])=>[names[k]??k,rename(v)])):names[x]??x;
-  return rename(fixture);
+  const names:Record<string,string>={cabinet:'rack',caption:'description',stock:'remaining',reviewer:'checker',selected:'chosen','supply.take':'kit.issue',cabinetKey:'rackId',quantity:'units',reason:'purpose',tracked:'logged',nora:'ari',quinn:'devon',tools:'parts','supply.review':'kit.authorization','supply.small':'kit.direct','supply.available':'kit.available','supply.spend':'kit.spend'};
+  function rename(x:unknown):unknown{
+    if(Array.isArray(x))return x.map(rename);
+    if(x&&typeof x==='object')return Object.fromEntries(Object.entries(x).map(([k,v])=>[ownValue(names,k)??k,rename(v)]));
+    return typeof x==='string'?ownValue(names,x)??x:x;
+  }
+  const domain=validateModel(rename(fixture.domain));
+  return {domain,initialState:validateState(domain,rename(fixture.initialState)),application:rename(fixture.application)};
 }
 export function extendedFixture(){
   const x=structuredClone(fixture);
   x.application.actors.push({id:'rory',label:'Rory'});
-  x.domain.actions['supply.take'].inputs.memo={type:'string'};
-  const review=x.domain.actions['supply.take'].policies[1];
-  if(review.effect!=='approval-required')throw Error('Expected review policy');
+  const take=x.domain.actions['supply.take'];
+  if(!take)throw Error('Expected supply.take fixture action');
+  take.inputs['memo']={type:'string'};
+  const review=take.policies[1];
+  if(review?.effect!=='approval-required')throw Error('Expected review policy');
   review.approvers={op:'literal',value:'rory'};
   x.domain.actions['supply.audit']={inputs:{note:{type:'string'}},bindings:[],preconditions:[],policies:[{id:'supply.audit-allowed',effect:'allow',when:literal(true)}],updates:[],inserts:[],deletes:[],observe:[]};
   return x;

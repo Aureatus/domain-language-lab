@@ -6,7 +6,7 @@ import {encodeJsonPretty} from '../adapters/effect/json.ts';
 const entry=process.argv[2];
 if(!entry)throw Error('Usage: node application/inspect-loading.ts VIEW.domain');
 const {contract}=deriveApplication(loadSource(entry).declaration);
-const examples=[
+const examples:readonly [string,boolean,boolean,boolean][]=[
   ['before request',false,false,false], ['retry pending after failure',false,true,true],
   ['first request',false,true,false], ['first response',true,false,false],
   ['background refresh',true,true,false], ['refresh failed',true,false,true],

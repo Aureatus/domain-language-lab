@@ -14,7 +14,7 @@ export const PrettyUnknownJsonCodec = Schema.fromJsonString(Schema.Unknown, { sp
 
 const decodeJsonValueSync = Schema.decodeUnknownSync(JsonValueCodec);
 const decodeJsonObjectSync = Schema.decodeUnknownSync(JsonObjectCodec);
-const encodeJsonValueSync = Schema.encodeSync(JsonValueCodec);
+const encodeJsonValueSync = Schema.encodeUnknownSync(JsonValueCodec);
 const encodeStringJsonSync = Schema.encodeSync(StringJsonCodec);
 const encodeUnknownJsonSync = Schema.encodeSync(UnknownJsonCodec);
 const encodePrettyUnknownJsonSync = Schema.encodeSync(PrettyUnknownJsonCodec);
@@ -38,10 +38,10 @@ export const encodeJsonPretty = (value: unknown, schema?: Schema.ConstraintEncod
     : encodePrettyUnknownJsonSync(value);
 
 /** Deterministic lexicographic key-sorted JSON encoding via Effect Schema codecs. */
-export const encodeCanonicalJson = value => {
+export const encodeCanonicalJson = (value:unknown):string => {
   if (Array.isArray(value)) return `[${value.map(encodeCanonicalJson).join(',')}]`;
   if (value && typeof value === 'object') {
-    return `{${Object.keys(value).sort().map(k => `${encodeStringJsonSync(k)}:${encodeCanonicalJson(value[k])}`).join(',')}}`;
+    return `{${Object.entries(value).sort(([a],[b])=>a<b?-1:a>b?1:0).map(([k,v]) => `${encodeStringJsonSync(k)}:${encodeCanonicalJson(v)}`).join(',')}}`;
   }
   return encodeJsonValueSync(value);
 };
@@ -97,7 +97,7 @@ export const DurableInvocationSchema = openObject({
   action: Schema.String,
   actor: Schema.String,
   args: Schema.JsonObject,
-  clock: Schema.Number,
+  clock: Schema.Finite,
 });
 
 export const DurableCommittedOutcomeSchema = openObject({

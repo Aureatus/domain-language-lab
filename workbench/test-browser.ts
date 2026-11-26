@@ -23,7 +23,7 @@ async function scanAccessibility(page:Page) {
 const root = fileURLToPath(new URL('../', import.meta.url));
 const artifact = resolve(root, 'artifacts/workbench.html');
 const html = await readFile(artifact, 'utf8');
-const payload=html.match(/<script id="workbench-data" type="application\/json">([\s\S]*?)<\/script>/);
+const payload=html.match(/<script id="workbench-data" type="application\/json">([\s\S]*?)<\/script>/)?.[1];
 assert.ok(payload);
 type Schedule=('approve'|'edit'|'execute')[];
 type Example={sampleSeed:number;originalHistory:Action[];minimalHistory:Action[];
@@ -31,13 +31,13 @@ type Example={sampleSeed:number;originalHistory:Action[];minimalHistory:Action[]
 type WorkbenchData={cases:Record<string,{inputs:{decision:Decision;role:Role;priority:Priority;schedule:Schedule;mutant:boolean};
   frames:{ticket:Ticket;events:unknown[];deliveries:unknown[]}[];violations:string[];trace:unknown}>;
   schedules:Schedule[];generated:{examples:Example[]};reports:Record<string,{availability:string;path:string;reason?:string;data?:unknown}>};
-const data:WorkbenchData=JSON.parse(payload[1]);
+const data:WorkbenchData=JSON.parse(payload);
 const inlineArtifact = resolve(root, 'artifacts/workbench-inline.html');
 const inlineHTML = await readFile(inlineArtifact, 'utf8');
 assert.ok(inlineHTML.length < 512000);
 assert.ok(Buffer.byteLength(inlineHTML) < 512000);
-const stylesheet=inlineHTML.match(/<style>([\s\S]*?)<\/style>/);
-assert.ok(stylesheet);assert.ok(!/\dvh|height:100%|#[0-9a-f]{3,8}\b/i.test(stylesheet[1]));
+const stylesheet=inlineHTML.match(/<style>([\s\S]*?)<\/style>/)?.[1];
+assert.ok(stylesheet);assert.ok(!/\dvh|height:100%|#[0-9a-f]{3,8}\b/i.test(stylesheet));
 assert.ok(!/<script[^>]+src=/.test(inlineHTML));
 assert.equal(Object.keys(data.cases).length, 216);
 const browser = await chromium.launch({ headless: true });
@@ -139,9 +139,11 @@ try {
   const download = await downloadEvent;
   const explanation = JSON.parse(await readFile(await download.path(), 'utf8'));
   assert.equal(explanation.kind, 'simulated');
-  assert.deepEqual(explanation.trace, data.cases['approval|support|high|0|false'].trace);
+  const control=data.cases['approval|support|high|0|false'];
+  assert.ok(control);assert.deepEqual(explanation.trace,control.trace);
   assert.equal(explanation.policyDiff.cases, 6);
-  assert.equal(explanation.reports.property.availability, data.reports.property.availability);
+  const propertyReport=data.reports['property'];
+  assert.ok(propertyReport);assert.equal(explanation.reports.property.availability,propertyReport.availability);
   await page.locator('#tab-execution').click();
   await page.locator('#tab-execution').focus();
   await page.keyboard.press('ArrowRight');
@@ -175,8 +177,8 @@ try {
   await page.screenshot({ path: '/tmp/opencode/workbench-checks/mobile.png', fullPage: true });
   // Missing and unfamiliar report formats must never become inferred passing evidence.
   const missingData = structuredClone(data);
-  missingData.reports.property = { availability: 'unavailable', path: 'artifacts/property-report.json', reason: 'Not present at build time.' };
-  missingData.reports.lean = { availability: 'available', path: 'artifacts/lean-report.json', data: { novel_schema: 'opaque' } };
+  missingData.reports['property'] = { availability: 'unavailable', path: 'artifacts/property-report.json', reason: 'Not present at build time.' };
+  missingData.reports['lean'] = { availability: 'available', path: 'artifacts/lean-report.json', data: { novel_schema: 'opaque' } };
   await page.close();
   page = await context.newPage();
   page.on('pageerror', error => errors.push(error.message));

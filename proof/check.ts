@@ -1,3 +1,4 @@
+import {errorMessage} from '../errors.ts';
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
@@ -11,9 +12,9 @@ const artifact = resolve(root, 'artifacts');
 mkdirSync(artifact, { recursive: true });
 const expected = ['commit_requires_current_binding', 'successful_path_exists', 'stale_approval_cannot_commit'];
 const pin = readFileSync(resolve(dir, 'lean-toolchain'), 'utf8').trim().split(':v').at(-1);
-const local = resolve(process.env.ELAN_HOME || resolve(homedir(), '.elan'), 'bin/lean');
+const local = resolve(process.env['ELAN_HOME'] || resolve(homedir(), '.elan'), 'bin/lean');
 // LEAN is an explicit executable override, never a shell command.
-const lean = process.env.LEAN || (existsSync(local) ? local : 'lean');
+const lean = process.env['LEAN'] || (existsSync(local) ? local : 'lean');
 const theoremAxioms:Record<string,string[]>={};
 const axiomsReported:string[]=[], trustedAssumptions:string[]=[];
 const report = {
@@ -38,10 +39,10 @@ try {
   // Fail closed: every expected theorem must report its complete transitive axiom set.
   for (const name of expected) {
     const lines = log.split('\n').filter(line => line.startsWith(`'ApprovalPilot.${name}' `));
-    if (lines.length !== 1) throw new Error(`Missing/duplicate axiom report for ${name}`);
-    const line = lines[0];
-    const parsed = line.match(/depends on axioms: \[([^\]]*)\]$/);
-    const axioms = parsed ? parsed[1].split(',').map(x => x.trim()).filter(Boolean)
+    const [line] = lines;
+    if (line === undefined || lines.length !== 1) throw new Error(`Missing/duplicate axiom report for ${name}`);
+    const reported = line.match(/depends on axioms: \[([^\]]*)\]$/)?.[1];
+    const axioms = reported !== undefined ? reported.split(',').map(x => x.trim()).filter(Boolean)
       : line.endsWith('does not depend on any axioms') ? [] : null;
     if (!axioms) throw new Error(`Unrecognized axiom output: ${line}`);
     report.theorem_axioms[name] = axioms;
@@ -51,7 +52,7 @@ try {
   report.trusted_assumptions = report.axioms_reported.map(axiom => `Lean core axiom: ${axiom}`);
   report.status = 'proof_checked';
   report.detail = 'Pinned Lean checked declarations; complete printed theorem axiom sets passed the propext-only allowlist.';
-} catch (error) { report.detail = error.message; }
+} catch (error) { report.detail = errorMessage(error); }
 writeFileSync(resolve(artifact, 'lean-proof.log'), log || report.detail + '\n');
 writeFileSync(resolve(artifact, 'lean-report.json'), JSON.stringify(report, null, 2) + '\n');
 console.log(JSON.stringify(report, null, 2));

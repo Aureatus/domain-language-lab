@@ -24,6 +24,7 @@ import {
   LiveWorkspaceDocumentSchema,
   InventoryReplaySchema,
 } from './json.ts';
+import {present} from '../../semantic/test-support.ts';
 import { createApp } from '../../live/core.ts';
 import { createHost, competition, replay } from '../../inventory/host.ts';
 
@@ -49,7 +50,7 @@ test('decodeJsonObject and encodeJson/encodeJsonPretty round-trip JSON cleanly',
 
 test('browser submission storage round-trips unresolved commands and rejects corrupt entries', () => {
   const saved = [{ phase: 'checking', id: 'request-1', body: { actor: 'maya', action: 'leave.request', args: { days: 3 } } }];
-  const decode = text => decodeStrictJson(ApplicationSavedSubmissionsSchema, text);
+  const decode = (text: string) => decodeStrictJson(ApplicationSavedSubmissionsSchema, text);
   assert.deepEqual(decode(encodeJson(saved, ApplicationSavedSubmissionsSchema)), saved);
   assert.deepEqual(decode('[]'), []);
   for (const raw of ['', '{}', '[null]', '[{"phase":"known","id":"request-1","body":{"actor":"maya","action":"leave.request","args":{}}}]'])
@@ -68,7 +69,7 @@ test('browser SSE codecs require snapshot and change envelopes without discardin
 
 test('browser Live workspace codec round-trips empty and populated journals without bypassing replay', () => {
   const app = createApp({ clock: () => 0 });
-  const decode = text => decodeStrictJson(LiveWorkspaceDocumentSchema, text);
+  const decode = (text: string) => decodeStrictJson(LiveWorkspaceDocumentSchema, text);
   const empty = app.exportWorkspace();
   assert.deepEqual(decode(encodeJson(empty, LiveWorkspaceDocumentSchema)), empty);
   assert.equal(app.dispatch('comment', { issueId: 'i1', body: 'Saved draft' }, 'u1').ok, true);
@@ -83,7 +84,7 @@ test('browser Live workspace codec round-trips empty and populated journals with
 });
 
 test('browser Inventory replay codec preserves exact observation and final-state verification', () => {
-  const decode = text => decodeJson(InventoryReplaySchema, text);
+  const decode = (text: string) => decodeJson(InventoryReplaySchema, text);
   for (const host of [createHost(), competition(true)]) {
     const bundle = host.export();
     assert.deepEqual(replay(decode(encodeJsonPretty(bundle, InventoryReplaySchema))).export(), bundle);
@@ -102,8 +103,8 @@ test('DurableOutcomeSchema and DurableOperationOutcomeSchema validate discrimina
     encodeJson({ status: 'committed', state: { revision: 1, records: {} }, events: [{ id: 'e1', kind: 'created' }], extra: 42 }),
   );
   assert.equal(committed.status, 'committed');
-  assert.equal(committed.events[0].kind, 'created');
-  assert.equal(committed.extra, 42);
+  assert.equal(present(committed.events[0])['kind'], 'created');
+  assert.equal(committed['extra'], 42);
 
   assert.throws(() => decodeJson(DurableOutcomeSchema, '{"status":"committed","state":{},"events":[{"id":123}]}'));
   assert.throws(() => decodeJson(DurableOutcomeSchema, '{"status":"pending","state":{}}'));
@@ -117,7 +118,7 @@ test('DurableOutcomeSchema and DurableOperationOutcomeSchema validate discrimina
     }),
   );
   assert.equal(approved.status, 'approved');
-  assert.equal(approved.receipt.sig, 'ok');
+  assert.equal(approved.receipt['sig'], 'ok');
   assert.throws(() => decodeJson(DurableReceiptSchema, '{"format":"wrong","request":{},"policyId":"p1","approver":"bob"}'));
 });
 

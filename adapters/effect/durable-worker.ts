@@ -4,6 +4,7 @@ import { issueModel, issueState } from '../../semantic/issues.ts';
 import { inventoryModel, initialState, invocation as stockInvocation } from '../../inventory/model.ts';
 
 const [path, mode, id = 'worker'] = process.argv.slice(2);
+if(!path)throw Error('Missing durable worker database path');
 const runtime = makeDurableRuntime(issueModel);
 const db = await Effect.runPromise(makeDurableStore(path));
 try {
@@ -21,6 +22,6 @@ try {
   } else if (mode === 'stock') {
     const result = await Effect.runPromise(durableExecute(makeDurableRuntime(inventoryModel), db,
       stockInvocation(id, 'reserve', id === 'stock-a' ? 'slotA' : 'slotB')));
-    process.stdout.write(`${result.status}:${result.code ?? ''}\n`);
+    process.stdout.write(`${result.status}:${result.status==='rejected'?result.code:''}\n`);
   }
 } finally { if (db.isOpen) await Effect.runPromise(closeDurableStore(db)); }

@@ -14,10 +14,11 @@ export async function bundleBrowser(entry: URL, define: Record<string, string> =
       rolldownOptions: {output: {codeSplitting: false}},
     },
   });
-  if (!Array.isArray(result) || result.length !== 1 || result[0].output.length !== 1)
+  const bundle=Array.isArray(result)&&result.length===1?result[0]:undefined;
+  if (!bundle || bundle.output.length !== 1)
     throw Error(`Expected a single browser bundle for ${entry.pathname}`);
-  const [chunk] = result[0].output;
-  if (chunk.type !== 'chunk') throw Error(`Expected a JavaScript bundle for ${entry.pathname}`);
+  const [chunk] = bundle.output;
+  if (chunk?.type !== 'chunk') throw Error(`Expected a JavaScript bundle for ${entry.pathname}`);
   return chunk.code;
 }
 

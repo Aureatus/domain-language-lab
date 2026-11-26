@@ -21,7 +21,7 @@ test('generated sampled reports are deterministic, serializable and non-vacuous'
   assert.ok(first.coverage.approvalRequiredCommits > 0);
   assert.ok(first.coverage.staleRejections > 0);
   for (const kind of ['request', 'approve', 'edit', 'execute', 'policy', 'revision', 'resource']) {
-    assert.ok(first.coverage.actions[kind] > 0, kind);
+    assert.ok((first.coverage.actions[kind] ?? 0) > 0, kind);
   }
   assert.match(first.engine.sha256, /^[a-f0-9]{64}$/);
   assert.equal(first.engine.oracle, 'independent-snapshot-state-machine/1');
@@ -74,7 +74,7 @@ test('argument, resource and whole-model changes invalidate snapshots; reapprova
     { kind: 'policy', role: 'viewer', priority: 'normal', decision: 'allow' },
   ];
   for (const change of changes) {
-    const history = [request, approve, change, execute];
+    const history:Action[] = [request, approve, change, execute];
     assert.equal(replayHistory(data(history)).coverage.staleRejections, 1);
     assert.equal(replayHistory(data(history, true)).failure?.kind, 'stale-approval-commit');
     const repaired = replayHistory(data([request, approve, change, approve, execute, execute]));

@@ -7,10 +7,35 @@
     "erasableSyntaxOnly": true,
     "noEmit": true,
     "strict": true,
-    "noImplicitAny": false,
-    "useUnknownInCatchVariables": false,
+    "noImplicitAny": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "noPropertyAccessFromIndexSignature": true,
+    "noFallthroughCasesInSwitch": true,
+    "noImplicitReturns": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "exactOptionalPropertyTypes": true,
+    "skipLibCheck": true,
+    "allowUnreachableCode": false,
+    "allowUnusedLabels": false,
+    "useUnknownInCatchVariables": true,
     "verbatimModuleSyntax": true,
-    "types": ["node"]
+    "types": ["node"],
+    "plugins": [
+      {
+        "name": "@effect/language-service",
+        "ignoreEffectSuggestionsInTscExitCode": false,
+        "overrides": [
+          {
+            "include": ["adapters/effect-ui/browser.ts"],
+            "options": {
+              "diagnosticSeverity": {"experimentalApiUsage": "off"}
+            }
+          }
+        ]
+      }
+    ]
   },
   "include": [
     "**/*.ts",

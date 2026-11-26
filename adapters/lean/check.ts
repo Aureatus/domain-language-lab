@@ -1,3 +1,4 @@
+import {errorMessage} from '../../errors.ts';
 import {spawnSync} from 'node:child_process';
 import {readFileSync, writeFileSync, mkdirSync} from 'node:fs';
 import {resolve} from 'node:path';
@@ -11,7 +12,7 @@ type Report = {format:string;status:'tool_error'|'not_checked'|'proof_checked'|'
   theorem_axioms:Record<string,string[]>;tool:{executable:string;version:string|null};scope:string;
   metadata?:ReturnType<typeof generate>['metadata'];generator_sha256?:string;template_sha256?:string;
   runner_sha256?:string;semantic_core_sha256?:string;detail?:string};
-export function check(source, law, directory, lean = process.env.LEAN || PINNED_LEAN) {
+export function check(source:unknown, law:unknown, directory:string, lean = process.env['LEAN'] || PINNED_LEAN) {
   mkdirSync(directory, {recursive: true});
   const report: Report = {format: 'generated-lean-evidence/1', status: 'tool_error', theorem_axioms: {}, tool: {executable: lean, version: null}, scope: 'Generated numeric kernel only; no runtime correspondence or full-action theorem.'};
   let log = '';
@@ -37,9 +38,10 @@ export function check(source, law, directory, lean = process.env.LEAN || PINNED_
     if (/\bsorry\b|\baxiom\s/.test(code)) throw Error('Forbidden proof escape');
     for (const name of ['preserves', 'positive_witness']) {
       const lines = log.split('\n').filter(l => l.startsWith(`'Generated.${name}' `));
-      if (lines.length !== 1) throw Error(`Missing/duplicate theorem axiom report: ${name}`);
-      const m = lines[0].match(/depends on axioms: \[([^\]]*)\]$/);
-      const axioms = m ? m[1].split(',').map(x => x.trim()).filter(Boolean) : lines[0].endsWith('does not depend on any axioms') ? [] : null;
+      const [line]=lines;
+      if (!line||lines.length!==1) throw Error(`Missing/duplicate theorem axiom report: ${name}`);
+      const reported=line.match(/depends on axioms: \[([^\]]*)\]$/)?.[1];
+      const axioms=reported!==undefined?reported.split(',').map(x=>x.trim()).filter(Boolean):line.endsWith('does not depend on any axioms')?[]:null;
       if (!axioms || axioms.some(a => a !== 'propext')) throw Error('Unrecognized/non-allowlisted theorem axioms');
       report.theorem_axioms[name] = axioms;
     }
@@ -47,7 +49,7 @@ export function check(source, law, directory, lean = process.env.LEAN || PINNED_
     report.detail = 'Pinned Lean checked generated invariant and concrete successful witness.';
   } catch (e) {
     if (e instanceof Unsupported) report.status = 'unsupported';
-    report.detail = e.message;
+    report.detail = errorMessage(e);
   }
   writeFileSync(resolve(directory, 'check.log'), log || report.detail + '\n');
   writeFileSync(resolve(directory, 'report.json'), encodeJsonPretty(report) + '\n');

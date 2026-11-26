@@ -1,4 +1,5 @@
 import {decodeJson,decodeJsonObject,decodeJsonValue,encodeJson,WorkspaceChangeSchema} from '../adapters/effect/json.ts';
+import {errorMessage} from '../errors.ts';
 import type {ApprovalRequest,FieldSchema,Grant,RecordSnapshot,State,Value} from '../semantic/v2/types.ts';
 
 function $(id:string) {
@@ -22,8 +23,8 @@ type Snapshot = {
   events?:{sequence:number;eventId:string;event:{type?:string;kind?:string}}[];
 };
 const entities:Record<string,string>={'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'};
-const esc = (value:unknown) => String(value ?? '').replace(/[&<>"']/g, c => entities[c]);
-const json = value => JSON.stringify(value, null, 2);
+const esc = (value:unknown) => String(value ?? '').replace(/[&<>"']/g, c => entities[c] ?? c);
+const json = (value:unknown) => JSON.stringify(value, null, 2);
 let snapshot:Snapshot|undefined, stream:EventSource|undefined, generation = 0, requestSerial = 0, busy = false;
 const drafts = new Map<string,{fields:Record<string,string>;clock:string;tool:string}>();
 const context = () => ({profile: profileInput.value, actor: actorInput.value});
@@ -31,13 +32,13 @@ const key = () => `${profileInput.value}/${actorInput.value}/${actionInput.value
 const id = () => `cmd-${crypto.randomUUID()}`;
 const inputs=()=>document.querySelectorAll<HTMLInputElement>('input[data-input]');
 function saveDraft() {
-  if(actionInput.value)drafts.set(key(),{fields:Object.fromEntries([...inputs()].flatMap(el=>el.dataset.input===undefined?[]:[[el.dataset.input,el.value]])),clock:clockInput.value,tool:toolInput.value});
+  if(actionInput.value)drafts.set(key(),{fields:Object.fromEntries([...inputs()].flatMap(el=>el.dataset['input']===undefined?[]:[[el.dataset['input'],el.value]])),clock:clockInput.value,tool:toolInput.value});
 }
 function invocation() {
   const args:Record<string,Value> = {};
   for (const el of inputs()) {
-    const name=el.dataset.input;
-    if(name!==undefined)args[name] = el.dataset.type === 'integer' ? Number(el.value) : el.dataset.type === 'ids' ? el.value.split(',').map(s => s.trim()).filter(Boolean) : el.value;
+    const name=el.dataset['input'];
+    if(name!==undefined)args[name] = el.dataset['type'] === 'integer' ? Number(el.value) : el.dataset['type'] === 'ids' ? el.value.split(',').map(s => s.trim()).filter(Boolean) : el.value;
   }
   return {id: id(), action: actionInput.value, actor: actorInput.value, clock: Number(clockInput.value), args};
 }
@@ -57,19 +58,19 @@ function table(records:Readonly<Record<string,RecordSnapshot>>|undefined, fields
   return `<table><thead><tr><th scope="col">ID</th>${fields.map(f => `<th scope="col">${esc(f)}</th>`).join('')}<th scope="col">Version</th></tr></thead><tbody>${entries.map(([recordId, r]) => `<tr data-record="${esc(recordId)}"><th scope="row"><code>${esc(recordId)}</code></th>${fields.map(f => `<td data-field="${esc(f)}">${esc(Array.isArray(r.values[f]) ? r.values[f].join(', ') : r.values[f])}</td>`).join('')}<td>${r.version}</td></tr>`).join('')}</tbody></table>`;
 }
 function preserve(container:HTMLElement, html:string) {
-  const active = document.activeElement; const focusKey = active instanceof HTMLElement&&container.contains(active) ? active.dataset.focus : null;
-  const open = new Set([...container.querySelectorAll<HTMLDetailsElement>('details[open]')].map(el => el.dataset.detail));
+  const active = document.activeElement; const focusKey = active instanceof HTMLElement&&container.contains(active) ? active.dataset['focus'] : null;
+  const open = new Set([...container.querySelectorAll<HTMLDetailsElement>('details[open]')].map(el => el.dataset['detail']));
   container.innerHTML = html;
-  for (const el of container.querySelectorAll('details')) if (open.has(el.dataset.detail)) el.open = true;
-  if (focusKey) [...container.querySelectorAll<HTMLElement>('[data-focus]')].find(el => el.dataset.focus === focusKey)?.focus({preventScroll:true});
+  for (const el of container.querySelectorAll('details')) if (open.has(el.dataset['detail'])) el.open = true;
+  if (focusKey) [...container.querySelectorAll<HTMLElement>('[data-focus]')].find(el => el.dataset['focus'] === focusKey)?.focus({preventScroll:true});
 }
 function render(snapshot:Snapshot) {
   const {state, profile, pending = [], events = []} = snapshot;
   $('revision').textContent = `${profile} · revision ${state.revision} · sequence ${snapshot.sequence}`;
   $('profile-note').textContent = profile === 'v1' ? 'v1 updates preallocated owner-bound slots. Terminal slots are not new records and cannot be deleted.' : 'v2 inserts caller-chosen reservation IDs. Quantity 3+ requires the stock operator’s policy-derived approval.';
   $('reservation-heading').textContent = profile === 'v1' ? 'Preallocated reservation slots' : 'Inserted reservation records';
-  $('stock').innerHTML = table(state.records.stock, ['capacity','available','operator']);
-  $('reservations').innerHTML = table(state.records.reservation, ['owner','quantity','status','expiresAt']);
+  $('stock').innerHTML = table(state.records['stock'], ['capacity','available','operator']);
+  $('reservations').innerHTML = table(state.records['reservation'], ['owner','quantity','status','expiresAt']);
   for (const [element,label] of [[$('stock'),'Stock table'],[$('reservations'),'Reservations table']] as const) { element.tabIndex=0; element.setAttribute('role','region'); element.setAttribute('aria-label',label); }
   $('scope').textContent = typeof snapshot.scope === 'string' ? snapshot.scope : json(snapshot.scope);
   const actor = actorInput.value;
@@ -77,7 +78,7 @@ function render(snapshot:Snapshot) {
   $('inbox-summary').textContent = profile === 'v1' ? 'v1 has no approval-required policy.' : `${inbox.length} awaiting ${actor} · ${pending.filter(p => p.status !== 'consumed').length} open durable requests`;
   preserve($('pending'), pending.length ? pending.map(p => {
     const inv = p.request.invocation;
-    return `<article class="approval" data-pending="${esc(p.invocationId)}"><strong>${esc(inv.args.reservationId)} · ${esc(p.status)}</strong><p><code>${esc(p.invocationId)}</code><br>${esc(inv.actor)} requests ${esc(inv.args.quantity)} · expires ${esc(inv.args.expiresAt)}</p>${p.request.requirements.map(r => {
+    return `<article class="approval" data-pending="${esc(p.invocationId)}"><strong>${esc(inv.args['reservationId'])} · ${esc(p.status)}</strong><p><code>${esc(p.invocationId)}</code><br>${esc(inv.actor)} requests ${esc(inv.args['quantity'])} · expires ${esc(inv.args['expiresAt'])}</p>${p.request.requirements.map(r => {
       const grant = p.grants.find(g => g.policyId === r.policyId);
       return `<div><code>${esc(r.policyId)}</code> → ${esc(r.approvers.join(', '))}${grant ? ` · granted by ${esc(grant.approver)}` : ''}${p.status !== 'consumed' && !grant && r.approvers.includes(actor) ? `<br><button data-focus="grant-${esc(p.invocationId)}-${esc(r.policyId)}" data-grant="${esc(p.invocationId)}" data-policy="${esc(r.policyId)}">Grant approval</button>` : ''}</div>`;
     }).join('')}<button data-focus="resume-${esc(p.invocationId)}" data-resume="${esc(p.invocationId)}">${p.status === 'consumed' ? 'Try resume again (consumed)' : 'Resume request'}</button><details data-detail="request-${esc(p.invocationId)}"><summary>Request Why</summary><pre>${esc(json({invocation:inv,requirements:p.request.requirements,capturedRevision:p.request.prestate.revision,grants:p.grants,resumeId:p.resumeId}))}</pre></details></article>`;
@@ -88,14 +89,14 @@ async function refresh(gen = generation) {
   const serial = ++requestSerial; const {profile,actor} = context();
   try {
     const response = await fetch(`/api/snapshot?${new URLSearchParams({profile,actor})}`);
-    const value = decodeJsonObject(await response.text()); if (!response.ok) throw Error(typeof value.error==='string'?value.error:`HTTP ${response.status}`);
+    const value = decodeJsonObject(await response.text()); if (!response.ok) throw Error(typeof value['error']==='string'?value['error']:`HTTP ${response.status}`);
     if (gen !== generation || serial !== requestSerial) return;
-    if((value.profile!=='v1'&&value.profile!=='v2')||!Array.isArray(value.tools)||!value.state||typeof value.state!=='object'||typeof value.sequence!=='number')throw Error('Invalid workspace snapshot.');
+    if((value['profile']!=='v1'&&value['profile']!=='v2')||!Array.isArray(value['tools'])||!value['state']||typeof value['state']!=='object'||typeof value['sequence']!=='number')throw Error('Invalid workspace snapshot.');
     const first = !snapshot; const current=value as unknown as Snapshot;snapshot=current;
     if (first) { actionInput.innerHTML = current.tools.map(t => `<option>${esc(t.name)}</option>`).join(''); buildForm(); }
     render(current); $('notice').textContent = ''; $('action-form').inert = false; executeJSON.disabled = false;
     if (stream?.readyState === EventSource.OPEN) $('connection').textContent = 'Connected · snapshot current';
-  } catch (error) { if (gen === generation && serial === requestSerial) { $('notice').textContent = `Snapshot unavailable: ${error.message}. Reconnect to retry.`; $('connection').textContent = 'Reconnecting · snapshot unavailable'; } }
+  } catch (error) { if (gen === generation && serial === requestSerial) { $('notice').textContent = `Snapshot unavailable: ${errorMessage(error)}. Reconnect to retry.`; $('connection').textContent = 'Reconnecting · snapshot unavailable'; } }
 }
 function connect() {
   stream?.close(); const gen = ++generation; snapshot = undefined;
@@ -106,21 +107,21 @@ function connect() {
   stream.onerror = () => { if(gen === generation) $('connection').textContent = 'Reconnecting · waiting for server'; };
   stream.addEventListener('change', event => { if (gen !== generation) return; try { $('relationship').textContent = json(decodeJson(WorkspaceChangeSchema,event.data)); } catch { $('relationship').textContent = event.data; } refresh(gen); });
 }
-const help = {stale:'The captured state changed. Submit a fresh action; old grants cannot authorize a new request.',consumed:'This request already resumed. Inspect durable history; use a new invocation for new work.',precondition:'Check capacity, lifecycle status and expiry. At expiry, resume is no longer valid.',denied:'This simulated actor is not permitted by the declared policy.',approval:'Required grants are missing. Switch to an approver listed in Request Why.'};
-async function command(endpoint, body) {
+const help:Record<string,string> = {stale:'The captured state changed. Submit a fresh action; old grants cannot authorize a new request.',consumed:'This request already resumed. Inspect durable history; use a new invocation for new work.',precondition:'Check capacity, lifecycle status and expiry. At expiry, resume is no longer valid.',denied:'This simulated actor is not permitted by the declared policy.',approval:'Required grants are missing. Switch to an approver listed in Request Why.'};
+async function command(endpoint:'execute'|'approve'|'resume', body:object) {
   if (busy) return; busy = true; const gen = generation;
   try {
     const response = await fetch(`/api/${endpoint}`, {method:'POST',headers:{'Content-Type':'application/json'},body:encodeJson(body)});
-    const value = decodeJsonObject(await response.text()); if (!response.ok) throw Error(typeof value.error==='string'?value.error:`HTTP ${response.status}`);
+    const value = decodeJsonObject(await response.text()); if (!response.ok) throw Error(typeof value['error']==='string'?value['error']:`HTTP ${response.status}`);
     if (gen !== generation) return;
-    const outcome = value.status === 'duplicate' ? value.result : value;
-    if(!outcome||typeof outcome!=='object'||!('status' in outcome)||typeof outcome.status!=='string')throw Error('Invalid workspace command result.');
-    const code='code' in outcome&&typeof outcome.code==='string'?outcome.code:undefined;
-    const reason='reason' in outcome?outcome.reason:undefined;
-    $('result').dataset.status = outcome.status;
-    $('result').innerHTML = `<strong>${esc(value.status)}${code ? ` · ${esc(code)}` : ''}</strong><p>${esc(reason ?? (outcome.status === 'pending' ? 'Awaiting approval. Stock has not changed.' : 'Server result received.'))} ${esc(code?help[code]:'')}</p><details><summary>Exact server result</summary><pre>${esc(json(value))}</pre></details>`;
+    const outcome = value['status'] === 'duplicate' ? value['result'] : value;
+    if(!outcome||typeof outcome!=='object'||!('status' in outcome)||typeof outcome['status']!=='string')throw Error('Invalid workspace command result.');
+    const code='code' in outcome&&typeof outcome['code']==='string'?outcome['code']:undefined;
+    const reason='reason' in outcome?outcome['reason']:undefined;
+    $('result').dataset['status'] = outcome['status'];
+    $('result').innerHTML = `<strong>${esc(value['status'])}${code ? ` · ${esc(code)}` : ''}</strong><p>${esc(reason ?? (outcome['status'] === 'pending' ? 'Awaiting approval. Stock has not changed.' : 'Server result received.'))} ${esc(code&&Object.hasOwn(help,code)?help[code]:'')}</p><details><summary>Exact server result</summary><pre>${esc(json(value))}</pre></details>`;
     await refresh(gen);
-  } catch(error) { if(gen === generation) { $('result').dataset.status='error'; $('result').textContent=`Command not confirmed: ${error.message}. Check connection and history before retrying.`; } }
+  } catch(error) { if(gen === generation) { $('result').dataset['status']='error'; $('result').textContent=`Command not confirmed: ${errorMessage(error)}. Check connection and history before retrying.`; } }
   finally { busy = false; }
 }
 $('action-form').addEventListener('submit', event => { event.preventDefault(); const inv = invocation(); toolInput.value = json(inv); saveDraft(); command('execute',{profile:context().profile,invocation:inv}); });
@@ -128,6 +129,6 @@ $('fields').addEventListener('input',syncJSON); clockInput.addEventListener('inp
 actionInput.addEventListener('change', buildForm);
 for (const name of ['profile','actor']) $(name).addEventListener('change', () => { $('result').replaceChildren(); connect(); });
 $('reconnect').addEventListener('click', () => {saveDraft(); connect();});
-executeJSON.addEventListener('click', () => {try {command('execute',{profile:context().profile,invocation:decodeJsonValue(toolInput.value)});}catch(error){$('result').dataset.status='error';$('result').textContent=`Invalid JSON: ${error.message}`;}});
-$('pending').addEventListener('click', event => {const button = event.target instanceof Element?event.target.closest('button'):null; if (!button) return; const {profile,actor} = context(); if(button.dataset.grant) command('approve',{profile,actor,command:{id:id(),invocationId:button.dataset.grant,policyId:button.dataset.policy}}); else if(button.dataset.resume) { if(!resumeClock.reportValidity()) return; command('resume',{profile,command:{id:id(),invocationId:button.dataset.resume,clock:Number(resumeClock.value)}}); }});
+executeJSON.addEventListener('click', () => {try {command('execute',{profile:context().profile,invocation:decodeJsonValue(toolInput.value)});}catch(error){$('result').dataset['status']='error';$('result').textContent=`Invalid JSON: ${errorMessage(error)}`;}});
+$('pending').addEventListener('click', event => {const button = event.target instanceof Element?event.target.closest('button'):null; if (!button) return; const {profile,actor} = context(); if(button.dataset['grant']) command('approve',{profile,actor,command:{id:id(),invocationId:button.dataset['grant'],policyId:button.dataset['policy']}}); else if(button.dataset['resume']) { if(!resumeClock.reportValidity()) return; command('resume',{profile,command:{id:id(),invocationId:button.dataset['resume'],clock:Number(resumeClock.value)}}); }});
 connect();

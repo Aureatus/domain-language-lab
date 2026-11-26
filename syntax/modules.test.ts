@@ -6,25 +6,27 @@ import {parseSource} from './frontend.ts';
 import {deriveApplication,buildInvocation} from '../application/derive.ts';
 import prior from './fixtures/prior-leave.ts';
 import {moduleSourcePage} from './highlight.ts';
+import {present} from '../semantic/test-support.ts';
 
 const loaded=loadSource('leave/browser.domain');
 const flattened=loaded.modules.map(m=>m.source.split('\n').filter(l=>!/^(module|import|use)\b/.test(l)).join('\n')).join('\n');
-const parse=text=>parseSource(text,{filename:'references.domain'});
+const parse=(text:string)=>parseSource(text,{filename:'references.domain'});
 test('loading declarations preserve explicit scope and reject invalid or duplicate modes',()=>{
-  const global=row=>flattened.replace('\napplication\n',`\napplication\n  ${row}\n`);
-  const view=(s,row)=>s.replace('    field name label "Team member"',`    ${row}\n    field name label "Team member"`);
-  const contract=s=>deriveApplication(parse(s).declaration).contract;
+  const global=(row:string)=>flattened.replace('\napplication\n',`\napplication\n  ${row}\n`);
+  const view=(s:string,row:string)=>s.replace('    field name label "Team member"',`    ${row}\n    field name label "Team member"`);
+  const contract=(s:string)=>deriveApplication(parse(s).declaration).contract;
   const base=contract(flattened);assert.ok(!Object.hasOwn(base,'loading')&&base.views.every(v=>!Object.hasOwn(v,'loading')));
   for(const [index,mode] of ['text','icon','skeleton','wait'].entries()){
     const local=['wait','text','icon','skeleton'][index],c=contract(view(global(`loading ${mode}`),`loading ${local}`));
     assert.deepEqual(c,{...base,loading:mode,views:[{...base.views[0],loading:local},...base.views.slice(1)]});
   }
-  for(const insert of [global,row=>view(flattened,row)]){
+  for(const insert of [global,(row:string)=>view(flattened,row)]){
     assert.throws(()=>parse(insert('loading spinner')),/Expected loading mode/);
     assert.throws(()=>parse(insert('loading wait\n    loading icon')),/Duplicate declaration 'loading'/);
   }
-  for(const target of [a=>a,a=>a.views[0]])for(const invalid of [null,true,'spinner',{mode:'icon'}]){
-    const d=structuredClone(loaded.declaration);target(d.application).loading=invalid;
+  for(const scope of ['application','view'])for(const invalid of [null,true,'spinner',{mode:'icon'}]){
+    const d=structuredClone(loaded.declaration),app=present(d.application);
+    Reflect.set(scope==='application'?app:present(app.views[0]),'loading',invalid);
     assert.throws(()=>deriveApplication(d),/Expected loading mode/);
   }
 });
@@ -57,25 +59,27 @@ test('references lower lazily, fail closed, retain policy authorization and reco
   const inv=buildInvocation(d.contract,{action:'leave.request',actor:'maya',args:{start:'2026-11-20',end:'2026-11-20'},id:'test',clock:1});
   const denied=d.runtime.execute(d.initialState,{...inv,actor:'leo'});
   assert.equal(denied.status,'rejected');assert.equal(denied.code,'denied');
-  const settings={...d.initialState.records.settings,alternate:d.initialState.records.settings['leave-rule']};delete settings['leave-rule'];
+  const originalSettings=present(d.initialState.records['settings']);
+  const settings:{-readonly [K in keyof typeof originalSettings]:typeof originalSettings[K]}={...originalSettings,alternate:present(originalSettings['leave-rule'])};delete settings['leave-rule'];
   const missing=d.runtime.execute({...d.initialState,records:{...d.initialState.records,settings}},inv);
   assert.equal(missing.status,'rejected');assert.equal(missing.code,'missing-record');
-  const employee={...d.initialState.records.employee};delete employee.maya;
+  const employee={...d.initialState.records['employee']};delete employee['maya'];
   const noEmployee=d.runtime.execute({...d.initialState,records:{...d.initialState.records,employee}},inv);
   assert.equal(noEmployee.status,'rejected');assert.equal(noEmployee.code,'missing-record');
   const unused=parse(flattened.replace('leaveId string','leaveId string\n    optional reference employee as unused')).declaration;
-  assert.deepEqual(unused.domain.actions['leave.request'].bindings,prior.domain.actions['leave.request'].bindings);
+  assert.deepEqual(present(unused.domain.actions['leave.request']).bindings,prior.domain.actions['leave.request'].bindings);
   const renamed=parse(flattened.replaceAll('employee','person').replaceAll('settings','configuration')).declaration;
-  assert.deepEqual(renamed.domain.actions['leave.request'].bindings.map(b=>b.resource),['person','configuration']);
+  assert.deepEqual(present(renamed.domain.actions['leave.request']).bindings.map(b=>b.resource),['person','configuration']);
   const r=deriveApplication(renamed).runtime.execute(renamed.initialState,{...inv,args:{...inv.args,personId:'maya'}});
   // The old employeeId is intentionally not accepted after renaming the schema.
   assert.equal(r.status,'rejected');assert.equal(r.code,'invalid');
-  const args={...inv.args,personId:inv.args.employeeId};delete args.employeeId;
+  const {employeeId,...previousArgs}=inv.args;
+  const args={...previousArgs,personId:present(employeeId)};
   assert.equal(deriveApplication(renamed).runtime.execute(renamed.initialState,{...inv,args}).status,'committed');
 });
 test('real relative graph resolution rejects cycles, duplicate IDs/imports, missing use and domain leakage',()=>{
   const dir=mkdtempSync('/tmp/opencode/modules-');
-  const put=(name,text)=>writeFileSync(`${dir}/${name}.domain`,text);
+  const put=(name:string,text:string)=>writeFileSync(`${dir}/${name}.domain`,text);
   put('a','module "a" view\nimport "./b.domain"\nuse "b"\n');
   put('b','module "b" domain\nimport "./a.domain"\ndomain "b"\n');
   assert.throws(()=>loadSource(`${dir}/a.domain`),/cycle/);

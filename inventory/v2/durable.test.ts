@@ -10,20 +10,20 @@ async function database() {
   return resolve(await mkdtemp('/tmp/opencode/inventory-v2-test-'), 'inventory.sqlite');
 }
 // Every phase is a different OS process: no retained interpreter, token, receipt or DB handle.
-function phase(path, scenario, name) {
+function phase(path:string, scenario:string, name:string) {
   const script = `import {runDurablePhase} from ${JSON.stringify(demoURL)};
     console.log(JSON.stringify(await runDurablePhase(...JSON.parse(process.argv[1]))));`;
   return JSON.parse(execFileSync(process.execPath, ['--input-type=module', '-e', script,
     JSON.stringify([path, scenario, name])], {encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe']}));
 }
 // Independent quantity oracle; does not interpret declarations, results, or event deltas.
-function inventory(snapshot, active: Record<string, number>, terminal = {}) {
+function inventory(snapshot:{state:{records:{stock:{camera:{values:{available:number}}};reservation:Record<string,{values:{quantity:number;status:string}}>}}}, active: Record<string, number>, terminal = {}) {
   assert.equal(snapshot.state.records.stock.camera.values.available,
     8 - Object.values(active).reduce((sum, quantity) => sum + quantity, 0));
   assert.deepEqual(Object.keys(snapshot.state.records.reservation).sort(), [...Object.keys(active), ...Object.keys(terminal)].sort());
   for (const [id, quantity] of Object.entries(active)) {
-    assert.equal(snapshot.state.records.reservation[id].values.quantity, quantity);
-    assert.equal(snapshot.state.records.reservation[id].values.status, 'active');
+    assert.equal(snapshot.state.records.reservation[id]?.values.quantity, quantity);
+    assert.equal(snapshot.state.records.reservation[id]?.values.status, 'active');
   }
 }
 
@@ -47,8 +47,8 @@ test('SQLite inventory approval survives process restarts, commits once, cancels
   assert.equal(resumed.after.state.revision, 1);
   assert.equal(resumed.after.state.records.reservation['durable-reservation'].version, 0);
   assert.equal(resumed.after.state.records.reservation['durable-reservation'].values.owner, 'alice');
-  assert.deepEqual(resumed.after.outbox.map(x => x.event.kind), ['action', 'change', 'create']);
-  assert.ok(resumed.after.outbox.every(x => x.event.clock === 101));
+  assert.deepEqual(resumed.after.outbox.map((x:{event:{kind:string}}) => x.event.kind), ['action', 'change', 'create']);
+  assert.ok(resumed.after.outbox.every((x:{event:{clock:number}}) => x.event.clock === 101));
   assert.equal(resumed.after.pending.status, 'consumed');
   assert.equal(resumed.after.pending.resumeId, 'resume-1');
   const retry = phase(path, 'lifecycle', 'retry');
@@ -61,13 +61,13 @@ test('SQLite inventory approval survives process restarts, commits once, cancels
   assert.deepEqual(retry.after, resumed.after);
   const finish = phase(path, 'lifecycle', 'finish');
   assert.deepEqual(finish.before, retry.after);
-  assert.deepEqual(finish.results.map(x => x.status), ['committed', 'committed']);
+  assert.deepEqual(finish.results.map((x:{status:string}) => x.status), ['committed', 'committed']);
   inventory({state: finish.results[0].state}, {}, {'durable-reservation': 3});
   assert.equal(finish.results[0].state.records.reservation['durable-reservation'].values.status, 'cancelled');
   inventory(finish.after, {});
   assert.equal(finish.after.state.revision, 3);
-  assert.deepEqual(finish.after.outbox.map(x => x.event.kind), ['action', 'change', 'create', 'action', 'change', 'change', 'action', 'delete']);
-  assert.equal(new Set(finish.after.outbox.map(x => x.eventId)).size, 8);
+  assert.deepEqual(finish.after.outbox.map((x:{event:{kind:string}}) => x.event.kind), ['action', 'change', 'create', 'action', 'change', 'change', 'action', 'delete']);
+  assert.equal(new Set(finish.after.outbox.map((x:{eventId:string}) => x.eventId)).size, 8);
 });
 
 for (const scenario of ['stale', 'expired']) {

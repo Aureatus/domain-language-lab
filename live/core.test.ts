@@ -1,9 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createApp, forkApp} from './core.ts';
+import {present} from '../semantic/test-support.ts';
 
 const app = () => createApp({clock: () => 1794391200000});
-const accepted = result => { assert.equal(result.ok, true, result.reason); return result; };
+type App=ReturnType<typeof createApp>;
+const accepted=<T extends object>(result:({ok:true}&T)|{ok:false;reason:string}):{ok:true}&T=>{
+  assert.ok(result.ok,'reason' in result?String(result.reason):undefined);return result;
+};
 
 test('trusted forks isolate siblings, prepared snapshots, restores, rule edits and clock contracts', () => {
   let calls=0;
@@ -21,8 +25,8 @@ test('trusted forks isolate siblings, prepared snapshots, restores, rule edits a
   const prepared=forkApp(child,{clock:()=>300});
   const grandchild=forkApp(prepared,{clock:()=>400});
   assert.equal(accepted(grandchild.dispatch('reopen',{issueId:'i1'},'u2')).event.createdAt,400);
-  assert.equal(prepared.state.issues[0].status,'resolved');
-  assert.equal(child.state.issues[0].status,'resolved');
+  assert.equal(present(prepared.state.issues[0]).status,'resolved');
+  assert.equal(present(child.state.issues[0]).status,'resolved');
   assert.equal(forkCalls,1);assert.equal(calls,1);
   audit(child);audit(prepared);audit(grandchild);
   assert.strictEqual(parent.state,state);assert.strictEqual(parent.model,model);
@@ -33,13 +37,13 @@ test('trusted forks isolate siblings, prepared snapshots, restores, rule edits a
   accepted(parent.setRule('comment',{notify:[]}));
   const afterRestore=forkApp(parent,{clock:()=>500});
   assert.equal(afterRestore.state.events.length,0);
-  assert.deepEqual(afterRestore.model.actions.comment.notify,[]);
+  assert.deepEqual(present(afterRestore.model.actions['comment']).notify,[]);
   assert.deepEqual(child.state.events[0],state.events[0]);
   accepted(child.restoreWorkspace(document));
   assert.equal(accepted(child.dispatch('comment',{issueId:'i1',body:'After child restore'},'u1')).event.createdAt,202);
   assert.equal(forkCalls,2);assert.equal(calls,2);
   assert.equal(afterRestore.state.events.length,0);
-  assert.throws(()=>{afterRestore.model.actions.comment.notify.push('opener')},TypeError);
+  assert.throws(()=>{present(afterRestore.model.actions['comment']).notify.push('opener')},TypeError);
   for(const fake of [{},parent.exportWorkspace(),Object.freeze({state,model}),Object.create(parent)]) {
     assert.throws(()=>forkApp(fake),/trusted runtime/);
   }
@@ -104,9 +108,9 @@ test('availability tracks applied revisions and preconditions but does not promi
   assert.equal(runtime.explainAction('assign',{issueId:'i1',assignee:null},'u1').reason,'Assignee is unchanged');
   const broken=createApp({clock:()=>{throw Error('clock unavailable')}});
   assert.equal(broken.explainAction('create',{title:'Valid'},'u1').available,true);
-  assert.equal(broken.dispatch('create',{title:'Valid'},'u1').reason,'clock unavailable');
+  const failed=broken.dispatch('create',{title:'Valid'},'u1');assert.equal(failed.ok,false);assert.equal(failed.reason,'clock unavailable');
 });
-function rejectedWithoutChange(runtime, action, args, actor = 'u1') {
+function rejectedWithoutChange(runtime:App,action:string,args:unknown,actor='u1') {
   const before = runtime.state;
   const model = runtime.model;
   const result = runtime.dispatch(action, args, actor);
@@ -115,7 +119,7 @@ function rejectedWithoutChange(runtime, action, args, actor = 'u1') {
   assert.strictEqual(runtime.state, before);
   assert.strictEqual(runtime.model, model);
 }
-function audit(runtime) {
+function audit(runtime:App) {
   const results = runtime.check();
   assert.ok(results.length >= 6);
   for (const result of results) assert.equal(result.ok, true, result.name);
@@ -154,11 +158,11 @@ test('live create, assign, comment, resolve, reopen and watch workflow', () => {
   accepted(runtime.dispatch('assign', {issueId: 'i3', assignee: 'u3'}, 'u1'));
   accepted(runtime.dispatch('watch', {issueId: 'i3'}, 'u2'));
   const comment = accepted(runtime.dispatch('comment', {issueId: 'i3', body: 'Reproduced on EUR invoices.'}, 'u3'));
-  assert.equal(comment.value.comments[0].author, 'u3');
-  assert.equal(comment.value.comments[0].createdAt, 1794391200000);
+  assert.equal(present(comment.value.comments[0]).author, 'u3');
+  assert.equal(present(comment.value.comments[0]).createdAt, 1794391200000);
   assert.deepEqual(comment.event.recipients.map(item => item.recipient), ['u2']);
   accepted(runtime.dispatch('resolve', {issueId: 'i3'}, 'u1'));
-  assert.equal(runtime.state.issues.at(-1).status, 'resolved');
+  assert.equal(present(runtime.state.issues.at(-1)).status, 'resolved');
   accepted(runtime.dispatch('reopen', {issueId: 'i3'}, 'u2'));
   accepted(runtime.dispatch('watch', {issueId: 'i3'}, 'u2'));
   const final = accepted(runtime.dispatch('assign', {issueId: 'i3', assignee: null}, 'u1'));
@@ -175,10 +179,10 @@ test('policy edits immediately change authorization and derived tool declaration
   const oldTools = runtime.tools();
   accepted(runtime.setRule('resolve', {allowedRoles: ['member'], notify: ['assignee']}));
   assert.equal(runtime.model.revision, 2);
-  const tool = runtime.tools().find(tool => tool.name === 'resolve');
+  const tool=present(runtime.tools().find(tool=>tool.name==='resolve'));
   assert.deepEqual(tool.allowedRoles, ['member']);
   assert.deepEqual(tool.notify, ['assignee']);
-  assert.deepEqual(oldTools.find(tool => tool.name === 'resolve').allowedRoles, ['lead']);
+  assert.deepEqual(present(oldTools.find(tool=>tool.name==='resolve')).allowedRoles, ['lead']);
   rejectedWithoutChange(runtime, 'resolve', {issueId: 'i1'}, 'u1');
   const result = accepted(runtime.dispatch('resolve', {issueId: 'i1'}, 'u2'));
   assert.equal(result.event.revision, 2);
@@ -195,15 +199,15 @@ test('relationship routing excludes actor and deduplicates recipients without lo
   const result = accepted(runtime.dispatch('comment', {issueId: 'i1', body: 'Retry patch is ready.'}, 'u3'));
   const routed = result.event.recipients;
   assert.deepEqual(routed.map(item => item.recipient), ['u2', 'u1']);
-  assert.deepEqual(routed[0].reasons, ['opener', 'assignee', 'watchers']);
-  assert.deepEqual(routed[0].paths, [
+  assert.deepEqual(present(routed[0]).reasons, ['opener', 'assignee', 'watchers']);
+  assert.deepEqual(present(routed[0]).paths, [
     {from: 'i1', relationship: 'opener', to: 'u2'},
     {from: 'i1', relationship: 'assignee', to: 'u2'},
     {from: 'i1', relationship: 'watchers', to: 'u2'},
   ]);
   const inbox = runtime.state.notifications.filter(item => item.eventId === result.event.id);
   assert.equal(inbox.length, 2);
-  assert.deepEqual(inbox[0].reasons, routed[0].reasons);
+  assert.deepEqual(present(inbox[0]).reasons, present(routed[0]).reasons);
   const actorComment = accepted(runtime.dispatch('comment', {issueId: 'i1', body: 'Verified.'}, 'u2'));
   assert.ok(actorComment.event.recipients.every(item => item.recipient !== 'u2'));
   audit(runtime);
@@ -212,23 +216,25 @@ test('relationship routing excludes actor and deduplicates recipients without lo
 test('historical why retains rule, actor, relationship and change snapshots', () => {
   const runtime = app();
   const result = accepted(runtime.dispatch('comment', {issueId: 'i1', body: 'Captured evidence'}, 'u3'));
-  const historical = runtime.explain(result.event.id);
+  const historical=runtime.explain(result.event.id);assert.ok(historical);
   const encoded = JSON.stringify(historical);
   accepted(runtime.dispatch('watch', {issueId: 'i1'}, 'u2')); // remove prior recipient path
   accepted(runtime.dispatch('assign', {issueId: 'i1', assignee: 'u1'}, 'u1'));
   const patch: {notify: string[]; allowedRoles: string[]} = {notify: [], allowedRoles: ['lead']};
   accepted(runtime.setRule('comment', patch));
   patch.notify.push('watchers');
-  assert.deepEqual(runtime.model.actions.comment.notify, []);
+  assert.deepEqual(present(runtime.model.actions['comment']).notify, []);
   assert.equal(JSON.stringify(runtime.explain(result.event.id)), encoded);
   assert.equal(historical.revision, 1);
   assert.equal(historical.relationshipSnapshot.assignee, 'u3');
   assert.deepEqual(historical.relationshipSnapshot.watchers, ['u1', 'u2']);
   assert.throws(() => { historical.rule.notify.push('assignee'); }, TypeError);
   assert.throws(() => { historical.actor.role = 'lead'; }, TypeError);
-  assert.throws(() => { historical.changes[0].after[0].body = 'tampered'; }, TypeError);
-  assert.throws(() => { runtime.state.users[0].role = 'member'; }, TypeError);
-  assert.throws(() => { Object.assign(runtime.model.actions.comment.inputs, {type: 'unknown'}); }, TypeError);
+  const after=present(historical.changes[0]).after;
+  assert.ok(Array.isArray(after));const savedComment=present(after[0]);assert.equal(typeof savedComment.body,'string');
+  assert.throws(() => { savedComment.body = 'tampered'; }, TypeError);
+  assert.throws(() => { present(runtime.state.users[0]).role = 'member'; }, TypeError);
+  assert.throws(() => { Object.assign(present(runtime.model.actions['comment']).inputs, {type: 'unknown'}); }, TypeError);
   const future = accepted(runtime.dispatch('comment', {issueId: 'i1', body: 'Future rule'}, 'u1'));
   assert.deepEqual(future.event.recipients, []);
   audit(runtime);
@@ -275,8 +281,8 @@ test('tool schemas derive from declarations and tool/direct invocation have exac
   const tool = app();
   assert.equal(direct.tools().length, 6);
   for (const descriptor of direct.tools()) {
-    assert.deepEqual(descriptor.parameters, direct.model.actions[descriptor.name].inputs);
-    assert.equal(descriptor.label, direct.model.actions[descriptor.name].label);
+    assert.deepEqual(descriptor.parameters, present(direct.model.actions[descriptor.name]).inputs);
+    assert.equal(descriptor.label, present(direct.model.actions[descriptor.name]).label);
     assert.equal(descriptor.parameters.additionalProperties, false);
   }
   for (const [name, args, actor] of [
@@ -294,7 +300,7 @@ test('commit groups issue changes, event and inbox; retained state sees no parti
   const runtime = app();
   const before = runtime.state;
   const result = accepted(runtime.dispatch('resolve', {issueId: 'i1'}, 'u1'));
-  assert.equal(before.issues[0].status, 'open');
+  assert.equal(present(before.issues[0]).status, 'open');
   assert.equal(before.events.length, 0);
   assert.equal(before.notifications.length, 0);
   assert.notStrictEqual(runtime.state, before);
@@ -303,7 +309,7 @@ test('commit groups issue changes, event and inbox; retained state sees no parti
   ]);
   assert.equal(runtime.state.events.length, 1);
   assert.equal(runtime.state.notifications.length, 2);
-  assert.equal(runtime.state.issues[0].version, 2);
+  assert.equal(present(runtime.state.issues[0]).version, 2);
   audit(runtime);
 });
 
@@ -323,13 +329,13 @@ test('failing clocks do not publish a partial mutation or consume event identity
   assert.equal(result.event.createdAt, 1);
 });
 
-const mutable = value => JSON.parse(JSON.stringify(value));
+const mutable=<T>(value:T):T=>JSON.parse(JSON.stringify(value));
 
 function mixedHistory() {
   let time = 1794391200000;
   const runtime = createApp({clock: () => time += 37});
   const prefixes = [{state: runtime.state, model: runtime.model}];
-  const save = result => {
+  const save=(result:{ok:true}|{ok:false;reason:string})=> {
     accepted(result);
     prefixes.push({state: runtime.state, model: runtime.model});
   };
@@ -360,12 +366,12 @@ test('workspace roundtrip preserves mixed history, IDs, revisions and event-time
   assert.deepEqual(document.journal[3], {step: 4, kind: 'setRule', action: 'comment',
     patch: {notify: ['assignee'], allowedRoles: ['member']}, revision: 2});
   for (const event of runtime.state.events) assert.deepEqual(restored.explain(event.id), event);
-  assert.equal(restored.explain('e3').rule.notify.length, 3);
-  assert.deepEqual(restored.explain('e5').rule.notify, ['assignee']);
-  assert.equal(restored.explain('e3').revision, 1);
-  assert.equal(restored.explain('e5').revision, 2);
-  assert.equal(restored.state.issues[2].comments[0].id, 'c3');
-  assert.equal(restored.state.issues[2].comments[1].id, 'c5');
+  assert.equal(present(restored.explain('e3')??undefined).rule.notify.length, 3);
+  assert.deepEqual(present(restored.explain('e5')??undefined).rule.notify, ['assignee']);
+  assert.equal(present(restored.explain('e3')??undefined).revision, 1);
+  assert.equal(present(restored.explain('e5')??undefined).revision, 2);
+  assert.equal(present(present(restored.state.issues[2]).comments[0]).id, 'c3');
+  assert.equal(present(present(restored.state.issues[2]).comments[1]).id, 'c5');
   const next = accepted(restored.dispatch('create', {title: 'Future issue'}, 'u1'));
   assert.equal(next.value.id, 'i4');
   assert.equal(next.event.id, 'e9');
@@ -380,16 +386,18 @@ test('exports are deeply detached frozen JSON and do not journal rejected operat
   const first = runtime.exportWorkspace();
   const second = runtime.exportWorkspace();
   assert.notStrictEqual(first, second);
-  assert.notStrictEqual(first.journal[0].args, runtime.state.events[0].args);
-  assert.throws(() => { first.journal[0].args.title = 'Changed'; }, TypeError);
-  assert.throws(() => { first.journal.push({}); }, TypeError);
+  const firstEntry=present(first.journal[0]);assert.equal(firstEntry.kind,'dispatch');
+  assert.notStrictEqual(firstEntry.args,present(runtime.state.events[0]).args);
+  assert.throws(() => { firstEntry.args['title'] = 'Changed'; }, TypeError);
+  assert.throws(() => { Array.prototype.push.call(first.journal,{}); }, TypeError);
   rejectedWithoutChange(runtime, 'resolve', {issueId: 'i1'}, 'u2');
   assert.equal(runtime.setRule('comment', {notify: ['unknown']}).ok, false);
   assert.deepEqual(runtime.exportWorkspace(), first);
   const patch: {notify: string[]} = {notify: []};
   accepted(runtime.setRule('comment', patch));
   patch.notify.push('opener');
-  assert.deepEqual(runtime.exportWorkspace().journal[1].patch.notify, []);
+  const edited=present(runtime.exportWorkspace().journal[1]);assert.equal(edited.kind,'setRule');
+  assert.deepEqual(edited.patch['notify'],[]);
   assert.equal(first.journal.length, 1);
   assert.deepEqual(JSON.parse(JSON.stringify(first)), first);
 });
@@ -401,11 +409,11 @@ test('every replay prefix is read-only, exact, and never changes the live journa
   const journal = runtime.exportWorkspace();
   for (let index = prefixes.length - 1; index >= 0; index--) {
     const preview = accepted(runtime.previewWorkspace(index));
-    assert.deepEqual(preview.state, prefixes[index].state);
-    assert.deepEqual(preview.model, prefixes[index].model);
-    assert.throws(() => { preview.state.issues[0].title = 'Changed'; }, TypeError);
-    assert.throws(() => { preview.model.actions.create.notify.push('opener'); }, TypeError);
-    assert.equal(preview.dispatch, undefined);
+    assert.deepEqual(preview.state, present(prefixes[index]).state);
+    assert.deepEqual(preview.model, present(prefixes[index]).model);
+    assert.throws(() => { present(preview.state.issues[0]).title = 'Changed'; }, TypeError);
+    assert.throws(() => { present(preview.model.actions['create']).notify.push('opener'); }, TypeError);
+    assert.equal(Reflect.get(preview,'dispatch'),undefined);
   }
   for (const count of [-1, 0.5, NaN, Infinity, '1', null, undefined, prefixes.length]) {
     assert.equal(runtime.previewWorkspace(count).ok, false);
@@ -424,7 +432,7 @@ test('restore replaces privately reconstructed state atomically and retains orig
   accepted(runtime.restoreWorkspace(source.exportWorkspace()));
   assert.equal(calls, 1);
   assert.deepEqual(runtime.state, source.state);
-  assert.equal(before.events[0].args.body, 'Old state');
+  assert.equal(present(before.events[0]).args['body'], 'Old state');
   accepted(runtime.previewWorkspace(5));
   assert.equal(calls, 1);
   const next = accepted(runtime.dispatch('comment', {issueId: 'i3', body: 'New time'}, 'u2'));
@@ -443,40 +451,42 @@ test('malformed imports including late replay failures preserve state/model/even
   const state = runtime.state;
   const model = runtime.model;
   const events = runtime.state.events;
-  const edits = [
+  type EditableEntry={kind?:unknown;step?:unknown;action?:unknown;actorId?:unknown;args:Record<string,unknown>;eventId?:unknown;issueId?:unknown;revision?:unknown;createdAt?:unknown;patch:Record<string,unknown>};
+  type EditableDocument={format?:unknown;seedVersion?:unknown;extra?:unknown;journal:EditableEntry[]};
+  const edits:((doc:EditableDocument)=>void)[] = [
     doc => { doc.format = 'live-issue-workspace/v2'; },
     doc => { doc.seedVersion = 2; },
     doc => { doc.extra = true; },
     doc => { delete doc.format; },
-    doc => { doc.journal = {}; },
-    doc => { doc.journal[0].kind = 'network'; },
-    doc => { doc.journal[0].step = 2; },
-    doc => { doc.journal[0].action = 'unknown'; },
-    doc => { doc.journal[0].action = ['create']; },
-    doc => { doc.journal[0].actorId = 'u9'; },
-    doc => { doc.journal[0].args.title = ' '; },
-    doc => { delete doc.journal[0].args.description; }, // canonical validated arguments required
-    doc => { doc.journal[0].args.schema = {type: 'unknown'}; },
-    doc => { doc.journal[0].eventId = 'e99'; },
-    doc => { doc.journal[0].issueId = 'i99'; },
-    doc => { doc.journal[0].revision = 99; },
-    doc => { doc.journal[0].createdAt = Infinity; },
-    doc => { doc.journal[0].createdAt = NaN; },
-    doc => { doc.journal[0].createdAt = 1e100; },
-    doc => { doc.journal[0].createdAt = '2026-11-11'; },
-    doc => { doc.journal[1].args.issueId = 'i9'; },
-    doc => { doc.journal[1].args.assignee = 'u9'; },
-    doc => { doc.journal[3].patch.inputs = {type: 'mystery'}; },
-    doc => { doc.journal[3].patch.notify = ['unknown']; },
-    doc => { doc.journal[3].patch.notify = ['opener', 'opener']; },
-    doc => { doc.journal[3].patch.allowedRoles = ['admin']; },
-    doc => { doc.journal.at(-1).revision = 100; }, // late failure after accepted actions
-    doc => { doc.journal.at(-1).patch = {}; },
+    doc => { Object.assign(doc,{journal:{}}); },
+    doc => { present(doc.journal[0]).kind = 'network'; },
+    doc => { present(doc.journal[0]).step = 2; },
+    doc => { present(doc.journal[0]).action = 'unknown'; },
+    doc => { present(doc.journal[0]).action = ['create']; },
+    doc => { present(doc.journal[0]).actorId = 'u9'; },
+    doc => { present(doc.journal[0]).args['title'] = ' '; },
+    doc => { delete present(doc.journal[0]).args['description']; }, // canonical validated arguments required
+    doc => { present(doc.journal[0]).args['schema'] = {type: 'unknown'}; },
+    doc => { present(doc.journal[0]).eventId = 'e99'; },
+    doc => { present(doc.journal[0]).issueId = 'i99'; },
+    doc => { present(doc.journal[0]).revision = 99; },
+    doc => { present(doc.journal[0]).createdAt = Infinity; },
+    doc => { present(doc.journal[0]).createdAt = NaN; },
+    doc => { present(doc.journal[0]).createdAt = 1e100; },
+    doc => { present(doc.journal[0]).createdAt = '2026-11-11'; },
+    doc => { present(doc.journal[1]).args['issueId'] = 'i9'; },
+    doc => { present(doc.journal[1]).args['assignee'] = 'u9'; },
+    doc => { present(doc.journal[3]).patch['inputs'] = {type: 'mystery'}; },
+    doc => { present(doc.journal[3]).patch['notify'] = ['unknown']; },
+    doc => { present(doc.journal[3]).patch['notify'] = ['opener', 'opener']; },
+    doc => { present(doc.journal[3]).patch['allowedRoles'] = ['admin']; },
+    doc => { present(doc.journal.at(-1)).revision = 100; }, // late failure after accepted actions
+    doc => { present(doc.journal.at(-1)).patch = {}; },
     doc => { doc.journal.reverse(); },
-    doc => { doc.journal.push(doc.journal.at(-1)); },
+    doc => { doc.journal.push(present(doc.journal.at(-1))); },
   ];
   for (const edit of edits) {
-    const document = mutable(valid);
+    const document:EditableDocument=JSON.parse(JSON.stringify(valid));
     edit(document);
     const result = runtime.restoreWorkspace(document);
     assert.equal(result.ok, false, JSON.stringify(document));
@@ -496,7 +506,7 @@ test('malformed imports including late replay failures preserve state/model/even
 test('imports reject lossy JSON, executable properties, oversized documents and history', () => {
   const runtime = app();
   const state = runtime.state;
-  const document = () => mutable(runtime.exportWorkspace());
+  const document=():{format:string;journal:unknown[]}=>JSON.parse(JSON.stringify(runtime.exportWorkspace()));
   const cycle = document();
   cycle.journal.push(cycle);
   const sparse = document();
@@ -504,7 +514,7 @@ test('imports reject lossy JSON, executable properties, oversized documents and 
   const accessor = document();
   Object.defineProperty(accessor, 'format', {enumerable: true, get() { throw Error('must not execute'); }});
   const symbol = document();
-  symbol[Symbol('hidden')] = true;
+  Object.defineProperty(symbol,Symbol('hidden'),{value:true});
   const many = document();
   many.journal = Array(501).fill({});
   const large = document();

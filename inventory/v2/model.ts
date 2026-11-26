@@ -12,7 +12,7 @@ const update = (id: string, target: string, name: string, value: Expr) => ({id, 
 
 function reserveAction(): Action {
   const stock = 'reserve.stock';
-  const s = name => field(stock, name);
+  const s = (name:string) => field(stock, name);
   return {
     inputs: {stockId: string, reservationId: string, quantity: integer(1), expiresAt: integer(0)},
     bindings: [{id: stock, resource: 'stock', key: input('stockId')}],
@@ -37,8 +37,8 @@ function reserveAction(): Action {
 function terminalAction(kind: 'cancel' | 'expire'): Action {
   const reservation = `${kind}.reservation`;
   const stock = `${kind}.stock`;
-  const r = name => field(reservation, name);
-  const s = name => field(stock, name);
+  const r = (name:string) => field(reservation, name);
+  const s = (name:string) => field(stock, name);
   const expiry = kind === 'expire';
   return {
     inputs: {stockId: string, reservationId: string},

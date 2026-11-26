@@ -1,13 +1,15 @@
+import {errorMessage,httpErrorStatus} from '../errors.ts';
 import {createServer} from 'node:http';
 import type {ServerResponse} from 'node:http';
 import {mkdir,readFile} from 'node:fs/promises';
 import {resolve} from 'node:path';
-import {createRequire} from 'node:module';
 import {randomUUID,createHash} from 'node:crypto';
 import {browserBundle} from '../browser-build.ts';
 import {isDeepStrictEqual} from 'node:util';
 import {deriveApplication,buildInvocation,inputDefaults} from './derive.ts';
-import {makeDurableRuntime,makeDurableStore,initializeDurableState,durableState,durableExecute,durableApprove,durableResume,durablePending,closeDurableStore} from '../adapters/effect/durable.ts';
+import {Effect} from '../adapters/effect/index.ts';
+import type {InvocationInput, State} from '../semantic/v2/types.ts';
+import {makeDurableStore,initializeDurableState,durableState,durableExecute,durableApprove,durableResume,durablePending,closeDurableStore} from '../adapters/effect/durable.ts';
 import {
   decodeJson,
   decodeStrictJson,
@@ -22,36 +24,36 @@ import {
   ApplicationResumeRequestSchema,
 } from '../adapters/effect/json.ts';
 
-const requestSchemas={
-  preview:ApplicationPreviewRequestSchema,
-  execute:ApplicationExecuteRequestSchema,
-  reconcile:ApplicationReconcileRequestSchema,
-  grant:ApplicationGrantRequestSchema,
-  resume:ApplicationResumeRequestSchema,
-};
-
-const require=createRequire(new URL('../adapters/effect/package.json',import.meta.url));
-const Effect=await import(require.resolve('effect/Effect')),run=Effect.runSync;
+const run=Effect.runSync;
 const operationId=()=>`application-${randomUUID()}`;
-const fail=(message,status=400)=>Object.assign(Error(message),{httpStatus:status});
-const unwrap=r=>r.status==='duplicate'?unwrap(r.result):r;
+const fail=(message:string,status=400)=>Object.assign(Error(message),{httpStatus:status});
+type Result={status:'prepared'|'pending'|'committed'|'rejected'|'approved'};
+const unwrap=(r:Result|{status:'duplicate';result:Result}):Result=>r.status==='duplicate'?r.result:r;
 const browserFiles=Object.fromEntries(Object.entries({
   '/':'index.html','/index.html':'index.html','/style.css':'style.css'
 }).map(([path,file])=>[path,new URL(file,import.meta.url)]));
 const applicationBundle=browserBundle(new URL('./browser.ts',import.meta.url));
-export function resultMessage(r){
+export function resultMessage(r:{status:string;code?:string}){
   if(r.status==='committed')return 'Saved. Your records are up to date.';
   if(r.status==='prepared')return 'Automatically approved';
   if(r.status==='pending')return 'Approval needed. No changes have been made.';
-  return ({stale:'Things changed after this request was sent. No changes were made. Please send a new request.',precondition:'This request does not meet the requirements. Check the available balance and inputs.',denied:'You do not have permission for this action.','missing-record':'This person does not have the required record.','unauthorized-approval':'Only a named approver can approve this request.',consumed:'This request has already been completed.'})[r.code]??`Could not complete this request (${r.code??r.status}). No changes were made.`;
+  const messages=new Map([
+    ['stale','Things changed after this request was sent. No changes were made. Please send a new request.'],
+    ['precondition','This request does not meet the requirements. Check the available balance and inputs.'],
+    ['denied','You do not have permission for this action.'],
+    ['missing-record','This person does not have the required record.'],
+    ['unauthorized-approval','Only a named approver can approve this request.'],
+    ['consumed','This request has already been completed.'],
+  ]);
+  return (r.code===undefined?undefined:messages.get(r.code))??`Could not complete this request (${r.code??r.status}). No changes were made.`;
 }
-export async function createApplicationServer(declaration,{directory,port=0,database='application.sqlite',staticFiles=browserFiles}: {directory?: string; port?: number; database?: string; staticFiles?: Record<string, URL>}={}) {
-  const derived=deriveApplication(declaration),{model,contract}=derived;
+export async function createApplicationServer(declaration:unknown,{directory,port=0,database='application.sqlite',staticFiles=browserFiles}: {directory?: string; port?: number; database?: string; staticFiles?: Record<string, URL>}={}) {
+  const derived=deriveApplication(declaration),{model,contract,runtime}=derived;
   const contractId=createHash('sha256').update(encodeJson({model,contract})).digest('hex');
   if(directory===undefined)throw new TypeError('Application storage directory required.');
   await mkdir(directory,{recursive:true});
-  const runtime=makeDurableRuntime(model),db=run(makeDurableStore(resolve(directory,database),{busyTimeout:250}));
-  let server,closed=false;const streams=new Set<ServerResponse>();
+  const db=run(makeDurableStore(resolve(directory,database),{busyTimeout:250}));
+  let closed=false;const streams=new Set<ServerResponse>();
   try{
     if(!db.prepare('SELECT value FROM durable_meta WHERE key=?').get('format'))run(initializeDurableState(runtime,db,derived.initialState));else run(durableState(runtime,db));
     // The invocation journal owns the outcome. Keep just the pre-elaboration
@@ -60,21 +62,21 @@ export async function createApplicationServer(declaration,{directory,port=0,data
       invocation_id TEXT PRIMARY KEY REFERENCES durable_invocations(id),
       contract_id TEXT NOT NULL, args_json TEXT NOT NULL
     )`);
-    const submissionKey=id=>`submission-${createHash('sha256').update(encodeJson(id)).digest('hex')}`;
+    const submissionKey=(id:string)=>`submission-${createHash('sha256').update(encodeJson(id)).digest('hex')}`;
     const storedSubmission=db.prepare(`SELECT i.command_json,i.outcome_json,s.contract_id,s.args_json
       FROM application_submissions s JOIN durable_invocations i ON i.id=s.invocation_id
       WHERE s.invocation_id=?`);
-    function lookup(key,body,execute){
+    function lookup(key:string,body:{actor:string;action?:string;args?:unknown},execute:boolean){
       const row=storedSubmission.get(key);
       if(!row)return null;
-      const invocation=decodeJson(DurableInvocationSchema,row.command_json);
+      const invocation=decodeJson(DurableInvocationSchema,row['command_json']);
       if(invocation.actor!==body.actor)throw fail('This submission belongs to another person.',403);
-      if(row.contract_id!==contractId||execute&&(invocation.action!==body.action||!isDeepStrictEqual(decodeJsonValue(row.args_json),decodeJsonValue(encodeJson(body.args)))))
+      if(row['contract_id']!==contractId||execute&&(invocation.action!==body.action||!isDeepStrictEqual(decodeJsonValue(row['args_json']),decodeJsonValue(encodeJson(body.args)))))
         throw fail('Submission ID already bound to another command or contract.',409);
-      return {invocation,result:decodeJson(DurableOutcomeSchema,row.outcome_json)};
+      return {invocation,result:decodeJson(DurableOutcomeSchema,row['outcome_json'])};
     }
     const state=()=>run(durableState(runtime,db));
-    function preview(actor,action,args,current){
+    function preview(actor:string,action:string,args:unknown,current:State){
       const invocation=buildInvocation(contract,{actor,action,args,id:operationId(),clock:Date.now()});
       const result=runtime.prepare(current,invocation);
       return {invocation,result};
@@ -83,34 +85,51 @@ export async function createApplicationServer(declaration,{directory,port=0,data
       // Each adapter projection opens its own read transaction. A different
       // writer process can commit between them; never label a mixed snapshot
       // with the newer ledger version.
-      const version=()=>db.prepare('SELECT (SELECT count(*) FROM durable_invocations) + (SELECT count(*) FROM durable_operations) AS version').get().version;
+      const version=()=>{
+        const value=db.prepare('SELECT (SELECT count(*) FROM durable_invocations) + (SELECT count(*) FROM durable_operations) AS version').get()?.['version'];
+        if(typeof value!=='number')throw Error('Missing snapshot version.');
+        return value;
+      };
       for(let attempt=0;attempt<4;attempt++){
         const snapshotVersion=version(),value=readSnapshot(snapshotVersion);
         if(version()===snapshotVersion)return value;
       }
       throw fail('Records changed during refresh. Reconnect to see the current snapshot.',503);
     }
-    function readSnapshot(snapshotVersion){
+    function readSnapshot(snapshotVersion:number){
       const current=state();
       const pending=db.prepare('SELECT invocation_id FROM durable_pending ORDER BY rowid').all().map(row=>{
-        const p=run(durablePending(runtime,db,row.invocation_id));
+        const id=row['invocation_id'];
+        if(typeof id!=='string')throw Error('Invalid pending invocation ID.');
+        const p=run(durablePending(runtime,db,id));
+        if(!p)throw Error('Pending invocation disappeared.');
         return {id:p.invocationId,status:p.status,invocation:p.request.invocation,requirements:p.request.requirements,grants:p.grants,stale:p.status==='pending'&&!isDeepStrictEqual(p.request.prestate,current)};
       });
       // Availability is only an interpreter-derived display hint. Every submit is
       // independently validated/authorized against fresh durable state.
-      const defaults={},availability={};
-      for(const actor of contract.actors){defaults[actor.id]={};availability[actor.id]={};for(const action of Object.keys(contract.actions)){
-        const args=inputDefaults(contract,action,current,actor.id);defaults[actor.id][action]=args;
-        try{const {result}=preview(actor.id,action,args,current);availability[actor.id][action]=result.status!=='rejected'||!['denied','missing-record'].includes(result.code);}catch{availability[actor.id][action]=true;}
+      const defaults:Record<string,Record<string,ReturnType<typeof inputDefaults>>>={},availability:Record<string,Record<string,boolean>>={};
+      for(const actor of contract.actors){const inputs:Record<string,ReturnType<typeof inputDefaults>>={},available:Record<string,boolean>={};defaults[actor.id]=inputs;availability[actor.id]=available;for(const action of Object.keys(contract.actions)){
+        const args=inputDefaults(contract,action,current,actor.id);inputs[action]=args;
+        try{const {result}=preview(actor.id,action,args,current);available[action]=result.status!=='rejected'||!['denied','missing-record'].includes(result.code);}catch{available[action]=true;}
       }}
       return {contractId,snapshotVersion,state:current,pending,defaults,availability};
     }
-    const evidence=(invocation,result,phase)=>({format:'application-evidence/v1',phase,invocation,policies:model.actions[invocation.action].policies,preconditions:model.actions[invocation.action].preconditions,group:{updates:model.actions[invocation.action].updates,inserts:model.actions[invocation.action].inserts,deletes:model.actions[invocation.action].deletes},outcome:{status:result.status,code:result.code??null,requirements:result.request?.requirements??[],events:result.events??[]},method:'Actual interpreter/durable result and declared AST; not a parser trace or ordered guard evaluation.'});
+    const evidence=(invocation:InvocationInput,result:{status:string;code?:string;requirements?:unknown;events?:unknown},phase:string)=>{
+      const action=model.actions[invocation.action];
+      if(!action)throw Error('Missing evidence action declaration.');
+      const {policies,preconditions,updates,inserts,deletes}=action;
+      return {format:'application-evidence/v1',phase,invocation,policies,preconditions,group:{updates,inserts,deletes},outcome:{status:result.status,code:result.code??null,requirements:result.requirements??[],events:result.events??[]},method:'Actual interpreter/durable result and declared AST; not a parser trace or ordered guard evaluation.'};
+    };
     const publish=()=>{const event=`event: update\ndata: ${encodeJson(snapshot())}\n\n`;for(const res of streams)if(!res.write(event))res.destroy();};
-    server=createServer(async(req,res)=>{
-      const json=(status,value)=>{res.writeHead(status,{'content-type':'application/json','cache-control':'no-store'});res.end(encodeJson(value));};
+    const portOf=():number=>{
+      const address=server.address();
+      if(!address||typeof address==='string')throw Error('Expected a listening TCP server.');
+      return address.port;
+    };
+    const server=createServer(async(req,res)=>{
+      const json=(status:number,value:unknown)=>{res.writeHead(status,{'content-type':'application/json','cache-control':'no-store'});res.end(encodeJson(value));};
       try{
-        if(!req.headers.host||![`127.0.0.1:${server.address().port}`,`localhost:${server.address().port}`].includes(req.headers.host))throw fail('Unexpected host.',403);
+        if(!req.headers.host||![`127.0.0.1:${portOf()}`,`localhost:${portOf()}`].includes(req.headers.host))throw fail('Unexpected host.',403);
         if(req.headers.origin&&req.headers.origin!==`http://${req.headers.host}`)throw fail('Cross-origin requests are not supported.',403);
         if(req.headers['sec-fetch-site']&&!['same-origin','none'].includes(req.headers['sec-fetch-site']))throw fail('Cross-site requests are not supported.',403);
         const url=new URL(req.url??'/',`http://${req.headers.host}`);
@@ -122,12 +141,25 @@ export async function createApplicationServer(declaration,{directory,port=0,data
         if(req.method==='POST'&&['/api/actions/preview','/api/actions/execute','/api/actions/reconcile','/api/approvals/grant','/api/approvals/resume'].includes(url.pathname)){
           if(req.headers['content-type']?.split(';')[0]!=='application/json')throw fail('Expected JSON.',415);
           let bytes=0;const chunks: Buffer[]=[];for await(const chunk of req){bytes+=chunk.length;if(bytes>16384)throw fail('Request too large.',413);chunks.push(chunk);}
-          const kind=url.pathname.slice(url.pathname.lastIndexOf('/')+1);let body,result,invocation,key,replayed=false;
-          try{body=decodeStrictJson(requestSchemas[kind],Buffer.concat(chunks).toString());}catch(e){throw fail(e.message||'Invalid JSON.');}
+          const kind=url.pathname.slice(url.pathname.lastIndexOf('/')+1);
+          let body:{actor:string;action?:string;args?:unknown;submissionId?:string;expectedContractId?:string;requestId?:string;policyId?:string};
+          let result:{status:string}|undefined;
+          let invocation:InvocationInput|undefined,key:string|undefined,replayed=false;
+          const input=Buffer.concat(chunks).toString();
+          try{
+            switch(kind){
+              case 'preview':body=decodeStrictJson(ApplicationPreviewRequestSchema,input);break;
+              case 'execute':body=decodeStrictJson(ApplicationExecuteRequestSchema,input);break;
+              case 'reconcile':body=decodeStrictJson(ApplicationReconcileRequestSchema,input);break;
+              case 'grant':body=decodeStrictJson(ApplicationGrantRequestSchema,input);break;
+              case 'resume':body=decodeStrictJson(ApplicationResumeRequestSchema,input);break;
+              default:throw Error('Unknown operation.');
+            }
+          }catch(e){throw fail(errorMessage(e)||'Invalid JSON.');}
           try{
             if(!contract.actors.some(a=>a.id===body.actor))throw Error('Choose a known person.');
-            if(Object.hasOwn(body,'submissionId'))key=submissionKey(body.submissionId);
-          }catch(e){throw fail(e.message);}
+            if(body.submissionId!==undefined)key=submissionKey(body.submissionId);
+          }catch(e){throw fail(errorMessage(e));}
            if(Object.hasOwn(body,'expectedContractId')&&body.expectedContractId!==contractId)throw fail('Application contract changed. Reload before continuing.',409);
            if(key){
             const stored=lookup(key,body,kind==='execute');
@@ -136,9 +168,12 @@ export async function createApplicationServer(declaration,{directory,port=0,data
           }
           if(kind==='execute'||kind==='preview'){
             if(!replayed){
-               try{invocation=buildInvocation(contract,{...body,id:key??operationId(),clock:Date.now()});}catch(e){
-                 if(key)return json(400,{error:e.message,disposition:'not-submitted',contractId,submissionId:body.submissionId});
-                 throw fail(e.message);
+               try{
+                 if(body.action===undefined)throw Error('Missing action.');
+                 invocation=buildInvocation(contract,{...body,action:body.action,args:body.args,id:key??operationId(),clock:Date.now()});
+               }catch(e){
+                 if(key)return json(400,{error:errorMessage(e),disposition:'not-submitted',contractId,submissionId:body.submissionId});
+                 throw fail(errorMessage(e));
                }
               if(kind==='preview')result=runtime.prepare(state(),invocation);
               else{
@@ -147,7 +182,7 @@ export async function createApplicationServer(declaration,{directory,port=0,data
                 }}:undefined));
                 // Another process may have won after our lookup, with a different
                 // host clock. Compare the client command, never retry with a new ID.
-                if(key&&(outcome.status==='duplicate'||outcome.code==='invocation-conflict')){
+                if(key&&(outcome.status==='duplicate'||outcome.status==='rejected'&&outcome.code==='invocation-conflict')){
                   const stored=lookup(key,body,true);
                   if(!stored)throw fail('Submission ID unavailable.',409);
                   ({invocation,result}=stored);replayed=true;
@@ -156,10 +191,12 @@ export async function createApplicationServer(declaration,{directory,port=0,data
             }
           }
           else if(kind==='grant'){
+            if(body.requestId===undefined||body.policyId===undefined)throw fail('Missing request or policy.');
             result=unwrap(run(durableApprove(runtime,db,{id:operationId(),invocationId:body.requestId,policyId:body.policyId},{authenticatedApprover:body.actor})));
             invocation=run(durablePending(runtime,db,body.requestId))?.request.invocation;
           }
           else if(kind==='resume'){
+            if(body.requestId===undefined)throw fail('Missing request.');
             const pending=run(durablePending(runtime,db,body.requestId));if(!pending)throw fail('Request not found.',404);
             // No arbitrary caller can trigger a previously granted invocation.
             const eligible=pending.request.invocation.actor===body.actor||pending.request.requirements.some(r=>r.approvers.includes(body.actor));
@@ -168,19 +205,25 @@ export async function createApplicationServer(declaration,{directory,port=0,data
             invocation=pending.request.invocation;
           }
           if(kind!=='preview'&&!replayed)publish();
-          return json(200,{submissionId:body.submissionId,status:result.status,code:result.code,message:kind==='grant'&&result.status==='approved'?'Approval saved. Complete the request separately.':resultMessage(result),args:invocation?.args,requirements:result.request?.requirements,evidence:invocation?evidence(invocation,result,kind==='reconcile'?'execute':kind):undefined,snapshot:kind==='preview'?undefined:snapshot(),contractId});
+          if(!result)throw Error('Missing operation result.');
+          const code='code' in result&&typeof result.code==='string'?result.code:undefined;
+          const request='request' in result?result.request:undefined;
+          const requirements=request&&typeof request==='object'&&'requirements' in request?request.requirements:undefined;
+          const projection={status:result.status,...(code===undefined?{}:{code}),requirements,events:'events' in result?result.events:undefined};
+          return json(200,{submissionId:body.submissionId,status:result.status,code,message:kind==='grant'&&result.status==='approved'?'Approval saved. Complete the request separately.':resultMessage(projection),args:invocation?.args,requirements,evidence:invocation?evidence(invocation,projection,kind==='reconcile'?'execute':kind):undefined,snapshot:kind==='preview'?undefined:snapshot(),contractId});
         }
         if(req.method==='GET'&&staticFiles===browserFiles&&url.pathname==='/app.js'){
           const script=await applicationBundle();
           res.writeHead(200,{'content-type':'text/javascript','x-content-type-options':'nosniff','cache-control':'no-store'});
           return res.end(script);
         }
-        if(req.method!=='GET'||!Object.hasOwn(staticFiles,url.pathname))throw fail('Not found.',404);
-        const file=staticFiles[url.pathname],data=await readFile(file);
+        const file=Object.hasOwn(staticFiles,url.pathname)?staticFiles[url.pathname]:undefined;
+        if(req.method!=='GET'||!file)throw fail('Not found.',404);
+        const data=await readFile(file);
         res.writeHead(200,{'content-type':file.pathname.endsWith('.html')?'text/html; charset=utf-8':file.pathname.endsWith('.css')?'text/css':'text/javascript','x-content-type-options':'nosniff','cache-control':'no-store'});res.end(data);
-      }catch(e){if(res.headersSent)res.destroy();else json(e.httpStatus??500,{error:e.httpStatus?e.message:'Storage failed. The operation may have been recorded; reconnect before retrying.'});}
+      }catch(e){const status=httpErrorStatus(e);if(res.headersSent)res.destroy();else json(status??500,{error:status?errorMessage(e):'Storage failed. The operation may have been recorded; reconnect before retrying.'});}
     });
-    await new Promise((yes,no)=>{server.once('error',no);server.listen(port,'127.0.0.1',yes);});
-    return {url:`http://127.0.0.1:${server.address().port}`,async close(){if(closed)return;closed=true;for(const res of streams)res.end();streams.clear();await new Promise<void>((yes,no)=>{server.close(e=>e?no(e):yes());server.closeAllConnections();});run(closeDurableStore(db));}};
+    await new Promise<void>((yes,no)=>{server.once('error',no);server.listen(port,'127.0.0.1',yes);});
+    return {url:`http://127.0.0.1:${portOf()}`,async close(){if(closed)return;closed=true;for(const res of streams)res.end();streams.clear();await new Promise<void>((yes,no)=>{server.close(e=>e?no(e):yes());server.closeAllConnections();});run(closeDurableStore(db));}};
   }catch(e){run(closeDurableStore(db));throw e;}
 }

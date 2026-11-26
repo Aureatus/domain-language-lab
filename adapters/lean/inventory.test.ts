@@ -4,31 +4,33 @@ import {mkdirSync, readFileSync, writeFileSync} from 'node:fs';
 import {resolve} from 'node:path';
 import {spawnSync} from 'node:child_process';
 import {inventoryModel, initialState, invocation} from '../../inventory/model.ts';
+import type {Model} from '../../semantic/core.ts';
 import {createInterpreter} from '../../semantic/core.ts';
 import {generate, hash, Unsupported} from './generate.ts';
 import {PINNED_LEAN} from './check.ts';
 import {projectInventory, generateInventory, checkInventory, obligation} from './inventory.ts';
+import {present} from '../../semantic/test-support.ts';
 
 const out = '/tmp/opencode/inventory-evidence';
-const action = m => m.actions['reservation.reserve'];
-const update = m => action(m).updates.find(u => u.id === 'reservation.reserve.set.available');
-const record = (available, revision = 0, version = 0) => `{ capacity := 5, available := ${available}, revision := ${revision}, version := ${version} }`;
+const action = (m:Model) => present(m.actions['reservation.reserve']);
+const update = (m:Model) => present(action(m).updates.find(u => u.id === 'reservation.reserve.set.available'));
+const record = (available:unknown, revision = 0, version = 0) => `{ capacity := 5, available := ${available}, revision := ${revision}, version := ${version} }`;
 
-function crossCheck(name, source, cases) {
+function crossCheck(name:string,source:Model,cases:{available?:number;quantity?:number;expected:string;post?:number}[]) {
   mkdirSync(out, {recursive: true});
   const {code} = generateInventory(source);
-  let lean = code.split('-- Independent source obligation:')[0];
+  let lean = present(code.split('-- Independent source obligation:')[0]);
   for (const [index, c] of cases.entries()) {
     const pre = structuredClone(initialState);
-    pre.records.stock.camera.values.available = c.available ?? 5;
+    present(present(pre.records['stock'])['camera']).values['available'] = c.available ?? 5;
     const call = invocation(`cross${index}`, 'reserve', 'slotA', 'alice', 10, c.quantity ?? 3);
     const actual = createInterpreter(source).execute(pre, call);
     assert.ok(actual.status === 'committed' || actual.status === 'rejected');
     assert.equal(actual.status === 'committed' ? 'committed' : actual.code, c.expected);
     const expected = actual.status === 'committed'
-      ? `.committed ${record(actual.state.records.stock.camera.values.available, actual.state.revision, actual.state.records.stock.camera.version)}`
+      ? `.committed ${record(present(present(actual.state.records['stock'])['camera']).values['available'], actual.state.revision, present(present(actual.state.records['stock'])['camera']).version)}`
       : `.${actual.code}`;
-    if (c.post !== undefined) assert.equal(actual.state.records.stock.camera.values.available, c.post);
+    if (c.post !== undefined) assert.equal(present(present(actual.state.records['stock'])['camera']).values['available'], c.post);
     lean += `example : step ${record(c.available ?? 5)} { quantity := ${c.quantity ?? 3}, clock := 10 } = ${expected} := by decide\n`;
   }
   lean += 'end Generated\n';
@@ -44,9 +46,9 @@ test('extracts actual numeric schemas and ASTs with complete original content bi
   const original = action(inventoryModel), projected = action(model);
   assert.deepEqual(projected.updates, [update(inventoryModel)]);
   assert.deepEqual(projected.preconditions, original.preconditions.filter(p => p.id === 'reservation.reserve.capacity'));
-  assert.deepEqual(model.resources.stock.fields, {capacity: inventoryModel.resources.stock.fields.capacity, available: inventoryModel.resources.stock.fields.available});
-  assert.deepEqual(projected.inputs, {quantity: original.inputs.quantity});
-  assert.deepEqual(projected.bindings[0].key, {op: 'literal', value: 'camera'});
+  assert.deepEqual(present(model.resources['stock']).fields, {capacity: inventoryModel.resources.stock.fields.capacity, available: inventoryModel.resources.stock.fields.available});
+  assert.deepEqual(projected.inputs, {quantity: original.inputs['quantity']});
+  assert.deepEqual(present(projected.bindings[0]).key, {op: 'literal', value: 'camera'});
   assert.deepEqual(metadata.source, inventoryModel);
   assert.equal(metadata.source_sha256, hash(inventoryModel));
   assert.equal(metadata.projected_sha256, hash(model));
@@ -68,17 +70,18 @@ test('extracts actual numeric schemas and ASTs with complete original content bi
 });
 
 test('structural drift and unretained dependencies fail closed', () => {
-  for (const edit of [
-    m => {m.resources.stock.fields.extra = {type: 'integer'};},
-    m => {action(m).inputs.quantity.min = 0;},
-    m => {action(m).preconditions.push({id: 'new.guard', when: {op: 'literal', value: true}});},
-    m => {action(m).policies[0].effect = 'deny';},
-    m => {action(m).bindings[0].key = {op: 'literal', value: 'camera'};},
-    m => {update(m).value = {op: 'field', binding: 'reservation.reserve.slot', field: 'quantity'};},
-    m => {update(m).value = {op: 'input', name: 'expiresAt'};},
-    m => {update(m).value = {op: 'clock'};},
-    m => {update(m).value.op = 'mul';},
-  ]) {
+  const edits:((m:typeof inventoryModel)=>void)[]=[
+    m => {Reflect.set(m.resources.stock.fields,'extra',{type:'integer'});},
+    m => {Reflect.set(present(action(m).inputs['quantity']),'min',0);},
+    m => {Reflect.set(action(m).preconditions,action(m).preconditions.length,{id:'new.guard',when:{op:'literal',value:true}});},
+    m => {Reflect.set(present(action(m).policies[0]),'effect','deny');},
+    m => {Reflect.set(present(action(m).bindings[0]),'key',{op:'literal',value:'camera'});},
+    m => {Reflect.set(update(m),'value',{op:'field',binding:'reservation.reserve.slot',field:'quantity'});},
+    m => {Reflect.set(update(m),'value',{op:'input',name:'expiresAt'});},
+    m => {Reflect.set(update(m),'value',{op:'clock'});},
+    m => {Reflect.set(update(m).value,'op','mul');},
+  ];
+  for(const edit of edits){
     const mutant = structuredClone(inventoryModel); edit(mutant);
     assert.throws(() => projectInventory(mutant), Unsupported);
   }
@@ -87,7 +90,7 @@ test('structural drift and unretained dependencies fail closed', () => {
 test('pinned Lean proves independent law and actual 5-to-2 witness', () => {
   const report = checkInventory(resolve(out, 'positive'));
   assert.equal(report.status, 'proof_checked', report.detail);
-  assert.deepEqual(report.theorem_axioms.positive_witness, []);
+  assert.deepEqual(report.theorem_axioms['positive_witness'], []);
   assert.deepEqual(Object.keys(report.theorem_axioms), ['preserves', 'positive_witness']);
   crossCheck('actual-reserve', inventoryModel, [
     {expected: 'committed', post: 2},
@@ -99,7 +102,8 @@ test('pinned Lean proves independent law and actual 5-to-2 witness', () => {
 
 test('changed original reserve update changes projection; unchanged law rejects correct mutant witness', () => {
   const mutant = structuredClone(inventoryModel);
-  update(mutant).value.right = {op: 'add', left: {op: 'input', name: 'quantity'}, right: {op: 'literal', value: 1}};
+  const expr=update(mutant).value;assert.ok('right' in expr);
+  Reflect.set(expr,'right',{op:'add',left:{op:'input',name:'quantity'},right:{op:'literal',value:1}});
   const before = generateInventory(), after = generateInventory(mutant);
   assert.notEqual(before.code, after.code);
   assert.notEqual(before.inventory.source_sha256, after.inventory.source_sha256);

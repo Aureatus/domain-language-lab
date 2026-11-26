@@ -1,4 +1,5 @@
 import {test} from 'node:test';
+import type {TestContext} from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdtemp,rm} from 'node:fs/promises';
 import {Worker} from 'node:worker_threads';
@@ -9,11 +10,11 @@ import {createApplicationServer} from './server.ts';
 import {fixture} from './fixture.ts';
 
 const actor='nora',action='supply.take',args={cabinetKey:'tools',quantity:1,reason:'Repair',tracked:true};
-async function post(url,kind,body,status=200){
+async function post(url:string,kind:string,body:object,status=200){
   const response=await fetch(`${url}/api/${kind.includes('/')?kind:`actions/${kind}`}`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});
   const data=await response.json();assert.equal(response.status,status,JSON.stringify(data));return data;
 }
-async function setup(t){
+async function setup(t:TestContext){
   const directory=await mkdtemp('/tmp/opencode/submissions-'),servers: Awaited<ReturnType<typeof createApplicationServer>>[]=[];
   t.after(async()=>{for(const s of servers)await s.close();await rm(directory,{recursive:true,force:true});});
   async function start(){const s=await createApplicationServer(fixture,{directory});servers.push(s);return s;}
@@ -60,8 +61,8 @@ test('failure to record submission identity rolls back the invocation, outbox an
     db.exec(`CREATE TRIGGER fail_binding BEFORE INSERT ON application_submissions BEGIN SELECT RAISE(ABORT,'injected failure'); END`);
     await post(url,'execute',body,500);
     assert.equal((await post(url,'reconcile',{actor,submissionId:body.submissionId})).status,'not-found');
-    assert.equal(db.prepare('SELECT count(*) n FROM durable_invocations').get()?.n,0);
-    assert.equal(db.prepare('SELECT count(*) n FROM durable_outbox').get()?.n,0);
+    assert.equal(db.prepare('SELECT count(*) n FROM durable_invocations').get()?.['n'],0);
+    assert.equal(db.prepare('SELECT count(*) n FROM durable_outbox').get()?.['n'],0);
     db.exec('DROP TRIGGER fail_binding');
     const result=await post(url,'execute',body);
     assert.equal(result.snapshot.state.records.cabinet.tools.values.stock,7);
@@ -89,8 +90,8 @@ test('independent SQLite connections race a stable submission; only one invocati
   assert.deepEqual(await post(peer,'reconcile',{actor,submissionId:'race'}),a);
   const db=new DatabaseSync(join(directory,'application.sqlite'),{readOnly:true});
   try{
-    assert.equal(db.prepare('SELECT count(*) n FROM durable_invocations').get()?.n,1);
-    assert.equal(db.prepare('SELECT count(*) n FROM durable_outbox').get()?.n,a.evidence.outcome.events.length);
+    assert.equal(db.prepare('SELECT count(*) n FROM durable_invocations').get()?.['n'],1);
+    assert.equal(db.prepare('SELECT count(*) n FROM durable_outbox').get()?.['n'],a.evidence.outcome.events.length);
   }finally{db.close();}
   const legacy=await post(server.url,'execute',{actor,action,args});
   assert.notEqual(legacy.evidence.invocation.id,a.evidence.invocation.id);

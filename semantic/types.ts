@@ -17,6 +17,7 @@ export interface Model {
 }
 export interface State {revision: number; records: Record<string, Record<string, {version: number; values: Record<string, Scalar | string[]>}>>}
 export interface Invocation {id: string; action: string; args: Record<string, Scalar | string[]>; actor: string; clock: number}
+export type InvocationInput = Omit<Invocation,'args'>&{args:unknown};
 export interface Recipient {recipient: string; paths: {relationship: string; resource: string; key: string}[]}
 export interface EventBase {id: string; kind: 'action' | 'change'; modelId: string; actionId: string; invocationId: string; actor: string; clock: number; revision: number; recipients: Recipient[]}
 export type Event = (EventBase & {kind: 'action'; semanticId: string}) | (EventBase & {kind: 'change'; semanticId: string; resource: string; key: string; field: string; before: Scalar | string[]; after: Scalar | string[]});
@@ -28,7 +29,7 @@ export type Committed = Readonly<{status: 'committed'; state: State; events: Eve
 export type Preparation = Readonly<{status: 'prepared'; prepared: Prepared}> | Pending | Rejected;
 export interface Interpreter {
   readonly model: Model;
-  prepare(state: State, invocation: Invocation): Preparation;
+  prepare(state: State, invocation: InvocationInput): Preparation;
   commit(state: State, token: Prepared): Committed | Rejected;
-  execute(state: State, invocation: Invocation): Committed | Pending | Rejected;
+  execute(state: State, invocation: InvocationInput): Committed | Pending | Rejected;
 }

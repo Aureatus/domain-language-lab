@@ -23,20 +23,20 @@ test('serves the derived application browser bundle without exposing TypeScript 
 });
 test('derived HTTP: exact Maya/Leo story, separate grants/resume, stale, validation, permissions and reopen',async()=>{
   const directory=await mkdtemp('/tmp/opencode/leave-server-');let server=await createLeaveServer({directory});
-  const post=async(path,body)=>{const response=await fetch(`${server.url}/api/${path}`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});return {http:response.status,...await response.json()};};
-  const request=(actor,start,end,days?:number)=>post('actions/execute',{actor,action:'leave.request',args:{start,end,...(days===undefined?{}:{days})}});
-  const rule=(actor,threshold)=>post('actions/execute',{actor,action:'settings.change',args:{threshold}});
-  const grant=(actor,p)=>post('approvals/grant',{actor,requestId:p.id,policyId:p.requirements[0].policyId});
-  const resume=(actor,p)=>post('approvals/resume',{actor,requestId:p.id});
-  const balance=(r,id)=>r.snapshot.state.records.employee[id].values.balance;
+  const post=async(path:string,body:object)=>{const response=await fetch(`${server.url}/api/${path}`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});return {http:response.status,...await response.json()};};
+  const request=(actor:string,start:string,end:string,days?:number)=>post('actions/execute',{actor,action:'leave.request',args:{start,end,...(days===undefined?{}:{days})}});
+  const rule=(actor:string,threshold:number)=>post('actions/execute',{actor,action:'settings.change',args:{threshold}});
+  const grant=(actor:string,p:{id:string;requirements:Array<{policyId:string}>})=>post('approvals/grant',{actor,requestId:p.id,policyId:p.requirements[0]?.policyId});
+  const resume=(actor:string,p:{id:string;requirements:Array<{policyId:string}>})=>post('approvals/resume',{actor,requestId:p.id});
+  const balance=(r:{snapshot:{state:{records:{employee:Record<string,{values:{balance:number}}>}}}} ,id:string)=>r.snapshot.state.records.employee[id]?.values.balance;
   try{
     const derived=await(await fetch(`${server.url}/api/contract`)).json();
-    assert.equal(derived.contract.actions['leave.request'].fields.find(f=>f.name==='start').widget,'date');
-    for(const [a,b] of [['2026-11-22','2026-11-21'],['2026-11-21','2026-11-22'],['2026-02-30','2026-03-01']])assert.equal((await request('maya',a,b)).http,400);
+    assert.equal(derived.contract.actions['leave.request'].fields.find((f:{name:string})=>f.name==='start').widget,'date');
+    const badDates:[string,string][]=[['2026-11-22','2026-11-21'],['2026-11-21','2026-11-22'],['2026-02-30','2026-03-01']];for(const [a,b] of badDates)assert.equal((await request('maya',a,b)).http,400);
     assert.equal((await request('maya','2026-11-20','2026-11-20',2)).http,400);
     assert.equal((await post('actions/execute',{actor:'maya',action:'leave.request',args:{employeeId:'leo',start:'2026-11-20',end:'2026-11-20'}})).http,400);
     const friday=await request('maya','2026-11-20','2026-11-20');assert.equal(friday.status,'committed');assert.equal(balance(friday,'maya'),4);
-    assert.deepEqual(friday.evidence.outcome.events.map(e=>e.kind),['action','change','create']);
+    assert.deepEqual(friday.evidence.outcome.events.map((e:{kind:string})=>e.kind),['action','change','create']);
     let trip=await request('maya','2026-11-23','2026-11-25');assert.equal(trip.status,'pending');assert.equal(balance(trip,'maya'),4);
     let p=trip.snapshot.pending[0];assert.equal(p.invocation.args.start,'2026-11-23');assert.equal(p.invocation.args.days,3);assert.equal(p.stale,false);
     assert.equal((await grant('leo',p)).code,'unauthorized-approval');
@@ -48,13 +48,13 @@ test('derived HTTP: exact Maya/Leo story, separate grants/resume, stale, validat
     assert.equal((await rule('maya',2)).code,'denied');
     const preview=await post('actions/preview',{actor:'leo',action:'leave.request',args:{start:'2026-11-26',end:'2026-11-27'}});assert.equal(preview.status,'prepared');
     await rule('sam',2);
-    const leo=await request('leo','2026-11-26','2026-11-27');assert.equal(leo.status,'pending');p=leo.snapshot.pending.find(p=>p.invocation.actor==='leo');
+    const leo=await request('leo','2026-11-26','2026-11-27');assert.equal(leo.status,'pending');p=leo.snapshot.pending.find((p:{invocation:{actor:string}})=>p.invocation.actor==='leo');
     assert.deepEqual(p.requirements[0].approvers,['sam']);
     const g=await grant('sam',p);assert.equal(g.status,'approved');assert.equal(balance(g,'leo'),5);
     const l=await resume('sam',p);assert.equal(l.status,'committed');assert.equal(balance(l,'leo'),3);
-    const stale=await request('leo','2026-11-30','2026-12-01');p=stale.snapshot.pending.find(p=>p.status==='pending');
+    const stale=await request('leo','2026-11-30','2026-12-01');p=stale.snapshot.pending.find((p:{status:string})=>p.status==='pending');
     await rule('sam',2);assert.equal((await grant('sam',p)).status,'approved');
-    const rejected=await resume('sam',p);assert.equal(rejected.code,'stale');assert.equal(balance(rejected,'leo'),3);assert.equal(rejected.snapshot.pending.find(r=>r.id===p.id).grants.length,1);
+    const rejected=await resume('sam',p);assert.equal(rejected.code,'stale');assert.equal(balance(rejected,'leo'),3);assert.equal(rejected.snapshot.pending.find((r:{id:string})=>r.id===p.id).grants.length,1);
     const url=server.url,port=Number(new URL(url).port);await server.close();server=await createLeaveServer({directory,port});
     const snapshot=await(await fetch(`${url}/api/snapshot`)).json();
     assert.equal(snapshot.state.records.employee.maya.values.balance,1);assert.equal(snapshot.state.records.employee.leo.values.balance,3);assert.equal(snapshot.contractId,derived.contractId);

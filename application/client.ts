@@ -32,12 +32,15 @@ export function createApplicationClient(url: string | URL,{fetch:transport=globa
   const base=new URL(url);let contractId:string|undefined;
   async function request(path: string,body?:RequestBody){
     const submissionId=body&&'submissionId' in body?body.submissionId:undefined;
-    let wire;
+    let init:RequestInit={};
     if(body!==undefined){
-      try{wire=submissionId?submissionWireBody(body,contractId,encodeJson):encodeJson(body);}
+      try{
+        const wire=submissionId?submissionWireBody(body,contractId,encodeJson):encodeJson(body);
+        init={method:'POST',headers:{'content-type':'application/json'},body:wire};
+      }
       catch(error){if(path==='/api/actions/execute'&&error instanceof Error)Object.assign(error,{notSubmitted:true});throw error;}
     }
-    const response=await transport(new URL(path,base),body===undefined?{}:{method:'POST',headers:{'content-type':'application/json'},body:wire});
+    const response=await transport(new URL(path,base),init);
     const value=decodeJsonObject(await response.text());
     if(!response.ok){
       const error=Error(typeof value['error']==='string'?value['error']:`HTTP ${response.status}`);

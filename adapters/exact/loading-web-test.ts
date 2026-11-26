@@ -1,23 +1,27 @@
 // Run against loading-fixture.ts generated AND compiled in a fresh workspace.
 // An explicit URL is required so the live server cannot be tested by accident.
 import assert from 'node:assert/strict';
+import type {Browser} from 'playwright';
 import {createRequire} from 'node:module';
 const url=process.argv[2];
-if(!/^http:\/\/127\.0\.0\.1:\d+$/.test(url)||url.endsWith(':4186'))throw Error('Supply an isolated adapter URL.');
-const require=createRequire(`${process.env.EXACT_ROOT??'/tmp/opencode/exact-source'}/package.json`);
-const browser=await require('playwright-core').chromium.launch({headless:true});
+if(!url||!/^http:\/\/127\.0\.0\.1:\d+$/.test(url)||url.endsWith(':4186'))throw Error('Supply an isolated adapter URL.');
+const require=createRequire(`${process.env['EXACT_ROOT']??'/tmp/opencode/exact-source'}/package.json`);
+const browser:Browser=await require('playwright-core').chromium.launch({headless:true});
 try{
   const page=await browser.newPage(),errors:string[]=[];
   page.setDefaultTimeout(6000);
   page.on('pageerror',e=>errors.push(e.message));
-  let gate;
-  function hold(){let release,seen;gate={done:new Promise(r=>{release=r;}),started:new Promise(r=>{seen=r;}),release,seen};return gate;}
+  let gate:{done:Promise<'fail'|void>;started:Promise<void>;release:(value:'fail'|void)=>void;seen:()=>void}|null=null;
+  function hold(){
+    const {promise:done,resolve:release}=Promise.withResolvers<'fail'|void>(),{promise:started,resolve:seen}=Promise.withResolvers<void>();
+    return gate={done,started,release,seen};
+  }
   await page.route('**/api/snapshot',async route=>{
     const current=gate;
     if(current){current.seen();if(await current.done==='fail')return route.abort('failed');}
     return route.continue();
   });
-  const by=id=>page.getByTestId(id),rows=page.locator('[data-testid^="view:"]'),loaders=page.locator('[data-testid^="loading:"]');
+  const by=(id:string)=>page.getByTestId(id),rows=page.locator('[data-testid^="view:"]'),loaders=page.locator('[data-testid^="loading:"]');
   const loading=async()=>{
     await by('loading:0:icon').waitFor();
     assert.equal(await by('loading:0:icon').getAttribute('aria-label'),'Loading Record group 0…');
@@ -25,7 +29,7 @@ try{
     assert.equal(await by('loading:2:skeleton').getAttribute('aria-label'),'Loading Record group 2…');
     assert.equal(await loaders.count(),3);assert.equal(await rows.count(),0);
   };
-  const ready=async actor=>{
+  const ready=async(actor:string)=>{
     await by(`view:3:${actor}`).waitFor();
     assert.equal(await rows.count(),4);assert.equal(await loaders.count(),0);
     assert.equal(await page.locator('[data-testid^="screen-"]').count(),0);

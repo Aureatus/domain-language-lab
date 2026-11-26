@@ -1,9 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {readFileSync,mkdtempSync,writeFileSync} from 'node:fs';
+import {mkdtempSync,writeFileSync} from 'node:fs';
 import {spawnSync} from 'node:child_process';
 import {lintSource} from './lint.ts';
 import source from './fixtures/legacy-source.ts';
+import {present} from '../semantic/test-support.ts';
 test('actual author source is lint clean, including adapter and hidden input contracts',()=>{
   assert.deepEqual(lintSource(source),[]);
 });
@@ -21,18 +22,18 @@ test('whitespace advisories have stable positions and avoid string/comment conte
 test('input use follows binding keys, host bindings and adapter mappings, not just labels',()=>{
   const edited=source.replace('key leaveId id','key "fixed" id').replace('start = input.start','start = "2026-11-20"').replace('end = input.end','end = "2026-11-20"');
   assert.deepEqual(lintSource(edited),[]);
-  assert.equal(lintSource(edited.replace('      bind "operation-id"','      label "leaveId"'))[0].ruleId,'usage/unused-input');
+  assert.equal(present(lintSource(edited.replace('      bind "operation-id"','      label "leaveId"'))[0]).ruleId,'usage/unused-input');
   assert.deepEqual(lintSource(source.replaceAll('\n','\r\n')),[]);
 });
 test('lexical, unsupported, core and metadata errors fail rather than advisory pass',()=>{
   for(const edited of [source+'unknown\n',source.replace('days like leave.days','days decimal'),source.replace('      min 0','      min 9'),source.replace('label "Weekdays"','widget impossible')]){
-    const d=lintSource(edited);assert.equal(d[0].severity,'error');assert.ok(d[0].line>0);assert.ok(d[0].column>0);
+    const d=lintSource(edited);assert.equal(present(d[0]).severity,'error');assert.ok(present(d[0]).line>0);assert.ok(present(d[0]).column>0);
   }
-  assert.equal(lintSource(source.replace('label "Weekdays"','widget impossible'))[0].ruleId,'domain/model-validation');
+  assert.equal(present(lintSource(source.replace('label "Weekdays"','widget impossible'))[0]).ruleId,'domain/model-validation');
 });
 test('CLI JSON, exit policies, missing files and invalid arguments',()=>{
   const dir=mkdtempSync('/tmp/opencode/lint-'),path=dir+'/test.domain';
-  const run=(...args)=>spawnSync(process.execPath,['syntax/lint.ts',...args],{encoding:'utf8'});
+  const run=(...args:string[])=>spawnSync(process.execPath,['syntax/lint.ts',...args],{encoding:'utf8'});
   writeFileSync(path,source+'# trailing  \n');
   let result=run(path,'--json');assert.equal(result.status,0);assert.equal(JSON.parse(result.stdout).warnings,1);
   assert.equal(run(path,'--strict').status,1);

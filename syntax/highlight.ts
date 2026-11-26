@@ -1,4 +1,5 @@
-import {readFile,writeFile} from 'node:fs/promises';
+import {errorMessage} from '../errors.ts';
+import {writeFile} from 'node:fs/promises';
 import {resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {tokenize,parseSource} from './frontend.ts';
@@ -7,7 +8,7 @@ import {loadSource} from './load.ts';
 const keywords=new Set('module import use singleton identity domain resource fields field relationships relationship from action inputs input bindings bind key id preconditions requires require policies policy deny allow when approve by changes update set end create as observations observe through initial revision records record version application title eyebrow subtitle scope loading actor label name present description default adapter output view summary list format type like min max enum ownerField reference widget constant source'.split(' '));
 const types=new Set(['string','integer','boolean']);
 const entities:Record<string,string>={'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'};
-const escape=(s:string)=>s.replace(/[&<>"']/g,c=>entities[c]);
+const escape=(s:string)=>s.replace(/[&<>"']/g,c=>entities[c]??c);
 type Parsed=ReturnType<typeof parseSource>;
 
 // Use the real lexer so strings, escapes and comments share the language's rules.
@@ -18,9 +19,10 @@ export function highlight(source:string,{quietIds=false}={}){
   if(quietIds){
     let statement:string|number='';
     tokens.forEach((t,i)=>{
-      if(i===0||tokens[i-1].kind==='newline')statement=t.value;
-      if(typeof statement==='string'&&['bind','require','approve','set','create'].includes(statement)&&t.kind==='word'&&t.value==='id'&&['word','string'].includes(tokens[i+1]?.kind)&&(tokens[i+2]?.kind==='newline'||tokens[i+2]?.value==='as')){
-        starts.add(t.start);ends.add(tokens[i+1].end);
+      if(i===0||tokens[i-1]?.kind==='newline')statement=t.value;
+      const id=tokens[i+1];
+      if(typeof statement==='string'&&['bind','require','approve','set','create'].includes(statement)&&t.kind==='word'&&t.value==='id'&&(id?.kind==='word'||id?.kind==='string')&&(tokens[i+2]?.kind==='newline'||tokens[i+2]?.value==='as')){
+        starts.add(t.start);ends.add(id.end);
       }
     });
   }
@@ -55,11 +57,11 @@ export function sourcePage(source:string,title='Domain source',{inline=false,ful
 }={}){
   let sections:Parsed['sections'],diagnostic='',rendered:string;
    try{sections=parsedSections??parseSource(source,{filename:title}).sections;rendered=highlight(source);}
-  catch(error){diagnostic=error.message;sections=[{kind:'raw',name:'Original source',line:1}];rendered=escape(source);}
+  catch(error){diagnostic=errorMessage(error);sections=[{kind:'raw',name:'Original source',line:1}];rendered=escape(source);}
   const lines=rendered.split('\n');if(lines.at(-1)==='')lines.pop();
   const groups:Record<string|number,string>={domain:'Resources',resource:'Resources',relationship:'Resources',relationships:'Resources',action:'Actions',initial:'Initial data',application:'Interface',raw:'Source'};
-  const group=(s:Parsed['sections'][number])=>groups[s.kind];
-  const code=(start,end)=>`<pre><code>${lines.slice(start-1,end).map((s,j)=>`<span class="line" id="L${start+j}"><a class="ln" href="#L${start+j}" aria-label="Line ${start+j}">${start+j}</a><span class="text">${s}</span></span>`).join('')}</code></pre>`;
+  const group=(s:Parsed['sections'][number]|undefined)=>s&&groups[s.kind];
+  const code=(start:number,end:number)=>`<pre><code>${lines.slice(start-1,end).map((s,j)=>`<span class="line" id="L${start+j}"><a class="ln" href="#L${start+j}" aria-label="Line ${start+j}">${start+j}</a><span class="text">${s}</span></span>`).join('')}</code></pre>`;
   const nav=sections.map((s,i)=>`${i===0||group(s)!==group(sections[i-1])?`<h2>${group(s)}</h2>`:''}<a href="#L${s.line}">${escape(String(s.name))}</a>`).join('');
   // One uninterrupted code region: no source lines are folded or filtered.
   const chunks=`<div class="source-section">${code(1,lines.length)}</div>`;
@@ -98,7 +100,7 @@ body{margin:0;color:var(--foreground,#e1e9f3);font:14px/1.5 var(--font-sans,syst
 </style><main><p>Exact excerpts from <code>${escape(filename)}</code> · <a href="${escape(fullHref)}">Open full source reader</a></p>${excerpts}<p>Full reader shows every line and ID continuously, with an outline and exact original source. Highlighting is not verification.</p></main></html>`;
 }
 if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url)){
-  const [input,output,mode]=process.argv.slice(2);
+  const [input,output]=process.argv.slice(2);
   if(!input||!output)throw Error('Usage: node syntax/highlight.ts source.domain output.html');
   await writeFile(output,moduleSourcePage(input));
   console.log(resolve(output));

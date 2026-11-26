@@ -13,6 +13,6 @@ test('ownership and lifecycle dominate placeholder preferences for every observa
 test('resolution preserves the declaration and labels its regions',()=>{
   const views=[{label:'Balance',loading:'wait'},{label:'Calendar'}];
   assert.deepEqual(loadingPlan({loading:'skeleton',views}),[{index:0,label:'Balance',strategy:'wait'},{index:1,label:'Calendar',strategy:'skeleton'}]);
-  assert.equal(loadingPlan({views})[1].strategy,'text');
+  assert.equal(loadingPlan({views})[1]?.strategy,'text');
   assert.throws(()=>loadingPlan({views:[],loading:'unknown'}));
 });

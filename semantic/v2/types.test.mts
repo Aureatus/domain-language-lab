@@ -10,7 +10,9 @@ const rt = createInterpreter(model);
 const p = rt.prepare(state, invocation);
 if (p.status === 'prepared') rt.commit(state, p.prepared);
 if (p.status === 'pending') {
-  const grant = rt.approve(p.request, {policyId: p.policyIds[0], approver: 'boss'});
+  const [policyId]=p.policyIds;
+  if(!policyId)throw Error('Expected pending approval policy');
+  const grant = rt.approve(p.request, {policyId, approver: 'boss'});
   if (grant.status === 'approved') rt.resume(state, invocation, p.request, [grant.receipt], {clock: 12});
 }
 const r = rt.prepareResume(state, invocation, request, receipts, {clock: 12});

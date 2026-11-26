@@ -1,10 +1,11 @@
+import {errorMessage} from '../../errors.ts';
 import {Effect,Layer,Schema} from 'effect';
 import {Command,UiSchema} from '@effect/ui';
 import {BrowserHost,Html} from '@effect/ui/html';
 import {createApplicationClient} from '../../application/client.ts';
 import type {ApplicationAction,ApplicationContract,ApplicationField} from '../../application/derive.ts';
 import {acceptsSnapshot} from '../../application/snapshot.ts';
-import {submissionControls,submissionStep} from '../../application/submission.ts';
+import {isNotSubmittedError,submissionControls,submissionStep} from '../../application/submission.ts';
 
 const StorageKeyCodec=Schema.fromJsonString(Schema.Tuple([Schema.Literal('effect-ui/spike'),Schema.String,Schema.String,Schema.String]));
 const SavedSubmissionCodec=Schema.fromJsonString(Schema.NullOr(Schema.Struct({
@@ -14,16 +15,17 @@ const SavedSubmissionCodec=Schema.fromJsonString(Schema.NullOr(Schema.Struct({
 const encodeStorageKey=Schema.encodeSync(StorageKeyCodec);
 const decodeSavedSubmission=Schema.decodeUnknownSync(SavedSubmissionCodec);
 const encodeSavedSubmission=Schema.encodeSync(SavedSubmissionCodec);
+const decodeSavedArgs=Schema.decodeUnknownSync(Schema.Record(Schema.String,Schema.String));
 const SubmissionBodySchema=Schema.Struct({actor:Schema.String,action:Schema.String,args:Schema.Record(Schema.String,Schema.Unknown)});
 const SnapshotSchema=Schema.Struct({
-  contractId:Schema.String,snapshotVersion:Schema.Number,
+  contractId:Schema.String,snapshotVersion:Schema.Finite,
   availability:Schema.Record(Schema.String,Schema.Record(Schema.String,Schema.Boolean)),
   defaults:Schema.Record(Schema.String,Schema.Record(Schema.String,Schema.Record(Schema.String,Schema.Unknown)))
 });
-const ReceiptSchema=Schema.Struct({status:Schema.String,message:Schema.optional(Schema.String),snapshot:Schema.optional(SnapshotSchema)});
+const ReceiptSchema=Schema.Struct({status:Schema.String,message:Schema.optionalKey(Schema.String),snapshot:Schema.optionalKey(SnapshotSchema)});
 const SubmissionSchema=Schema.Struct({
-  phase:Schema.Literals(['editing','submitting','unknown','checking','retryable','known']),id:Schema.optional(Schema.String),
-  body:Schema.optional(SubmissionBodySchema),result:Schema.optional(ReceiptSchema),message:Schema.optional(Schema.String)
+  phase:Schema.Literals(['editing','submitting','unknown','checking','retryable','known']),id:Schema.optionalKey(Schema.String),
+  body:Schema.optionalKey(SubmissionBodySchema),result:Schema.optionalKey(ReceiptSchema),message:Schema.optionalKey(Schema.String)
 });
 const EventSchema=Schema.Union([
   Schema.Struct({type:Schema.Literal('submit'),id:Schema.String,body:SubmissionBodySchema}),
@@ -62,12 +64,12 @@ function actionForm({actor,action,fields,contractId,snapshot,client,storage}:{
   const Execute=Command.make('Execute',{args:{submission:SubmissionSchema,persist:Schema.Boolean}},({submission,persist})=>Effect.promise(async()=>{
     const {id,body}=submission;
     if(!id||!body)return observe({type:'lost'});
-    try{if(persist)storage.setItem(key,encodeSavedSubmission({id,body:{...body,args:Schema.decodeUnknownSync(Schema.Record(Schema.String,Schema.String))(body.args)}}));}
+    try{if(persist)storage.setItem(key,encodeSavedSubmission({id,body:{...body,args:decodeSavedArgs(body.args)}}));}
     catch{return observe({type:'invalid',message:'Could not store the submission identity. The request was not sent.'});}
     try{
       return observeReceipt(await client.execute({...body,submissionId:id}));
     }catch(error){
-      if(error.notSubmitted){clearSaved();return observe({type:'invalid',message:error.message});}
+      if(isNotSubmittedError(error)){clearSaved();return observe({type:'invalid',message:error.message});}
       return observe({type:'lost'});
     }
   }));
@@ -84,7 +86,7 @@ function actionForm({actor,action,fields,contractId,snapshot,client,storage}:{
   }));
   const nextSnapshot=(current:typeof SnapshotSchema.Type,next?:typeof SnapshotSchema.Type)=>
     next&&acceptsSnapshot(current,next,contractId)?next:current;
-  const available=(model:{snapshot:typeof SnapshotSchema.Type})=>model.snapshot.availability[actor.id][action.id];
+  const available=(model:{snapshot:typeof SnapshotSchema.Type})=>model.snapshot.availability[actor.id]?.[action.id]??false;
 
   return Html.component({
     name:'DerivedActionForm',
@@ -96,7 +98,7 @@ function actionForm({actor,action,fields,contractId,snapshot,client,storage}:{
   }).make({
     init:()=>({
       draft:Object.fromEntries(fields.map(({name})=>{
-        const value=(saved?.body.args??snapshot.defaults[actor.id][action.id])[name];
+        const value=(saved?.body.args??snapshot.defaults[actor.id]?.[action.id])?.[name];
         return [name,typeof value==='string'?value:''];
       })),
       submission:saved?{...saved,phase:'unknown'}:{phase:'editing'},
@@ -138,7 +140,7 @@ function actionForm({actor,action,fields,contractId,snapshot,client,storage}:{
           h.fieldset.disabled(!controls.submit).children(...fields.map(field=>
             h.label.children(field.label,
               h.input.attr('name',field.name).attr('type',field.widget).attr('required','')
-                .value(model.draft[field.name])
+                .value(model.draft[field.name]??'')
                 .onInput(({value})=>Message.DraftChanged({field:field.name,value}))
             )
           )),
@@ -164,9 +166,10 @@ try{
   const query=new URLSearchParams(location.search);
   const actor=contract.actors.find(({id})=>id===(query.get('actor')??'maya'));
   const actionId=query.get('action')??'leave.request';
-  if(contract.format!=='derived-application/v1'||!actor||!Object.hasOwn(contract.actions,actionId))
+  const action=Object.hasOwn(contract.actions,actionId)?contract.actions[actionId]:undefined;
+  if(contract.format!=='derived-application/v1'||!actor||!action)
     throw Error('Unsupported contract, actor or action.');
-  const action=contract.actions[actionId],fields=action.fields.filter(field=>!field.hidden);
+  const fields=action.fields.filter(field=>!field.hidden);
   if(fields.some(({widget,schema})=>!['date','text'].includes(widget)||schema.type!=='string'))
     throw Error('This spike supports only date and text inputs.');
   const snapshot=await client.snapshot();
@@ -177,5 +180,5 @@ try{
   const form=actionForm({actor,action,fields,contractId,snapshot,client,storage:sessionStorage});
   Layer.launch(BrowserHost.mount(form,{},host)).pipe(Effect.runFork);
 }catch(error){
-  root.replaceChildren(Object.assign(document.createElement('p'),{textContent:`Could not load the spike: ${error.message}`}));
+  root.replaceChildren(Object.assign(document.createElement('p'),{textContent:`Could not load the spike: ${errorMessage(error)}`}));
 }

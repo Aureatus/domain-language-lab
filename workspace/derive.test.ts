@@ -5,15 +5,20 @@ import {inventoryModel, runtime as v1, initialState as initialV1, invocation as 
 import {inventoryV2Model, runtime as v2, initialState as initialV2, invocation as invokeV2} from '../inventory/v2/model.ts';
 import {issueModel, issueState} from '../semantic/issues.ts';
 import {createInterpreter} from '../semantic/core.ts';
+import type {Model as V1Model} from '../semantic/types.ts';
+import type {Model as V2Model} from '../semantic/v2/types.ts';
 
 test('tools preserve exact schema/policy/precondition declarations in both profiles', () => {
-  for (const model of [inventoryModel, inventoryV2Model, issueModel]) {
+  const models:(V1Model|V2Model)[]=[inventoryModel,inventoryV2Model,issueModel];
+  for (const model of models) {
     for (const tool of deriveTools(model)) {
-      assert.deepEqual(tool.inputs, model.actions[tool.name].inputs);
-      assert.deepEqual(tool.policyIds, model.actions[tool.name].policies.map(x => x.id));
-      assert.deepEqual(tool.preconditionIds, model.actions[tool.name].preconditions.map(x => x.id));
+      const action=model.actions[tool.name];assert.ok(action);
+      assert.deepEqual(tool.inputs, action.inputs);
+      assert.deepEqual(tool.policyIds, action.policies.map(x => x.id));
+      assert.deepEqual(tool.preconditionIds, action.preconditions.map(x => x.id));
     }
-    const tools = deriveTools(model); tools[0].inputs = {};
+    const tools = deriveTools(model),[first]=tools;
+    assert.ok(first);first.inputs = {};
     assert.notDeepEqual(tools, deriveTools(model));
   }
 });
@@ -39,6 +44,7 @@ test('action declarations and facts route views, independently of actor-excluded
 
 test('routing is generic across renamed actions and other domains; pending is explicit', () => {
   const {'issue.resolve':resolveIssue,...actions}=issueModel.actions;
+  assert.ok(resolveIssue);
   const model = {...issueModel,actions:{...actions,'ticket.finish':resolveIssue}};
   const runtime = createInterpreter(model);
   const result = runtime.execute(issueState, {id: 'generic', action: 'ticket.finish', args: {issueId: 'i1'}, actor: 'maya', clock: 1});

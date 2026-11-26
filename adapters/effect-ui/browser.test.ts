@@ -3,14 +3,15 @@ import {test} from 'node:test';
 import {chromium} from 'playwright';
 import declaration from '../../leave/model.ts';
 import {start} from './serve.ts';
+import {present} from '../../semantic/test-support.ts';
 
 const execute='**/api/actions/execute',reconcile='**/api/actions/reconcile';
 
 test('Effect UI keeps Submit locked until the original receipt is recovered',{timeout:30000},async t=>{
   const model=structuredClone(declaration);
-  const presentation=model.application.actions['leave.request'];
+  const presentation=present(model.application.actions['leave.request']);
   presentation.label='Request leave';
-  presentation.fields.start.label='From';
+  present(presentation.fields['start']).label='From';
   const app=await start({model});
   t.after(()=>app.close());
   const browser=await chromium.launch();
@@ -26,13 +27,13 @@ test('Effect UI keeps Submit locked until the original receipt is recovered',{ti
   const form=page.locator('form[data-action="leave.request"]');
   const submit=form.getByRole('button',{name:'Request leave'});
   const first=form.getByLabel('From'),last=form.getByLabel('Last day');
-  const snapshotVersion=version=>page.getByText(`Snapshot version: ${version}`,{exact:true});
+  const snapshotVersion=(version:number)=>page.getByText(`Snapshot version: ${version}`,{exact:true});
   await snapshotVersion(0).waitFor();
   assert.deepEqual(await form.locator('input').evaluateAll(inputs=>inputs.map(input=>input.getAttribute('name'))),['start','end']);
   await first.fill('2026-11-23');
   await last.fill('2026-11-25');
 
-  let original;
+  let original:import('../../application/client.ts').ApplicationReceipt|undefined;
   // Persist the request on the real backend; drop only Chromium's response.
   await page.route(execute,async route=>{
     const response=await route.fetch({maxRetries:0});
@@ -43,9 +44,10 @@ test('Effect UI keeps Submit locked until the original receipt is recovered',{ti
   const check=page.getByRole('button',{name:'Check submission',exact:true});
   const retry=page.getByRole('button',{name:'Retry same submission',exact:true});
   await check.waitFor();
+  assert.ok(original?.snapshot&&original.evidence);
   assert.equal(original.status,'pending');
   assert.equal(original.snapshot.pending.length,1);
-  assert.deepEqual(executes[0].args,{start:'2026-11-23',end:'2026-11-25'});
+  assert.deepEqual(present(executes[0]).args,{start:'2026-11-23',end:'2026-11-25'});
   assert.equal(await submit.isDisabled(),true);
 
   await page.getByRole('button',{name:'Refresh records'}).click();
@@ -73,7 +75,7 @@ test('Effect UI keeps Submit locked until the original receipt is recovered',{ti
   };
   const [response]=await Promise.all([page.waitForResponse(reconcile),assertChecking()]);
   assert.deepEqual(response.request().postDataJSON(),{
-    actor:executes[0].actor,submissionId:executes[0].submissionId,expectedContractId:executes[0].expectedContractId
+    actor:present(executes[0]).actor,submissionId:present(executes[0]).submissionId,expectedContractId:present(executes[0]).expectedContractId
   });
   const recovered=await response.json();
   assert.equal(recovered.status,original.status);

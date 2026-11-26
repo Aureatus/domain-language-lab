@@ -19,18 +19,18 @@ export function loadSource(path: string|URL){
     const body=source.split('\n').map((line,i)=>{
       function fail(message:string):never{throw new SourceError(filename,{line:i+1,column:1},message);}
       if(/^module\b/.test(line)){
-        const m=/^module "([^"\n]+)" (domain|data|view)\s*$/.exec(line);
-        if(!m||!isKind(m[2])||module)fail('Expected one module "ID" domain|data|view header.');
-        module={id:m[1],kind:m[2]};return ' '.repeat(line.length);
+        const [,id,kind]=/^module "([^"\n]+)" (domain|data|view)\s*$/.exec(line)??[];
+        if(!id||!kind||!isKind(kind)||module)fail('Expected one module "ID" domain|data|view header.');
+        module={id,kind};return ' '.repeat(line.length);
       }
       if(/^import\b/.test(line)){
-        const m=/^import "([^"\n]+\.domain)"\s*$/.exec(line);
-        if(!m||!m[1].startsWith('./')&&!m[1].startsWith('../'))fail('Imports must be explicit relative .domain paths.');
-        const target=realpathSync(resolve(dirname(filename),m[1]));
+        const input=/^import "([^"\n]+\.domain)"\s*$/.exec(line)?.[1];
+        if(!input||!input.startsWith('./')&&!input.startsWith('../'))fail('Imports must be explicit relative .domain paths.');
+        const target=realpathSync(resolve(dirname(filename),input));
         if(imports.includes(target))fail('Duplicate import.');imports.push(target);return ' '.repeat(line.length);
       }
       if(/^use\b/.test(line)){
-        const m=/^use "([^"\n]+)"\s*$/.exec(line);if(!m||uses.includes(m[1]))fail('Invalid or duplicate use.');uses.push(m[1]);return ' '.repeat(line.length);
+        const id=/^use "([^"\n]+)"\s*$/.exec(line)?.[1];if(!id||uses.includes(id))fail('Invalid or duplicate use.');uses.push(id);return ' '.repeat(line.length);
       }
       return line;
     }).join('\n');

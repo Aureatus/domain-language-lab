@@ -1,11 +1,12 @@
 // Tests our generated renderer against the shared backend, not upstream's suite.
+import type {Browser} from 'playwright';
 import {createRequire} from 'node:module';
 import assert from 'node:assert/strict';
 import {writeFile} from 'node:fs/promises';
-const require=createRequire(`${process.env.EXACT_ROOT??'/tmp/opencode/exact-source'}/package.json`);
+const require=createRequire(`${process.env['EXACT_ROOT']??'/tmp/opencode/exact-source'}/package.json`);
 const {chromium}=require('playwright-core');
-const base=process.env.EXACT_URL??'http://127.0.0.1:4186';
-const browser=await chromium.launch({headless:true});
+const base=process.env['EXACT_URL']??'http://127.0.0.1:4186';
+const browser:Browser=await chromium.launch({headless:true});
 const page=await browser.newPage({viewport:{width:390,height:844}}),errors:string[]=[];
 page.on('pageerror',e=>errors.push(e.message));
 const snapshot=async()=>{const r=await fetch(base+'/api/snapshot');return r.json();};
@@ -18,13 +19,11 @@ try{
   const field=page.getByTestId('maya:leave.request:start');
   await field.fill('2026-11-20');
   const before=await field.boundingBox();
-  let release,started;
-  const held=new Promise(resolve=>{release=resolve;});
-  const polling=new Promise(resolve=>{started=resolve;});
+  const {promise:held,resolve:release}=Promise.withResolvers<void>(),{promise:polling,resolve:started}=Promise.withResolvers<void>();
   await page.route('**/api/snapshot',async route=>{started();await held;await route.continue();});
   try{
     await polling;
-    await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+    await page.evaluate(()=>new Promise<number>(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
     assert.equal(await page.getByText('Loading…',{exact:true}).count(),0,'Background polling must not insert loading content.');
     assert.deepEqual(await field.boundingBox(),before,'Polling must not move the form.');
     assert.equal(await field.inputValue(),'2026-11-20');

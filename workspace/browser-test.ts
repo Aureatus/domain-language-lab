@@ -16,8 +16,8 @@ const context = await browser.newContext({viewport:{width:1440,height:1060}});
 const a = await context.newPage(), b = await context.newPage(), errors:string[] = [], checks:string[]=[];
 for(const page of [a,b]) page.on('pageerror', e=>errors.push(e.message));
 export async function ready(page:Page, profile='v1') { await page.locator('#revision').filter({hasText:`${profile} ·`}).waitFor(); await page.waitForFunction(()=>document.querySelector<HTMLElement>('#action-form')?.inert===false); }
-export async function choose(page, profile, actor='alice') { await page.selectOption('#profile',profile); await page.selectOption('#actor',actor); await ready(page,profile); }
-export async function execute(page, action, args={}, clock=100) {
+export async function choose(page:Page, profile:string, actor='alice') { await page.selectOption('#profile',profile); await page.selectOption('#actor',actor); await ready(page,profile); }
+export async function execute(page:Page, action:string, args:Record<string,unknown>={}, clock=100) {
   await page.selectOption('#action',`reservation.${action}`);
   for(const [name,value] of Object.entries(args)) await page.fill(`#input-${name}`,String(value));
   await page.fill('#clock',String(clock));
@@ -26,14 +26,14 @@ export async function execute(page, action, args={}, clock=100) {
   await page.locator('#result strong').filter({hasText:value.status}).waitFor();
   return value;
 }
-async function stock(page, count) { await page.waitForFunction(count=>document.querySelector('#stock [data-field="available"]')?.textContent === String(count),count); }
-async function operation(page, selector, endpoint) {
+async function stock(page:Page, count:number) { await page.waitForFunction(count=>document.querySelector('#stock [data-field="available"]')?.textContent === String(count),count); }
+async function operation(page:Page, selector:string, endpoint:string) {
   const response=page.waitForResponse(r=>r.url().endsWith(`/api/${endpoint}`)&&r.request().method()==='POST');
   await page.locator(selector).click(); const value=await (await response).json();
   await page.locator('#result strong').filter({hasText:value.status}).waitFor(); return value;
 }
-async function grant(invocationId) { const selector=`[data-pending="${invocationId}"] [data-grant]`; await b.locator(selector).waitFor(); assert.equal((await operation(b,selector,'approve')).status,'approved'); }
-async function resume(invocationId,clock=101) { await a.fill('#resume-clock',String(clock)); return operation(a,`[data-pending="${invocationId}"] [data-resume]`,'resume'); }
+async function grant(invocationId:string) { const selector=`[data-pending="${invocationId}"] [data-grant]`; await b.locator(selector).waitFor(); assert.equal((await operation(b,selector,'approve')).status,'approved'); }
+async function resume(invocationId:string,clock=101) { await a.fill('#resume-clock',String(clock)); return operation(a,`[data-pending="${invocationId}"] [data-resume]`,'resume'); }
 try {
   await Promise.all([a.goto(url),b.goto(url)]); await Promise.all([ready(a),ready(b)]);
   await stock(a,5); await a.screenshot({path:new URL('workspace-v1.png',artifacts).pathname,fullPage:true});
@@ -102,12 +102,11 @@ try {
   checks.push('v2 expire restores stock; committed event history survives same-database restart');
 
   // Hold an old actor response and ensure it cannot repaint a newer context.
-  let release; const held=new Promise(resolve=>release=resolve); let capturedResolve; const captured=new Promise(resolve=>capturedResolve=resolve);
+  const {promise:held,resolve:release}=Promise.withResolvers<void>(),{promise:captured,resolve:capturedResolve}=Promise.withResolvers<void>();
   await a.route('**/api/snapshot?profile=v1&actor=alice',async route=>{const response=await route.fetch();capturedResolve();await held;await route.fulfill({response});});
   await a.selectOption('#profile','v1'); await captured; await a.selectOption('#profile','v2'); await ready(a,'v2'); release(); await a.unrouteAll({behavior:'wait'});
   assert.match(await a.locator('#revision').innerText(),/^v2/);
-  let releaseActor, actorCapturedResolve;
-  const actorHeld=new Promise(resolve=>releaseActor=resolve), actorCaptured=new Promise(resolve=>actorCapturedResolve=resolve);
+  const {promise:actorHeld,resolve:releaseActor}=Promise.withResolvers<void>(),{promise:actorCaptured,resolve:actorCapturedResolve}=Promise.withResolvers<void>();
   await a.route('**/api/snapshot?profile=v2&actor=bob',async route=>{const response=await route.fetch();actorCapturedResolve();await actorHeld;await route.fulfill({response});});
   await a.selectOption('#actor','bob'); await actorCaptured;
   await a.selectOption('#actor','alice'); await ready(a,'v2'); releaseActor(); await a.unrouteAll({behavior:'wait'});

@@ -70,9 +70,11 @@ test('finite schedule exploration detects the deliberate stale-binding mutant', 
   assert.equal(safe.scope.schedules, 6);
   assert.equal(safe.result, 'bounded_pass');
   assert.equal(broken.result, 'counterexample');
-  assert.equal(broken.failures[0].trace.interpreter.staleApprovalMutantUsed, true);
+  const [failure]=broken.failures;
+  assert.ok(failure);
+  assert.equal(failure.trace.interpreter.staleApprovalMutantUsed, true);
   assert.deepEqual(broken.failures.map(f => f.schedule), [['approve', 'edit', 'execute']]);
-  assert.equal(replay(broken.failures[0].schedule).execute().reason, 'stale-approval');
+  assert.equal(replay(failure.schedule).execute().reason, 'stale-approval');
 });
 
 test('policy diff supplies the exact changed context, not a full-equivalence claim', () => {

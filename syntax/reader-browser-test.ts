@@ -8,7 +8,9 @@ import {loadSource} from './load.ts';
 const parsed=loadSource('leave/browser.domain'),html=moduleSourcePage('leave/browser.domain');
 await writeFile('artifacts/time-away-highlighted.html',html);
 await writeFile('artifacts/time-away-highlighted-inline.html',html);
-await writeFile('artifacts/time-away-source-preview.html',sourceExcerptPage(parsed.modules[0].source,{parsed}));
+const [module]=parsed.modules;
+assert.ok(module);
+await writeFile('artifacts/time-away-source-preview.html',sourceExcerptPage(module.source,{parsed}));
 const browser=await chromium.launch({headless:true}),report:{width:number;files:number;exactSource:boolean;allIdsVisible:boolean;download:boolean;keyboardNavigation:boolean}[]=[];
 try{
   for(const width of [1440,728,390]){

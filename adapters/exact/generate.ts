@@ -6,7 +6,7 @@ import pin from './pin.json' with {type:'json'};
 import {loadingPlan,lifecycleGuard} from '../../application/loading.ts';
 import type {ApplicationAction,ApplicationContract,ApplicationField} from '../../application/derive.ts';
 const q=JSON.stringify;
-function placeholder({index,strategy,label}){
+function placeholder({index,strategy,label}:ReturnType<typeof loadingPlan>[number]){
   const name=q(`Loading ${label}…`),id=q(`loading:${index}:${strategy}`);
   switch(strategy){
     case 'text':return `text ${name} role="status" testId=${id}`;
@@ -21,11 +21,13 @@ type Marker = {semanticId:string; marker?:string; generated?:{file:string;line:n
 type Form = {k:string;actor:ApplicationContract['actors'][number];a:ApplicationAction;fields:ApplicationField[];shape:string};
 export function generate(envelope: Envelope,{api='http://127.0.0.1:4186'}={}){
   const {contract:c,contractId}=envelope;
+  const [defaultActor]=c.actors;
+  if(!defaultActor)throw Error('Missing default actor.');
   if(c.format!=='derived-application/v1'||!contractId)throw Error('Unsupported derived contract.');
   if(!/^http:\/\/127\.0\.0\.1:\d+$/.test(api))throw Error('This experimental adapter requires a loopback HTTP backend.');
   for(const v of c.views)if(!['summary','list'].includes(v.kind)||v.columns.some(x=>!['text','date',undefined].includes(x.format)))throw Error('Unsupported view.');
   const lines:string[]=[],maps:Marker[]=[];const emit=(s:string,id?:string)=>{if(id){const marker=`// mapping-${maps.length}`;maps.push({semanticId:id,marker});const indent=s.match(/^ */)?.[0]??'';lines.push(indent+marker);}lines.push(s);};
-  const plan=loadingPlan(c),guard=phase=>lifecycleGuard(phase,{pending:'pending(screen)',failed:'failed(screen)',owned:'screen.owner == actor'});
+  const plan=loadingPlan(c),guard=(phase:string)=>lifecycleGuard(phase,{pending:'pending(screen)',failed:'failed(screen)',owned:'screen.owner == actor'});
   emit(`// Generated; edit the domain/application declarations, never this file.
 shape Row
   id: string
@@ -52,7 +54,7 @@ shape Submission
   phase: string
   message: string
 component App
-  state actor = ${q(c.actors[0].id)}
+  state actor = ${q(defaultActor.id)}
   state noticeOwner = ""
   resource screen = loadScreen(actor) as shape Screen else empty()
   mutation changed as shape Reply refreshes screen
@@ -159,7 +161,13 @@ component App
     .replaceAll('as shape Submission refreshes screen','as shape Submission refreshes screen'+forms.map(f=>`, ${f.k}`).join(''))
     .replace('as shape Reply refreshes screen','as shape Reply refreshes screen'+forms.map(f=>`, ${f.k}`).join(''))
     .replace('  action reload\n    refresh screen','  action reload\n    refresh screen'+forms.map(f=>`\n    refresh ${f.k}`).join(''))+'\n';
-  maps.forEach(m=>{m.generated={file:'app.contract',line:contract.split('\n').findIndex(l=>l.trim()===m.marker)+2};delete m.marker;const [action,input]=m.semanticId.split('/input:');m.contractPointer=`/contract/actions/${action.slice('action:'.length).replaceAll('~','~0').replaceAll('/','~1')}${input?'/fields/'+c.actions[action.slice('action:'.length)].fields.findIndex(f=>f.name===input):''}`;});
+  maps.forEach(m=>{
+    m.generated={file:'app.contract',line:contract.split('\n').findIndex(l=>l.trim()===m.marker)+2};delete m.marker;
+    const [action,input]=m.semanticId.split('/input:'),id=action?.slice('action:'.length);
+    const declaration=id?c.actions[id]:undefined;
+    if(!id||!declaration)throw Error(`Unknown mapped action: ${action}`);
+    m.contractPointer=`/contract/actions/${id.replaceAll('~','~0').replaceAll('/','~1')}${input?'/fields/'+declaration.fields.findIndex(f=>f.name===input):''}`;
+  });
   const ts=`// Generated typed Exact data seam; no domain policy implementation.
 import type {Answer, Sources} from './app.contract.d.ts';
 import {createClient,submissionDriver} from './client.mjs';
@@ -184,7 +192,8 @@ export async function writeAdapter(envelope: Envelope,out: string,options?: Para
   await mkdir(out,{recursive:true});
   for(const [name,data] of Object.entries({'app.contract':r.contract,'app.ts':r.ts,'app.json':JSON.stringify(r.app,null,2),'adapter-manifest.json':JSON.stringify(r.manifest,null,2),'contract.json':JSON.stringify(envelope,null,2)}))
     await writeFile(resolve(out,name),data);
-  for(const [name,src] of [['submission.mjs','../../application/submission.ts'],['client.mjs','./client.ts']]){
+  const modules=[{name:'submission.mjs',src:'../../application/submission.ts'},{name:'client.mjs',src:'./client.ts'}];
+  for(const {name,src} of modules){
     const source=await readFile(new URL(src,import.meta.url),'utf8');
     await writeFile(resolve(out,name),stripTypeScriptTypes(source).replace("'./submission.ts'","'./submission.mjs'"));
   }
