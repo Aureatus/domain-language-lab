@@ -1,10 +1,36 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdir, mkdtemp} from 'node:fs/promises';
-import {resolve} from 'node:path';
+import {mkdir, mkdtemp, readFile, rm} from 'node:fs/promises';
+import {basename, dirname, resolve} from 'node:path';
+import {fileURLToPath} from 'node:url';
 import {execFileSync} from 'node:child_process';
+import type {runDurableDemo} from './demo.ts';
 
 const demoURL = new URL('./demo.ts', import.meta.url).href;
+test('the durable demo publishes separate, inspectable SQLite evidence for all three scenarios', async t => {
+  const output=await database();
+  const directory=dirname(output),target=resolve(directory,'reports','demo.json');
+  t.after(()=>rm(directory,{recursive:true,force:true}));
+  const summary=JSON.parse(execFileSync(process.execPath,[fileURLToPath(demoURL),target],{encoding:'utf8'}));
+  const report:Awaited<ReturnType<typeof runDurableDemo>>=JSON.parse(await readFile(target,'utf8'));
+  const evidenceDirectory=report.paths.databaseDirectory;
+  assert.equal(dirname(evidenceDirectory),'/tmp/opencode');
+  assert.match(basename(evidenceDirectory),/^inventory-v2-demo-/);
+  t.after(()=>rm(evidenceDirectory,{recursive:true,force:true}));
+  assert.equal(report.format,'inventory-v2-execution-report/2');
+  assert.equal(report.runtime.storage,'node:sqlite DatabaseSync');
+  assert.deepEqual(summary,{report:target,execution:'executed',scenarios:report.scenarios.map(({scenario,checks,databasePath})=>({scenario,checks,databasePath}))});
+  assert.deepEqual(report.scenarios.map(s=>s.scenario),['lifecycle','stale','expired']);
+  assert.deepEqual(report.scenarios.map(s=>s.steps.at(-1)?.after.state.revision),[3,1,0]);
+  for(const {databasePath,scenario,steps} of report.scenarios){
+    assert.equal(databasePath,resolve(evidenceDirectory,scenario+'.sqlite'));
+    assert.match((await readFile(databasePath)).subarray(0,16).toString(),/^SQLite format 3/);
+    for(const [index,step] of steps.entries()){
+      if(index>0)assert.deepEqual(step.before,steps[index-1]?.after);
+    }
+  }
+});
+
 async function database() {
   await mkdir('/tmp/opencode', {recursive: true});
   return resolve(await mkdtemp('/tmp/opencode/inventory-v2-test-'), 'inventory.sqlite');

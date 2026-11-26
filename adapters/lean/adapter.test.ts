@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdirSync, writeFileSync, readFileSync} from 'node:fs';
+import {mkdirSync, mkdtempSync, rmSync, writeFileSync, readFileSync} from 'node:fs';
+import {tmpdir} from 'node:os';
 import {resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {spawnSync} from 'node:child_process';
@@ -61,6 +62,44 @@ test('pinned Lean checks generated nonvacuous law and complete axiom reports', (
   assert.deepEqual(Object.keys(report.theorem_axioms), ['preserves', 'positive_witness']);
   assert.deepEqual(report.theorem_axioms['positive_witness'], []);
   assert.equal(report.semantic_primitives_sha256, hash(readFileSync(new URL('../../semantic/primitives.ts', import.meta.url), 'utf8')));
+});
+
+test('Lean command-line reports agree with persisted proof evidence and fail on unsupported laws', t => {
+  const directory=mkdtempSync(resolve(tmpdir(),'premise-lean-cli-'));
+  t.after(()=>rmSync(directory,{recursive:true,force:true}));
+  const input=resolve(directory,'model.json'),law=resolve(directory,'law.json');
+  writeFileSync(input,JSON.stringify(model));
+  const run=(entry:string,args:string[])=>spawnSync(process.execPath,[entry,...args],{encoding:'utf8'});
+  const valid=resolve(directory,'valid');
+  writeFileSync(law,JSON.stringify(obligation));
+  const checked=run('adapters/lean/check.ts',[input,law,valid]);
+  assert.equal(checked.status,0,checked.stderr);
+  const report=JSON.parse(checked.stdout);
+  assert.deepEqual(report,JSON.parse(readFileSync(resolve(valid,'report.json'),'utf8')));
+  assert.equal(report.status,'proof_checked');
+  assert.deepEqual(report.theorem_axioms,{preserves:['propext'],positive_witness:[]});
+  for(const [patch,detail] of [
+    [{format:'unknown'},/Unsupported law format/],
+    [{id:'invalid id'},/Unsupported law ID/],
+    [{witness:null},/Invalid law witness/],
+    [{witness:{...obligation.witness,pre:null}},/Invalid law witness record/],
+  ] satisfies [object,RegExp][]){
+    const rejected=resolve(directory,'rejected');
+    writeFileSync(law,JSON.stringify({...obligation,...patch}));
+    const unsupported=run('adapters/lean/check.ts',[input,law,rejected]);
+    assert.equal(unsupported.status,1,unsupported.stderr);
+    const failure=JSON.parse(unsupported.stdout);
+    assert.equal(failure.status,'unsupported');
+    assert.match(failure.detail,detail);
+    assert.deepEqual(failure.theorem_axioms,{});
+  }
+  const inventory=resolve(directory,'inventory');
+  const projected=run('adapters/lean/inventory.ts',[inventory]);
+  assert.equal(projected.status,0,projected.stderr);
+  const summary=JSON.parse(projected.stdout),persisted=JSON.parse(readFileSync(resolve(inventory,'report.json'),'utf8'));
+  assert.equal(summary.status,'proof_checked');
+  assert.equal(summary.source_sha256,persisted.inventory.source_sha256);
+  assert.match(summary.source_sha256,/^[0-9a-f]{64}$/);
 });
 
 test('unsupported selected strings, dynamic binding, boolean schema and operators fail closed', () => {

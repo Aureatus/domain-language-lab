@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {spawnSync} from 'node:child_process';
-import {mkdtemp,readFile,rm} from 'node:fs/promises';
+import {mkdtemp,readFile,rm,writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {deriveApplication} from './derive.ts';
@@ -53,4 +53,42 @@ test('interaction-check CLI resolves defaults and writes a standalone counterexa
   assert.equal(replay.actor,'maya');
   assert.deepEqual(replay.args,args);
   assert.deepEqual(replay.events.map((event:{type:string})=>event.type),summary.sequence);
+});
+
+test('inspector reproduces the saved counterexample and rejects incompatible or altered evidence',async t=>{
+  const directory=await mkdtemp(join(tmpdir(),'premise-counterexample-'));
+  t.after(()=>rm(directory,{recursive:true,force:true}));
+  const trace=join(directory,'original.json'),changed=join(directory,'changed.json');
+  const entry='leave/browser.domain',action='leave.request';
+  const checked=spawnSync(process.execPath,['application/check-interactions.ts',entry,action,'--mutant','snapshot-unlocks','--out',trace],{encoding:'utf8'});
+  assert.equal(checked.status,1,checked.stderr);
+  const original=JSON.parse(await readFile(trace,'utf8'));
+  const inspect=(...args:string[])=>spawnSync(process.execPath,['application/inspect-action.ts',entry,action,...args],{encoding:'utf8'});
+  const replay=inspect('--replay',trace);
+  assert.equal(replay.status,0,replay.stderr);
+  assert.match(replay.stdout,/Offline replay; file provenance is not authenticated/);
+  assert.match(replay.stdout,/Replaying deliberate test fault: snapshot-unlocks/);
+  assert.match(replay.stdout,/Failure replay: reproduced \(submission\.no-fresh-submit-before-receipt\)/);
+  for(const [args,message] of [
+    [['--replay',trace,'--args','{}'],/cannot be combined/],
+    [['--replay',trace,'--actor','leo'],/does not match the selected contract/],
+    [['--replay',changed],/does not match the selected contract/],
+  ] satisfies [string[],RegExp][]){
+    const invalid=inspect(...args);
+    assert.equal(invalid.status,1);
+    assert.match(invalid.stderr,message);
+  }
+  for(const [edits,message] of [
+    [{checkerBuild:'obsolete'},/checker\/projection build differs/],
+    [{mutant:'unknown'},/Unknown replay mutant/],
+  ] satisfies [object,RegExp][]){
+    await writeFile(changed,JSON.stringify({...original,...edits}));
+    const invalid=inspect('--replay',changed);
+    assert.equal(invalid.status,1);
+    assert.match(invalid.stderr,message);
+  }
+  await writeFile(changed,JSON.stringify({...original,failure:{...original.failure,eventCount:0}}));
+  const different=inspect('--json','--replay',changed);
+  assert.equal(different.status,1,different.stderr);
+  assert.equal(JSON.parse(different.stdout).replayStatus,'not-reproduced');
 });

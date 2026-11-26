@@ -203,6 +203,47 @@ test('startup port failure cleans databases; close is idempotent and terminates 
   await f.close(); await f.close(); await f.restart(); assert.equal((await get(f)).state.revision, 0);
 });
 
+test('snapshot refuses corrupt persisted approval evidence without altering the valid profile', async t => {
+  const f=await fixture(t);
+  assert.equal((await execute(f,'v2',v2('proof','reserve',{reservationId:'reserved',quantity:3}))).status,'pending');
+  assert.equal((await approve(f,'approve-proof','proof')).status,'approved');
+  const original=await get(f);
+  const other=await get(f,'v1');
+  const db=new DatabaseSync(join(f.directory,'v2.sqlite'));
+  t.after(()=>db.close());
+  const meta=db.prepare('UPDATE durable_meta SET value=? WHERE key=?');
+  const blocks=[
+    {read:"SELECT value FROM durable_meta WHERE key='model_key'",field:'value',write:(value:string)=>meta.run(value,'model_key'),
+      corrupt:()=> '{}',error:/Durable model binding mismatch/},
+    {read:"SELECT value FROM durable_meta WHERE key='state_json'",field:'value',write:(value:string)=>meta.run(value,'state_json'),
+      corrupt:(value:string)=>JSON.stringify(JSON.parse(value),null,2),error:/Stored state is not canonical/},
+    {read:"SELECT request_json FROM durable_pending WHERE invocation_id='proof'",field:'request_json',
+      write:(value:string)=>db.prepare("UPDATE durable_pending SET request_json=? WHERE invocation_id='proof'").run(value),
+      corrupt:(value:string)=>{const request=JSON.parse(value);return JSON.stringify({...request,invocation:{...request.invocation,id:'other'}});},
+      error:/Malformed stored pending request/},
+    {read:"SELECT receipt_json FROM durable_grants WHERE invocation_id='proof'",field:'receipt_json',
+      write:(value:string)=>db.prepare("UPDATE durable_grants SET receipt_json=? WHERE invocation_id='proof'").run(value),
+      corrupt:(value:string)=>JSON.stringify({...JSON.parse(value),approver:'alice'}),error:/Malformed stored grant/},
+  ];
+  for(const {read,field,write,corrupt,error} of blocks){
+    const value=db.prepare(read).get()?.[field];
+    assert.ok(typeof value==='string');
+    write(corrupt(value));
+    const response=await fetch(f.url+'/api/snapshot?profile=v2');
+    assert.equal(response.status,500);
+    assert.match((await response.json()).error,error);
+    assert.deepEqual(await get(f,'v1'),other);
+    write(value);
+    assert.deepEqual(await get(f),original);
+  }
+  const invalidActor=await fetch(f.url+'/api/snapshot?profile=v2&actor=');
+  assert.equal(invalidActor.status,400);
+  assert.match((await invalidActor.json()).error,/bounded simulation identity/);
+  const nonJson=await fetch(f.url+'/api/execute',{method:'POST',body:'{}'});
+  assert.equal(nonJson.status,415);
+  assert.match((await nonJson.json()).error,/Expected application\/json/);
+});
+
 test('snapshot selection is exact and rejected commands leave the profile unchanged', async t => {
   await assert.rejects(createWorkspaceServer({port:65536}), /Invalid port/);
   const f=await fixture(t);

@@ -131,3 +131,30 @@ test('malformed persisted JSON fails closed on recovery', async t => {
   await assert.rejects(run(durableState(rt, db)));
   await run(closeDurableStore(db));
 });
+
+test('only initialized canonical stores can be read or executed, and bounds cannot advance the outbox', async t => {
+  const dir=temp(),db=await run(makeDurableStore(join(dir,'boundaries.sqlite')));
+  t.after(async()=>{await run(closeDurableStore(db));rmSync(dir,{recursive:true,force:true});});
+  const runtime=makeDurableRuntime(issueModel);
+  await assert.rejects(run(durableState(runtime,db)),/not initialized/);
+  await assert.rejects(run(durableExecute(runtime,db,invoke('unused'))),/has not been initialized/);
+  await run(initializeDurableState(runtime,db,issueState));
+  await assert.rejects(run(initializeDurableState(runtime,db,issueState)),/already initialized/);
+  assert.deepEqual(await run(durableState(runtime,db)),issueState);
+  assert.equal((await run(durableExecute(runtime,db,invoke('published')))).status,'committed');
+  const before=await run(pullOutbox(db));
+  assert.ok(before.length>0);
+  for(const limit of [0,1.5,1001])await assert.rejects(run(pullOutbox(db,{limit})),/1 to 1000/);
+  for(const sequence of [0,1.5,Number.MAX_SAFE_INTEGER+1])await assert.rejects(run(acknowledgeOutbox(db,sequence)),/positive safe integer/);
+  assert.deepEqual(await run(pullOutbox(db)),before);
+  const meta=db.prepare('UPDATE durable_meta SET value=? WHERE key=?');
+  const format=db.prepare("SELECT value FROM durable_meta WHERE key='format'").get()?.['value'];
+  assert.ok(typeof format==='string');
+  meta.run('unsupported','format');
+  await assert.rejects(run(durableState(runtime,db)),/Unsupported durable store format/);
+  meta.run(format,'format');
+  const state=await run(durableState(runtime,db));
+  meta.run(JSON.stringify(state,null,2),'state_json');
+  await assert.rejects(run(durableExecute(runtime,db,invoke('ambiguous'))),/not canonical/);
+  assert.deepEqual(await run(pullOutbox(db)),before);
+});

@@ -1,8 +1,10 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import {mkdtemp} from 'node:fs/promises';
+import {mkdtemp,readFile,rm,writeFile} from 'node:fs/promises';
 import {spawnSync} from 'node:child_process';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
 import {parseSource,SourceError,tokenize} from './frontend.ts';
 import prior from './fixtures/prior-leave.ts';
 import current,{sourceMap} from '../leave/model.ts';
@@ -145,4 +147,29 @@ test('source counter includes domain author text rather than hiding it behind th
   const result=spawnSync(process.execPath,['application/count.ts','leave','model.ts','server.ts'],{encoding:'utf8'});
   assert.equal(result.status,0,result.stderr);const report=JSON.parse(result.stdout);
   assert.ok(report.files.some((f:{path:string})=>f.path==='leave/time-away.domain'));assert.ok(report.files.some((f:{path:string})=>f.path==='leave/demo.domain'));assert.equal(report.total.files,5);
+});
+
+test('source accounting writes the same report as stdout and refuses opaque imports',async t=>{
+  const directory=await mkdtemp(join(tmpdir(),'premise-source-count-'));
+  t.after(()=>rm(directory,{recursive:true,force:true}));
+  const output=join(directory,'report.json');
+  const run=(...args:string[])=>spawnSync(process.execPath,['application/count.ts',...args],{encoding:'utf8'});
+  const missing=run('leave');
+  assert.equal(missing.status,1);
+  assert.match(missing.stderr,/Usage: count\.ts/);
+  const counted=run('leave','model.ts','--report',output);
+  assert.equal(counted.status,0,counted.stderr);
+  assert.deepEqual(JSON.parse(counted.stdout),JSON.parse(await readFile(output,'utf8')));
+  const file=join(directory,'entry.ts');
+  for(const [text,error] of [
+    ["import './side-effect.ts';",/Unsupported import syntax/],
+    ["export const module = import('./dynamic.ts');",/Unsupported import syntax/],
+    ["export const model = loadSource(variable);",/Unsupported source loading syntax/],
+  ] satisfies [string,RegExp][]){
+    await writeFile(file,text);
+    const rejected=run(directory,'entry.ts');
+    assert.equal(rejected.status,1);
+    assert.match(rejected.stderr,error);
+    assert.equal(rejected.stdout,'');
+  }
 });

@@ -165,3 +165,24 @@ test('explicit format selection and v2 state validation reject malformed declara
   await assert.rejects(run(durableState(f.rt, f.db)));
   await assert.rejects(run(durableExecute(f.rt, f.db, f.inv)));
 });
+
+test('invalid approval commands and corrupt pending rows cannot acquire or spend authority', async t => {
+  const f=await setup(t);
+  await assert.rejects(run(durableApprove(f.rt,f.db,null,{authenticatedApprover:'boss'})),/Unexpected or missing operation members/);
+  await assert.rejects(run(durableResume(f.rt,f.db,null)),/Unexpected or missing operation members/);
+  await assert.rejects(run(durablePending(f.rt,f.db,'')),/nonempty bounded identity/);
+  assert.equal((await run(durableExecute(f.rt,f.db,f.inv))).status,'pending');
+  const row=f.db.prepare('SELECT request_json FROM durable_pending WHERE invocation_id=?').get(f.inv.id)?.['request_json'];
+  assert.ok(typeof row==='string');
+  const pending=JSON.parse(row);
+  const update=f.db.prepare('UPDATE durable_pending SET request_json=? WHERE invocation_id=?');
+  update.run(JSON.stringify({...pending,invocation:{...pending.invocation,args:{reviewers:[42]}}}),f.inv.id);
+  await assert.rejects(run(durablePending(f.rt,f.db,f.inv.id)),/Invalid invocation input: reviewers/);
+  update.run(JSON.stringify({...pending,invocation:{...pending.invocation,actor:'other'}}),f.inv.id);
+  await assert.rejects(approve(f),/Malformed stored approval request/);
+  assert.deepEqual(await run(durableState(f.rt,f.db)),f.state);
+  assert.deepEqual(await run(pullOutbox(f.db)),[]);
+  update.run(row,f.inv.id);
+  assert.equal((await approve(f)).status,'approved');
+  assert.equal((await resume(f)).status,'committed');
+});
