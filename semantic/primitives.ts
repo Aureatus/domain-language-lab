@@ -1,3 +1,4 @@
+import type {Invocation, InvocationInput} from './types.ts';
 import type {Expr, FieldSchema, Scalar} from './v2/types.ts';
 
 export const own = (o:object, k:PropertyKey) => Object.hasOwn(o, k);
@@ -33,9 +34,18 @@ export function value(s:FieldSchema,x:unknown):asserts x is Scalar | string[] {
   assert(valid, `Value violates ${s.type} schema`, 'schema');
 }
 export function fields(o:unknown) { assert(obj(o), 'Expected field map'); Object.values(o).forEach(schema); }
-export function checkArgs(inputs: Readonly<Record<string, FieldSchema>>, args: unknown): asserts args is Record<string, Scalar | string[]> {
+function checkArgs(inputs: Readonly<Record<string, FieldSchema>>, args: unknown): asserts args is Invocation['args'] {
   const record = keys(args, Object.keys(inputs));
   for (const [name, spec] of Object.entries(inputs)) value(spec, record[name]);
+}
+export function checkInvocation<A extends {inputs: Readonly<Record<string, FieldSchema>>}>(actions: Readonly<Record<string, A>>, input: InvocationInput, invalidIdentity: string): {a: A; inv: Invocation} {
+  keys(input, ['id', 'action', 'args', 'actor', 'clock']);
+  assert(safeKey(input.id) && safeKey(input.actor) && Number.isSafeInteger(input.clock) && input.clock >= 0, invalidIdentity);
+  const a = ownValue(actions, input.action);
+  assert(a, 'Unknown action');
+  const {args} = input;
+  checkArgs(a.inputs, args);
+  return {a, inv: {...input, args}};
 }
 export type Kind=FieldSchema['type'];
 export const binary:Readonly<Record<string,readonly [Kind,Kind]>> = {add: ['integer', 'integer'], sub: ['integer', 'integer'], lt: ['integer', 'boolean'], le: ['integer', 'boolean'], and: ['boolean', 'boolean'], or: ['boolean', 'boolean']};

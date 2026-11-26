@@ -1,8 +1,8 @@
 /** semantic-core/v1: browser-safe, data-only, bounded reference interpreter. */
 import {errorMessage} from '../errors.ts';
-import {assert, binary, canonical, checkArgs, checkRecords, evaluate, fail, fields, increment, keys, obj, own, ownValue, routeRecipients, safeKey, value} from './primitives.ts';
+import {assert, binary, canonical, checkInvocation, checkRecords, evaluate, fail, fields, increment, keys, obj, own, ownValue, routeRecipients, safeKey, value} from './primitives.ts';
 import type {Kind} from './primitives.ts';
-import type {Committed, Event, Expr, Interpreter, Invocation, InvocationInput, Model, Preparation, Prepared, Rejected, State} from './types.ts';
+import type {Committed, Event, Expr, Interpreter, InvocationInput, Model, Preparation, Prepared, Rejected, State} from './types.ts';
 export type * from './types.ts';
 type Patch = Pick<Extract<Event,{kind:'change'}>,'semanticId'|'resource'|'key'|'field'|'before'|'after'>;
 type Snapshot=State['records'][string][string];
@@ -126,12 +126,7 @@ export function createInterpreter(source: unknown): Readonly<Interpreter> {
   function prepare(state:State, invocation:InvocationInput):Preparation {
     try {
       const before = checkState(model, state), input = jsonSnapshot(invocation);
-      keys(input, ['id', 'action', 'args', 'actor', 'clock']);
-      assert(safeKey(input.id) && safeKey(input.actor) && Number.isSafeInteger(input.clock) && input.clock >= 0, 'Invalid invocation identity/clock');
-      const a=ownValue(model.actions,input.action);
-      assert(a,'Unknown action');const {args}=input;
-      checkArgs(a.inputs,args);
-      const inv:Invocation={...input,args};
+      const {a, inv} = checkInvocation(model.actions, input, 'Invalid invocation identity/clock');
       const bound = new Map<string,Bound>(), ctx = {inv, bound};
       for (const b of a.bindings) {
         const key=evaluate(b.key,ctx),record=ownValue(ownValue(before.records,b.resource),key);

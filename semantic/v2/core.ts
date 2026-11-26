@@ -1,9 +1,9 @@
 /** semantic-core/v2. Explicit opt-in lifecycle profile. */
 import {errorMessage} from '../../errors.ts';
 import {jsonSnapshot} from '../core.ts';
-import {assert, binary, canonical, checkArgs, checkRecords, evaluate, fields, increment, keys, obj, own, ownValue, routeRecipients, safeKey, value} from '../primitives.ts';
+import {assert, binary, canonical, checkInvocation, checkRecords, evaluate, fields, increment, keys, obj, own, ownValue, routeRecipients, safeKey, value} from '../primitives.ts';
 import type {Kind} from '../primitives.ts';
-import type {ApprovalReceipt, ApprovalRequest, ApprovalResult, Committed, Event, Expr, Grant, Interpreter, Invocation, InvocationInput, Model, Pending, Prepared, PreparedResult, RecordSnapshot, Rejected, State, Value} from './types.ts';
+import type {ApprovalReceipt, ApprovalRequest, ApprovalResult, Committed, Event, Expr, Grant, Interpreter, InvocationInput, Model, Pending, Prepared, PreparedResult, RecordSnapshot, Rejected, State, Value} from './types.ts';
 export type * from './types.ts';
 type Patch<K extends 'change'|'create'|'delete'> = Omit<Extract<Event,{kind:K}>,'kind'|'id'|'modelId'|'actionId'|'invocationId'|'actor'|'clock'|'revision'|'recipients'>;
 export {jsonSnapshot};
@@ -106,12 +106,7 @@ export function createInterpreter(source: unknown): Readonly<Interpreter> {
   const relations = new Map(model.relationships.map(r => [r.id, r]));
   function context(state:State,invocation:InvocationInput) {
     const before = checkState(model, state), input = jsonSnapshot(invocation);
-    keys(input, ['id', 'action', 'args', 'actor', 'clock']);
-    assert(safeKey(input.id) && safeKey(input.actor) && Number.isSafeInteger(input.clock) && input.clock >= 0, 'Invalid invocation');
-    const a=ownValue(model.actions,input.action);
-    assert(a,'Unknown action');const {args}=input;
-    checkArgs(a.inputs,args);
-    const inv:Invocation={...input,args};
+    const {a, inv} = checkInvocation(model.actions, input, 'Invalid invocation');
     const bound = new Map<string,Bound>(), ctx = {inv, bound};
     for (const b of a.bindings) {
       const key = evaluate(b.key, ctx); assert(safeKey(key), 'Invalid record key');
