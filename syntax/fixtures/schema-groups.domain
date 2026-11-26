@@ -24,8 +24,8 @@ end
 action "supply.adjust"
   inputs
     key string
-    balance like supply.balance
-    status like supply.status
+    balance infer
+    status infer
   end
   bindings
     item from supply key input.key

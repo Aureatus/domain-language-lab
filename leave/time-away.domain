@@ -42,9 +42,9 @@ action "leave.request" identity request
   inputs
     employeeId reference employee as employee
     leaveId string
-    start like leave.start
-    end like leave.end
-    days like leave.days
+    start infer
+    end infer
+    days infer
   end
 
   preconditions
@@ -79,7 +79,7 @@ end
 
 action "settings.change" identity edit
   inputs
-    threshold like settings.threshold
+    threshold infer
   end
   policies
     allow when actor == settings.manager id "settings.manager-only"

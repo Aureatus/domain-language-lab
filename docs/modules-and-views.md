@@ -66,9 +66,9 @@ action "leave.request" identity request
   inputs
     employeeId reference employee as employee
     leaveId string
-    start like leave.start
-    end like leave.end
-    days like leave.days
+    start infer
+    end infer
+    days infer
   end
 ```
 
