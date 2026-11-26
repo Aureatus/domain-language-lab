@@ -89,11 +89,6 @@ const SafeClock = Schema.Number.pipe(
 
 export const DurableEventSchema = openObject({ id: Schema.String });
 
-const DurableStateSchema = openObject({
-  revision: SafeClock,
-  records: Schema.JsonObject,
-});
-
 export const DurableInvocationSchema = openObject({
   id: Schema.String,
   action: Schema.String,
@@ -255,18 +250,18 @@ const stringMap = <S extends Schema.Constraint>(value:S) => Schema.Record(Schema
 const ScalarSchema = Schema.Union([Schema.String,Schema.Finite,Schema.Boolean]);
 const ValueSchema = Schema.Union([ScalarSchema,Schema.Array(Schema.String)]);
 const ValueMapSchema = stringMap(ValueSchema);
-export const SemanticStateSchema = openObject({
+const SemanticStateSchema = openObject({
   revision: SafeClock, records: stringMap(stringMap(openObject({version:SafeClock,values:ValueMapSchema}))),
 });
-export const SemanticInvocationSchema = openObject({
+const SemanticInvocationSchema = openObject({
   id:Schema.String,action:Schema.String,actor:Schema.String,args:ValueMapSchema,clock:Schema.Finite,
 });
-export const ApprovalRequirementSchema = openObject({
+const ApprovalRequirementSchema = openObject({
   policyId:Schema.String,approvers:Schema.Array(Schema.String),allowSelfApproval:Schema.Boolean,
 });
-export const ApprovalGrantSchema = openObject({policyId:Schema.String,approver:Schema.String});
+const ApprovalGrantSchema = openObject({policyId:Schema.String,approver:Schema.String});
 const PendingStatus = Schema.Literals(['pending','consumed']);
-export const FieldSchemaCodec = Schema.Union([
+const FieldSchemaCodec = Schema.Union([
   openObject({type:Schema.Literal('integer'),min:Schema.optionalKey(Schema.Finite),max:Schema.optionalKey(Schema.Finite)}),
   openObject({type:Schema.Literal('string'),enum:Schema.optionalKey(Schema.Array(Schema.String))}),
   openObject({type:Schema.Literal('boolean')}),
