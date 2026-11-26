@@ -1,5 +1,5 @@
 import {createInterpreter, validateState} from '../../semantic/v2/core.ts';
-import type {Action, Expr, FieldSchema, Model} from '../../semantic/v2/core.ts';
+import type {Action, Expr, FieldSchema, Model, Scalar} from '../../semantic/v2/core.ts';
 import {bin, field, input, integer, lit} from '../declarations.ts';
 
 const string: FieldSchema = {type: 'string'};

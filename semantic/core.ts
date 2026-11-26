@@ -1,10 +1,10 @@
 /** semantic-core/v1: browser-safe, data-only, bounded reference interpreter. */
 import {errorMessage} from '../errors.ts';
-import {assert, binary, canonical, checkRecords, evaluate, fail, fields, increment, keys, obj, own, ownValue, routeRecipients, safeKey, value} from './primitives.ts';
-import type {Committed, Event, Expr, FieldSchema, Interpreter, Invocation, InvocationInput, Model, Preparation, Prepared, Rejected, State} from './types.ts';
+import {assert, binary, canonical, checkArgs, checkRecords, evaluate, fail, fields, increment, keys, obj, own, ownValue, routeRecipients, safeKey, value} from './primitives.ts';
+import type {Kind} from './primitives.ts';
+import type {Committed, Event, Expr, Interpreter, Invocation, InvocationInput, Model, Preparation, Prepared, Rejected, State} from './types.ts';
 export type * from './types.ts';
 type Patch = Pick<Extract<Event,{kind:'change'}>,'semanticId'|'resource'|'key'|'field'|'before'|'after'>;
-type CoreValue=Invocation['args'][string];
 type Snapshot=State['records'][string][string];
 type Bound={resource:string;key:string;record:Snapshot};
 type Token={readonly kind:'semantic-prepared/v1'};
@@ -40,11 +40,6 @@ export function jsonSnapshot<T>(value:T):T {
   }
   // oxlint-disable-next-line typescript/consistent-type-assertions -- The walker copies every permitted value and key without coercion.
   return freeze(visit(value, 0)) as T;
-}
-
-function checkArgs(inputs:Readonly<Record<string,FieldSchema>>,args:unknown):asserts args is Invocation['args'] {
-  const record=keys(args,Object.keys(inputs));
-  for(const [name,schema] of Object.entries(inputs))value(schema,record[name]);
 }
 
 /** Validate the entire declaration, including unreachable expressions. Returns frozen JSON. */

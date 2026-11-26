@@ -1,22 +1,18 @@
 /** semantic-core/v2. Explicit opt-in lifecycle profile. */
 import {errorMessage} from '../../errors.ts';
 import {jsonSnapshot} from '../core.ts';
-import {assert, binary, canonical, checkRecords, evaluate, fields, increment, keys, obj, own, ownValue, routeRecipients, safeKey, value} from '../primitives.ts';
-import type {ApprovalReceipt, ApprovalRequest, ApprovalResult, Committed, Event, Expr, FieldSchema, Grant, Interpreter, Invocation, InvocationInput, Model, Pending, Prepared, PreparedResult, RecordSnapshot, Rejected, State, Value} from './types.ts';
+import {assert, binary, canonical, checkArgs, checkRecords, evaluate, fields, increment, keys, obj, own, ownValue, routeRecipients, safeKey, value} from '../primitives.ts';
+import type {Kind} from '../primitives.ts';
+import type {ApprovalReceipt, ApprovalRequest, ApprovalResult, Committed, Event, Expr, Grant, Interpreter, Invocation, InvocationInput, Model, Pending, Prepared, PreparedResult, RecordSnapshot, Rejected, State, Value} from './types.ts';
 export type * from './types.ts';
 type Patch<K extends 'change'|'create'|'delete'> = Omit<Extract<Event,{kind:K}>,'kind'|'id'|'modelId'|'actionId'|'invocationId'|'actor'|'clock'|'revision'|'recipients'>;
 export {jsonSnapshot};
 type Address={resource:string;key:string};
 type Bound=Address&{record:RecordSnapshot};
-type EvalContext={inv:Invocation;bound:Map<string,Bound>};
 type Token={readonly kind:'semantic-prepared/v2'};
 type Plan={before:string;state:State;events:readonly Event[]};
 type MutableState={revision:number;records:Record<string,Record<string,{version:number;values:Record<string,Value>}>>};
 const equal = (a:unknown,b:unknown) => canonical(a) === canonical(b);
-function checkArgs(inputs:Readonly<Record<string,FieldSchema>>,args:unknown):asserts args is Invocation['args'] {
-  const record=keys(args,Object.keys(inputs));
-  for(const [name,schema] of Object.entries(inputs))value(schema,record[name]);
-}
 
 export function validateModel(source: unknown): Model {
   // oxlint-disable-next-line typescript/consistent-type-assertions -- The checks below validate the frozen declaration before returning it.

@@ -33,7 +33,11 @@ export function value(s:FieldSchema,x:unknown):asserts x is Scalar | string[] {
   assert(valid, `Value violates ${s.type} schema`, 'schema');
 }
 export function fields(o:unknown) { assert(obj(o), 'Expected field map'); Object.values(o).forEach(schema); }
-type Kind=FieldSchema['type'];
+export function checkArgs(inputs: Readonly<Record<string, FieldSchema>>, args: unknown): asserts args is Record<string, Scalar | string[]> {
+  const record = keys(args, Object.keys(inputs));
+  for (const [name, spec] of Object.entries(inputs)) value(spec, record[name]);
+}
+export type Kind=FieldSchema['type'];
 export const binary:Readonly<Record<string,readonly [Kind,Kind]>> = {add: ['integer', 'integer'], sub: ['integer', 'integer'], lt: ['integer', 'boolean'], le: ['integer', 'boolean'], and: ['boolean', 'boolean'], or: ['boolean', 'boolean']};
 
 type EvalContext<V> = {
