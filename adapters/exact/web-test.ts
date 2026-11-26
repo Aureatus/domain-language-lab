@@ -19,7 +19,7 @@ const errors: string[] = [];
 page.on("pageerror", (e) => errors.push(e.message));
 
 const snapshot = async () => {
-  const r = await fetch(base + "/api/snapshot");
+  const r = await fetch(`${base}/api/snapshot`);
 
   return r.json();
 };
@@ -54,9 +54,9 @@ try {
     await polling;
     await page.evaluate(
       () =>
-        new Promise<number>((resolve) =>
-          requestAnimationFrame(() => requestAnimationFrame(resolve))
-        )
+        new Promise<number>((resolve) => {
+          requestAnimationFrame(() => requestAnimationFrame(resolve));
+        })
     );
     assert.equal(
       await page.getByText("Loading…", { exact: true }).count(),

@@ -3,7 +3,7 @@ import * as Effect from "effect/Effect";
 import * as SynchronizedRef from "effect/SynchronizedRef";
 
 import { errorMessage } from "../../errors.ts";
-import { createInterpreter, jsonSnapshot } from "../../semantic/core.ts";
+import { jsonSnapshot } from "../../semantic/core.ts";
 import type {
   Committed,
   Event,
@@ -14,21 +14,23 @@ import type {
 import { encodeCanonicalJson as canonical } from "./json.ts";
 
 /** Effect 4 adapter. The clock is data on each invocation, never read implicitly. */
-type Store = {
+interface Store {
   state: State;
   events: Event[];
   invocations: Map<
     string,
     { invocation: Invocation; result: Committed; modelKey: string }
   >;
-};
+}
 
 type Outcome =
   | ReturnType<Interpreter["execute"]>
   | { status: "duplicate"; code: undefined; result: Committed }
   | { status: "rejected"; code: "invocation-conflict"; result: Committed };
 
-type PublishOptions = { beforePublish?: (result: Committed) => void };
+interface PublishOptions {
+  beforePublish?: (result: Committed) => void;
+}
 
 class MemoryStoreError extends Data.TaggedError("MemoryStoreError")<{
   message: string;
@@ -54,7 +56,7 @@ export const execute = (
   { beforePublish }: PublishOptions = {}
 ) =>
   SynchronizedRef.modifyEffect(store, (current) =>
-    Effect.gen(function* (): Effect.fn.Return<
+    Effect.gen(function* innerExecute(): Effect.fn.Return<
       readonly [Outcome, Store],
       MemoryStoreError
     > {
@@ -111,6 +113,9 @@ export const execute = (
   );
 
 /** @public */
-export const makeRuntime = createInterpreter;
+export { createInterpreter as makeRuntime } from "../../semantic/core.ts";
 
-export { Effect, SynchronizedRef };
+// oxlint-disable-next-line oxc/no-barrel-file -- callers share this adapter's Effect runtime instance.
+export * as Effect from "effect/Effect";
+
+export * as SynchronizedRef from "effect/SynchronizedRef";

@@ -14,7 +14,7 @@ const invocation = {
   action: "issue.resolve",
   args: { issueId: "i1" },
   actor: "maya",
-  clock: 1730000000000,
+  clock: 1_730_000_000_000,
 };
 
 const run = Effect.runPromise;
@@ -86,7 +86,7 @@ test("pending publishes nothing; failure before publication leaves both unchange
     run(
       execute(createInterpreter(issueModel), store, invocation, {
         beforePublish: () => {
-          throw Error("injected");
+          throw new Error("injected");
         },
       })
     )

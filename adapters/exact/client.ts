@@ -86,11 +86,11 @@ export function submissionDriver(
           ? { type: "missing" }
           : { type: "found", result }
       );
-    } catch (e) {
-      if (type !== "check" && isNotSubmittedError(e)) {
-        step({ type: "invalid", message: e.message });
+    } catch (error) {
+      if (type !== "check" && isNotSubmittedError(error)) {
+        step({ type: "invalid", message: error.message });
 
-        return { phase: state.phase, message: e.message };
+        return { phase: state.phase, message: error.message };
       }
 
       step({ type: "lost" });
@@ -132,7 +132,7 @@ export function createClient(
     const result = await response.json();
 
     if (!response.ok) {
-      const error = Error(result.error ?? `HTTP ${response.status}`);
+      const error = new Error(result.error ?? `HTTP ${response.status}`);
 
       const notSubmitted =
         path === "actions/execute" &&
@@ -147,11 +147,11 @@ export function createClient(
     }
 
     if (result.contractId !== contractId) {
-      throw Error("Declaration changed. Regenerate this Exact adapter.");
+      throw new Error("Declaration changed. Regenerate this Exact adapter.");
     }
 
     if (body?.submissionId && result.submissionId !== body.submissionId) {
-      throw Error("Submission receipt identity mismatch.");
+      throw new Error("Submission receipt identity mismatch.");
     }
 
     if (path === "actions/reconcile" && result.message) {
@@ -168,7 +168,7 @@ export function createClient(
     const s: ApplicationSnapshot = await request("snapshot");
 
     if (!Number.isSafeInteger(s.snapshotVersion)) {
-      throw Error("Unsupported snapshot version.");
+      throw new TypeError("Unsupported snapshot version.");
     }
 
     if (s.snapshotVersion >= (cached?.snapshotVersion ?? -1)) {
@@ -176,7 +176,7 @@ export function createClient(
     }
 
     if (!cached) {
-      throw Error("Unsupported snapshot version.");
+      throw new Error("Unsupported snapshot version.");
     }
 
     return cached;
@@ -192,12 +192,13 @@ export function createClient(
 
   function project(s: ApplicationSnapshot, actor: string) {
     const rows: { id: string; title: string; detail: string }[] = [];
-    const records = s.state.records;
-    contract.views.forEach((v, i) => {
+    const { records } = s.state;
+
+    for (const [i, v] of contract.views.entries()) {
       const collection = records[v.resource];
 
       if (!collection) {
-        throw Error(`Missing view resource: ${v.resource}`);
+        throw new Error(`Missing view resource: ${v.resource}`);
       }
 
       for (const [id, r] of Object.entries(collection)) {
@@ -215,12 +216,12 @@ export function createClient(
             .map((c) => {
               const value = r.values[c.field];
 
-              return `${c.label}: ${contract.relationships.some((r) => r.resource === v.resource && r.field === c.field) ? (Array.isArray(value) ? value.map(person).join(", ") : person(value)) : text(value)}`;
+              return `${c.label}: ${contract.relationships.some((entry) => entry.resource === v.resource && entry.field === c.field) ? (Array.isArray(value) ? value.map(person).join(", ") : person(value)) : text(value)}`;
             })
             .join(" · "),
         });
       }
-    });
+    }
 
     const inbox = s.pending
       .filter(
@@ -233,7 +234,7 @@ export function createClient(
         const action = contract.actions[p.invocation.action];
 
         if (!action) {
-          throw Error(`Missing pending action: ${p.invocation.action}`);
+          throw new Error(`Missing pending action: ${p.invocation.action}`);
         }
 
         return {
@@ -272,10 +273,10 @@ export function createClient(
             ? `Approval is saved, but completion failed. ${r.message}`
             : r.message,
       };
-    } catch (e) {
+    } catch (error) {
       return {
         ok: false,
-        message: `${path === "approvals/resume" ? "Approval may be saved, but completion failed. " : ""}${e instanceof Error ? e.message : String(e)} Reconnect and inspect saved state before retrying; an HTTP failure can have an ambiguous outcome.`,
+        message: `${path === "approvals/resume" ? "Approval may be saved, but completion failed. " : ""}${error instanceof Error ? error.message : String(error)} Reconnect and inspect saved state before retrying; an HTTP failure can have an ambiguous outcome.`,
       };
     }
   }

@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
 import { join, resolve, dirname } from "node:path";
-import { fileURLToPath } from "node:url";
 
 import {
   makeDurableRuntime,
@@ -40,11 +39,11 @@ const rng = (seed: number) => {
   let x = seed >>> 0;
 
   return () => {
-    x = (x + 0x6d2b79f5) | 0;
+    x = (x + 0x6d_2b_79_f5) | 0;
     let t = Math.imul(x ^ (x >>> 15), 1 | x);
     t ^= t + Math.imul(t ^ (t >>> 7), 61 | t);
 
-    return ((t ^ (t >>> 14)) >>> 0) / 0x100000000;
+    return ((t ^ (t >>> 14)) >>> 0) / 0x1_00_00_00_00;
   };
 };
 
@@ -57,29 +56,32 @@ const positiveInteger = (n: number, name: string) => {
 };
 
 const validSeed = (n: number) => {
-  if (!Number.isInteger(n) || n < 0 || n > 0xffffffff) {
+  if (!Number.isInteger(n) || n < 0 || n > 0xff_ff_ff_ff) {
     throw new TypeError("seed must be a uint32");
   }
 
   return n;
 };
 
-type Execute = { api: "execute"; command: ReturnType<typeof invocation> };
+interface Execute {
+  api: "execute";
+  command: ReturnType<typeof invocation>;
+}
 
-type Approve = {
+interface Approve {
   api: "approve";
   command: { id: string; invocationId: string; policyId: string };
   host: { authenticatedApprover: string };
-};
+}
 
-type Resume = {
+interface Resume {
   api: "resume";
   command: { id: string; invocationId: string; clock: number };
-};
+}
 
 type Operation = Execute | Approve | Resume;
 
-type Reservation = {
+interface Reservation {
   version: number;
   values: {
     stockId: string;
@@ -88,9 +90,9 @@ type Reservation = {
     expiresAt: number;
     status: string;
   };
-};
+}
 
-type OracleState = {
+interface OracleState {
   revision: number;
   records: {
     stock: {
@@ -106,15 +108,15 @@ type OracleState = {
     };
     reservation: Record<string, Reservation>;
   };
-};
+}
 
-type Pending = {
+interface Pending {
   invocation: Execute["command"];
   prestate: OracleState;
   grants: Grant[];
   status: "pending" | "consumed";
   resumeId: string | null;
-};
+}
 
 type Prediction =
   | {
@@ -125,13 +127,13 @@ type Prediction =
     }
   | { status: "duplicate"; result: Prediction; code?: never; state?: never };
 
-type Oracle = {
+interface Oracle {
   state: OracleState;
   pending: Record<string, Pending>;
   ledger: Map<string, { op: Operation; expected: Prediction }>;
-};
+}
 
-type ObservedEvent = {
+interface ObservedEvent {
   readonly id: string;
   readonly kind?: unknown;
   readonly invocationId?: unknown;
@@ -139,9 +141,9 @@ type ObservedEvent = {
   readonly actor?: unknown;
   readonly clock?: unknown;
   readonly revision?: unknown;
-};
+}
 
-type ObservedResult = {
+interface ObservedResult {
   status: string;
   code?: string;
   state?: unknown;
@@ -150,13 +152,16 @@ type ObservedResult = {
   policyIds?: readonly string[];
   request?: ApprovalRequest;
   receipt?: ApprovalReceipt;
-};
+}
 
 type Snapshot = Awaited<ReturnType<typeof snapshot>>;
 
-type Observation = { result: ObservedResult; snapshot: Snapshot };
+interface Observation {
+  result: ObservedResult;
+  snapshot: Snapshot;
+}
 
-type Counterexample = {
+interface Counterexample {
   status: "counterexample";
   index?: number;
   phase?: string;
@@ -170,9 +175,9 @@ type Counterexample = {
     actual?: unknown;
   };
   failingPrefix: Operation[];
-};
+}
 
-type Case = {
+interface Case {
   seed: number;
   commands: Operation[];
   observations: Observation[];
@@ -180,20 +185,20 @@ type Case = {
   restartBoundaries: number;
   counterexample?: Counterexample;
   replay?: { status: "passed"; comparison: string };
-};
+}
 
 type History = { seed: number; observations?: unknown[] } & (
   | { commands: Operation[]; failingPrefix?: Operation[] }
   | { commands?: undefined; failingPrefix: Operation[] }
 );
 
-type GeneratedOptions = {
+interface GeneratedOptions {
   reportPath?: string;
   seed?: number;
   runs?: number;
   steps?: number;
   histories?: History[];
-};
+}
 
 const isObject = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
@@ -210,7 +215,7 @@ function isOperation(value: unknown): value is Operation {
   const c = value["command"];
 
   switch (value["api"]) {
-    case "execute":
+    case "execute": {
       return (
         typeof c["clock"] === "number" &&
         typeof c["action"] === "string" &&
@@ -224,19 +229,26 @@ function isOperation(value: unknown): value is Operation {
             typeof v === "boolean"
         )
       );
-    case "approve":
+    }
+
+    case "approve": {
       return (
         typeof c["invocationId"] === "string" &&
         typeof c["policyId"] === "string" &&
         isObject(value["host"]) &&
         typeof value["host"]["authenticatedApprover"] === "string"
       );
-    case "resume":
+    }
+
+    case "resume": {
       return (
         typeof c["invocationId"] === "string" && typeof c["clock"] === "number"
       );
-    default:
+    }
+
+    default: {
       return false;
+    }
   }
 }
 
@@ -300,7 +312,13 @@ export function generatedHistory(seed: number, steps = 30) {
   const blocks: Operation[][] = [];
 
   let serial = 0;
-  const id = (label: string) => `${prefix}-${label}-${serial++}`;
+
+  const id = (label: string) => {
+    const value = `${prefix}-${label}-${serial}`;
+    serial += 1;
+
+    return value;
+  };
 
   const action = (
     kind: string,
@@ -424,7 +442,7 @@ export function generatedHistory(seed: number, steps = 30) {
     blocks.push([r, grant(r), resume(r, r.command.args.expiresAt)]);
   }
 
-  for (let i = blocks.length - 1; i > 0; i--) {
+  for (let i = blocks.length - 1; i > 0; i -= 1) {
     const j = Math.floor(random() * (i + 1));
     const a = blocks[i];
     const b = blocks[j];
@@ -621,7 +639,7 @@ function predict(o: Oracle, op: Operation): Prediction {
 
     if (kind === "reserve") {
       stock.values.available -= count(a["quantity"]);
-      stock.version++;
+      stock.version += 1;
       records[a.reservationId] = {
         version: 0,
         values: {
@@ -638,12 +656,12 @@ function predict(o: Oracle, op: Operation): Prediction {
       const record = records[a.reservationId];
       assert.ok(record, "Missing committed reservation");
       stock.values.available += record.values.quantity;
-      stock.version++;
-      record.version++;
+      stock.version += 1;
+      record.version += 1;
       record.values.status = kind === "cancel" ? "cancelled" : "expired";
     }
 
-    o.state.revision++;
+    o.state.revision += 1;
     expected.invocation = copy(inv);
   }
 
@@ -752,9 +770,7 @@ function checkEvents(
 
       if (!prior) {
         changes.push({ kind: "create", resource, key, after: next });
-      } else if (!next) {
-        changes.push({ kind: "delete", resource, key, before: prior });
-      } else {
+      } else if (next) {
         for (const field of Object.keys(prior.values)) {
           if (
             canonical(prior.values[field]) !== canonical(next.values[field])
@@ -769,6 +785,8 @@ function checkEvents(
             });
           }
         }
+      } else {
+        changes.push({ kind: "delete", resource, key, before: prior });
       }
     }
   }
@@ -796,8 +814,8 @@ function checkEvents(
     events
       .slice(1)
       .map(projection)
-      .sort((a, b) => canonical(a).localeCompare(canonical(b))),
-    changes.sort((a, b) => canonical(a).localeCompare(canonical(b)))
+      .toSorted((a, b) => canonical(a).localeCompare(canonical(b))),
+    changes.toSorted((a, b) => canonical(a).localeCompare(canonical(b)))
   );
 
   for (const event of events) {
@@ -828,11 +846,11 @@ export function checkHistory(
       expected = predict(o, op);
       const observation = observations[index];
       assert.ok(observation, "Missing step observation");
-      const { result, snapshot } = observation;
+      const { result, snapshot: innerSnapshot } = observation;
       checkOutcome(result, expected, o, op);
-      assert.deepEqual(snapshot.state, o.state, "persisted domain state");
+      assert.deepEqual(innerSnapshot.state, o.state, "persisted domain state");
       assert.equal(
-        snapshot.state.records.stock.camera.values.available,
+        innerSnapshot.state.records.stock.camera.values.available,
         8 -
           Object.values(o.state.records.reservation)
             .filter((r) => r.values.status === "active")
@@ -841,7 +859,7 @@ export function checkHistory(
       );
 
       for (const [id, p] of Object.entries(o.pending)) {
-        const actual = snapshot.pending[id];
+        const actual = innerSnapshot.pending[id];
         assert.ok(actual, `missing pending projection ${id}`);
         assert.equal(actual.invocationId, id);
         assert.equal(actual.status, p.status);
@@ -851,12 +869,12 @@ export function checkHistory(
       }
 
       assert.deepEqual(
-        Object.keys(snapshot.pending)
-          .filter((id) => snapshot.pending[id])
-          .sort(),
-        Object.keys(o.pending).sort()
+        Object.keys(innerSnapshot.pending)
+          .filter((id) => innerSnapshot.pending[id])
+          .toSorted(),
+        Object.keys(o.pending).toSorted()
       );
-      const events = snapshot.events;
+      const { events } = innerSnapshot;
       assert.deepEqual(
         events.slice(0, previousEvents.length),
         previousEvents,
@@ -934,11 +952,11 @@ async function snapshot(path: string, commands: Operation[]) {
   const ids = [
     ...new Set(
       commands.flatMap((x) =>
-        x.api !== "execute"
-          ? [x.command.invocationId]
-          : x.command.action === "reservation.reserve"
+        x.api === "execute"
+          ? x.command.action === "reservation.reserve"
             ? [x.command.id]
             : []
+          : [x.command.invocationId]
       )
     ),
   ];
@@ -955,7 +973,7 @@ async function snapshot(path: string, commands: Operation[]) {
 }
 
 async function execute(path: string, op: Operation): Promise<ObservedResult> {
-  const api = op.api;
+  const { api } = op;
 
   return durable(path, async (rt, db) => {
     if (op.api === "execute") {
@@ -1035,7 +1053,7 @@ export function mutationChecks(
   );
 
   assert.ok(
-    staleIndex >= 0 && commitIndex >= 0,
+    staleIndex !== -1 && commitIndex !== -1,
     "mutation fixture requires stale rejection and committed reserve"
   );
 
@@ -1106,7 +1124,7 @@ export function mutationChecks(
 
 export async function runGenerated({
   reportPath,
-  seed = 0x51a7,
+  seed = 0x51_a7,
   runs = 6,
   steps = 30,
   histories,
@@ -1118,7 +1136,7 @@ export async function runGenerated({
   const scenarios =
     histories?.map((history) => ({ caseSeed: history.seed, history })) ??
     Array.from({ length: runs }, (_, i) => ({
-      caseSeed: (seed + Math.imul(i, 0x9e3779b9)) >>> 0,
+      caseSeed: (seed + Math.imul(i, 0x9e_37_79_b9)) >>> 0,
       history: undefined,
     }));
 
@@ -1169,7 +1187,7 @@ export async function runGenerated({
           for (
             let index = 0;
             index < Math.max(baseline.length, observed.observations.length);
-            index++
+            index += 1
           ) {
             try {
               assert.deepEqual(
@@ -1282,7 +1300,7 @@ export async function runGenerated({
     }
 
     for (const { result } of observed.observations) {
-      const key = `${result.status}${result.code ? ":" + result.code : ""}`;
+      const key = `${result.status}${result.code ? `:${result.code}` : ""}`;
       coverage[key] = (coverage[key] ?? 0) + 1;
     }
 
@@ -1325,13 +1343,13 @@ export async function runGenerated({
 
   if (reportPath) {
     await mkdir(dirname(reportPath), { recursive: true });
-    await writeFile(reportPath, encodeJsonPretty(report) + "\n");
+    await writeFile(reportPath, `${encodeJsonPretty(report)}\n`);
   }
 
   return report;
 }
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) {
+if (process.argv[1] === import.meta.filename) {
   const args = process.argv.slice(2);
   const options: GeneratedOptions = {};
 
@@ -1347,19 +1365,24 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     return value;
   }
 
-  for (let i = 0; i < args.length; i++) {
+  for (let i = 0; i < args.length; i += 1) {
     const arg = argValue(i);
 
     if (arg === "--seed") {
-      options.seed = Number(args[++i]);
+      i += 1;
+      options.seed = Number(args[i]);
     } else if (arg === "--runs") {
-      options.runs = Number(args[++i]);
+      i += 1;
+      options.runs = Number(args[i]);
     } else if (arg === "--steps") {
-      options.steps = Number(args[++i]);
+      i += 1;
+      options.steps = Number(args[i]);
     } else if (arg === "--report") {
-      options.reportPath = resolve(argValue(++i));
+      i += 1;
+      options.reportPath = resolve(argValue(i));
     } else if (arg === "--replay") {
-      replay = args[++i];
+      i += 1;
+      replay = args[i];
     } else if (!arg.startsWith("-") && !options.reportPath) {
       options.reportPath = resolve(arg);
     } else {
@@ -1370,7 +1393,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   options.reportPath ??= resolve("artifacts/durable-generated-report.json");
 
   if (replay) {
-    const input = decodeJsonObject(await readFile(replay, "utf8"));
+    const input = decodeJsonObject(await readFile(replay, "utf-8"));
     const cases = input["cases"] ?? [input];
 
     if (!Array.isArray(cases)) {

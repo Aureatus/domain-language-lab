@@ -1,6 +1,6 @@
 import { runDerivedChecks } from "./derive.ts";
 
-self.onmessage = ({ data }) => {
+self.addEventListener("message", ({ data }) => {
   try {
     self.postMessage({ id: data.id, report: runDerivedChecks(data.workspace) });
   } catch (error) {
@@ -9,4 +9,4 @@ self.onmessage = ({ data }) => {
       error: error instanceof Error ? error.message : String(error),
     });
   }
-};
+});

@@ -19,16 +19,16 @@ const sources = await Promise.all(
   paths.map(async (p) => [
     p,
     createHash("sha256")
-      .update(await readFile(new URL(p, root), "utf8"))
+      .update(await readFile(new URL(p, root), "utf-8"))
       .digest("hex"),
   ])
 );
 
-const bundle = await bundleBrowser(new URL("./app.ts", import.meta.url));
+const bundle = await bundleBrowser(new URL("app.ts", import.meta.url));
 
 const template = await readFile(
   new URL("inventory/template.html", root),
-  "utf8"
+  "utf-8"
 );
 
 await mkdir(new URL("artifacts/", root), { recursive: true });
@@ -36,7 +36,7 @@ await mkdir(new URL("artifacts/", root), { recursive: true });
 await writeFile(
   new URL("artifacts/inventory.html", root),
   template.replace("/* BUNDLE */", () =>
-    bundle.replace(/<\/script/gi, "<\\/script")
+    bundle.replaceAll(/<\/script/giu, "<\\/script")
   )
 );
 

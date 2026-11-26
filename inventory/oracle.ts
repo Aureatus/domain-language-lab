@@ -45,7 +45,7 @@ export function inspectInventory(
     }
   }
 
-  const stock = state.records["stock"];
+  const { stock } = state.records;
   const reservations = state.records["reservation"];
 
   if (!stock || !reservations) {

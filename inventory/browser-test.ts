@@ -31,8 +31,8 @@ try {
     fullPage: true,
   });
   await page.click("#broken");
-  assert.match(await page.locator("#health").innerText(), /oversold/);
-  assert.match(await page.locator("#health").innerText(), /lost reservation/);
+  assert.match(await page.locator("#health").innerText(), /oversold/u);
+  assert.match(await page.locator("#health").innerText(), /lost reservation/u);
   assert.equal(await page.locator("#steps .step").count(), 4);
   await page.screenshot({
     path: new URL("inventory-mutant.png", artifacts).pathname,
@@ -41,7 +41,7 @@ try {
   await page.click("#replay");
   assert.match(
     await page.locator("#replay-result").innerText(),
-    /Exact replay matched/
+    /Exact replay matched/u
   );
   // Browser export is actual JSON, then import it through the file control.
   const downloadPromise = page.waitForEvent("download");
@@ -59,7 +59,7 @@ try {
       document.querySelector("#replay-result")?.textContent ===
       "Imported replay verified."
   );
-  assert.match(await page.locator("#health").innerText(), /INVARIANT FAILURE/);
+  assert.match(await page.locator("#health").innerText(), /INVARIANT FAILURE/u);
   await page.locator('[data-step="1"]').click();
   assert.equal(await page.locator("#available").innerText(), "5");
   assert.ok(await page.locator("button[type=submit]").isDisabled());
@@ -67,13 +67,16 @@ try {
   assert.equal(await page.locator("#available").innerText(), "2");
   await page.click("#correct");
   assert.equal(await page.locator("#available").innerText(), "0");
-  assert.match(await page.locator("#health").innerText(), /Conservation holds/);
-  assert.match(await page.locator("#steps").innerText(), /stale/);
-  assert.match(await page.locator("#steps").innerText(), /precondition/);
+  assert.match(
+    await page.locator("#health").innerText(),
+    /Conservation holds/u
+  );
+  assert.match(await page.locator("#steps").innerText(), /stale/u);
+  assert.match(await page.locator("#steps").innerText(), /precondition/u);
   await page.locator('[data-step="3"]').click();
   assert.match(
     await page.locator("#explanation").innerText(),
-    /Stale preparation rejected/
+    /Stale preparation rejected/u
   );
   await page.locator('[data-step="5"]').click();
   await page.screenshot({
@@ -84,7 +87,7 @@ try {
   await page.click("#replay");
   assert.match(
     await page.locator("#replay-result").innerText(),
-    /Exact replay matched/
+    /Exact replay matched/u
   );
   // Real form actions: owner rejection, early expiration, inclusive boundary, cancellation.
   await page.click("#reset");
@@ -95,7 +98,7 @@ try {
   await page.click("button[type=submit]");
   assert.match(
     await page.locator("#explanation").innerText(),
-    /expiryBoundary/
+    /expiryBoundary/u
   );
   await page.fill("#clock", "30");
   await page.click("button[type=submit]");
@@ -107,7 +110,7 @@ try {
   await page.click("button[type=submit]");
   assert.match(
     await page.locator("#explanation").innerText(),
-    /Ownership policy denied/
+    /Ownership policy denied/u
   );
   await page.selectOption("#actor", "alice");
   await page.click("button[type=submit]");

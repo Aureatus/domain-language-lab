@@ -2,7 +2,7 @@ import { errorMessage } from "../errors.ts";
 import { createApp, forkApp } from "./core.ts";
 import type { LiveModel, Rule } from "./core.ts";
 
-type Case = {
+interface Case {
   id: string;
   action: string | null;
   actorId: string | null;
@@ -10,11 +10,15 @@ type Case = {
   actual: Observation | null;
   status: "passed" | "failed" | "unknown";
   reason?: string;
-};
+}
 
 type WitnessArgs = Record<string, string | number | boolean | null | undefined>;
 
-type Variant = { name: string; args: WitnessArgs | unknown[]; valid?: boolean };
+interface Variant {
+  name: string;
+  args: WitnessArgs | unknown[];
+  valid?: boolean;
+}
 
 type App = ReturnType<typeof createApp>;
 
@@ -24,13 +28,13 @@ type Issue = State["issues"][number];
 
 type Relationships = Pick<Issue, "id" | "opener" | "assignee" | "watchers">;
 
-type Route = {
+interface Route {
   recipient: string;
   reasons: string[];
   paths: { from: string; relationship: string; to: string }[];
-};
+}
 
-type Observation = {
+interface Observation {
   ok: boolean;
   unchanged?: boolean;
   reason?: string;
@@ -43,7 +47,7 @@ type Observation = {
     action: string;
     reasons: string[];
   }[];
-};
+}
 
 // Deliberately independent of core.check(), core's validator and routing helper.
 const derivationCopy = <T>(value: T): T => JSON.parse(JSON.stringify(value));
@@ -90,7 +94,7 @@ export function describeChange(
 
     if (
       !Array.isArray(values) ||
-      Array.from(values).some((value) => !allowed.includes(value)) ||
+      [...values].some((value) => !allowed.includes(value)) ||
       new Set(values).size !== values.length
     ) {
       return { ok: false, reason: `Invalid ${key}` };
@@ -150,7 +154,7 @@ function derivedArgs(
     } else if (field.type === "string") {
       args[key] = "Generated witness";
     } else {
-      throw Error(`Unsupported witness schema: ${key}`);
+      throw new Error(`Unsupported witness schema: ${key}`);
     }
   }
 
@@ -192,10 +196,11 @@ function derivedRoutes(
       };
     })
     .filter((row) => row.reasons.length)
-    .sort((a, b) => {
-      const pathOrder =
-        paths.findIndex((path) => path === a.reasons[0]) -
-        paths.findIndex((path) => path === b.reasons[0]);
+    .toSorted((a, b) => {
+      const pathIndex = (reason: string | undefined) =>
+        reason === undefined ? -1 : paths.indexOf(reason);
+
+      const pathOrder = pathIndex(a.reasons[0]) - pathIndex(b.reasons[0]);
 
       return (
         pathOrder ||
@@ -223,22 +228,22 @@ function derivedRelationship(
   }
 
   if (Array.isArray(args)) {
-    throw Error("Expected witness arguments");
+    throw new TypeError("Expected witness arguments");
   }
 
   const matched = state.issues.find((item) => item.id === args["issueId"]);
 
   if (!matched) {
-    throw Error("Expected witness issue");
+    throw new Error("Expected witness issue");
   }
 
   const issue = derivationCopy(matched);
 
   if (action === "assign") {
-    const assignee = args["assignee"];
+    const { assignee } = args;
 
     if (assignee !== null && typeof assignee !== "string") {
-      throw Error("Expected witness assignee");
+      throw new Error("Expected witness assignee");
     }
 
     issue.assignee = assignee;
@@ -406,10 +411,10 @@ export function runDerivedChecks(workspace: unknown) {
     return { result: "unknown", revision: null, cases, scope: derivationScope };
   }
 
-  const revision = source.model.revision;
+  const { revision } = source.model;
 
   const resourceBound = (reason: string) =>
-    /history limit|too large|too complex/.test(reason);
+    /history limit|too large|too complex/u.test(reason);
 
   const entryPoints: readonly ("invokeTool" | "dispatch")[] = [
     "invokeTool",
@@ -489,9 +494,8 @@ export function runDerivedChecks(workspace: unknown) {
 
           const expected: Observation = {
             ok,
-            ...(!ok
-              ? { unchanged: true }
-              : {
+            ...(ok
+              ? {
                   recipients: derivedRoutes(
                     derivedRelationship(
                       trial.state,
@@ -502,7 +506,8 @@ export function runDerivedChecks(workspace: unknown) {
                     rule.notify,
                     actor.id
                   ),
-                }),
+                }
+              : { unchanged: true }),
           };
 
           const result = trial[entryPoint](action, variant.args, actor.id);
@@ -516,9 +521,9 @@ export function runDerivedChecks(workspace: unknown) {
 
           const actual: Observation = {
             ok: result.ok,
-            ...(!result.ok
-              ? { unchanged, reason: result.reason }
-              : { recipients: result.event.recipients }),
+            ...(result.ok
+              ? { recipients: result.event.recipients }
+              : { unchanged, reason: result.reason }),
           };
 
           let matches =
@@ -541,8 +546,7 @@ export function runDerivedChecks(workspace: unknown) {
               reasons: row.reasons,
             }));
             actual.notifications = notifications;
-            matches =
-              matches &&
+            matches &&=
               derivationEqual(notifications, expected.notifications) &&
               trial.state.events.length === beforeState.events.length + 1;
           }

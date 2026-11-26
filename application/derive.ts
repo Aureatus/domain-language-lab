@@ -14,11 +14,15 @@ import type {
 import { adapters } from "./inputs.ts";
 import { loadingModes } from "./loading.ts";
 
-export { loadingModes };
+export { loadingModes } from "./loading.ts";
 
-type FieldReference = { resource: string; key: string; field: string };
+interface FieldReference {
+  resource: string;
+  key: string;
+  field: string;
+}
 
-export type ApplicationField = {
+export interface ApplicationField {
   name: string;
   schema: FieldSchema;
   label: string;
@@ -30,9 +34,9 @@ export type ApplicationField = {
   };
   reference?: { resource: string; labelField?: string };
   default?: Value | FieldReference;
-};
+}
 
-export type ApplicationAction = {
+export interface ApplicationAction {
   id: string;
   label: string;
   description: string;
@@ -45,9 +49,9 @@ export type ApplicationAction = {
   }[];
   policies: Action["policies"];
   preconditions: Action["preconditions"];
-};
+}
 
-type ApplicationView = {
+interface ApplicationView {
   kind: "list" | "summary";
   resource: string;
   label: string;
@@ -55,9 +59,9 @@ type ApplicationView = {
   key?: string;
   ownerField?: string;
   columns: { field: string; label: string; format?: "date" | "text" }[];
-};
+}
 
-export type ApplicationContract = {
+export interface ApplicationContract {
   format: string;
   title: string;
   eyebrow: string;
@@ -69,13 +73,13 @@ export type ApplicationContract = {
   views: ApplicationView[];
   resources: Model["resources"];
   relationships: Model["relationships"];
-};
+}
 
 const title = (s: string) =>
   s
-    .replace(/[._-]/g, " ")
-    .replace(/([a-z])([A-Z])/g, "$1 $2")
-    .replace(/^./, (c) => c.toUpperCase());
+    .replaceAll(/[._-]/gu, " ")
+    .replaceAll(/([a-z])([A-Z])/gu, "$1 $2")
+    .replace(/^./u, (c) => c.toUpperCase());
 
 function exact(
   value: unknown,
@@ -89,7 +93,7 @@ function exact(
     Object.keys(value).some((k) => !keys.includes(k)) ||
     required.some((k) => !Object.hasOwn(value, k))
   ) {
-    throw Error(
+    throw new Error(
       `Unsupported or missing configuration members (allowed: ${keys.join(", ")}).`
     );
   }
@@ -97,7 +101,7 @@ function exact(
 
 const text = (s: unknown) => {
   if (typeof s !== "string" || !s.length) {
-    throw Error("Expected nonempty text.");
+    throw new Error("Expected nonempty text.");
   }
 
   return s;
@@ -107,7 +111,7 @@ const optionalText = (s: unknown) => (s === undefined ? undefined : text(s));
 
 const array = (value: unknown, message: string): readonly unknown[] => {
   if (!Array.isArray(value)) {
-    throw Error(message);
+    throw new TypeError(message);
   }
 
   return value;
@@ -115,13 +119,13 @@ const array = (value: unknown, message: string): readonly unknown[] => {
 
 function validateLoading(config: Record<string, unknown>) {
   if (!Object.hasOwn(config, "loading")) {
-    return undefined;
+    return;
   }
 
-  const loading = config["loading"];
+  const { loading } = config;
 
   if (typeof loading !== "string" || !loadingModes.includes(loading)) {
-    throw Error(`Expected loading mode: ${loadingModes.join(", ")}.`);
+    throw new Error(`Expected loading mode: ${loadingModes.join(", ")}.`);
   }
 
   return loading;
@@ -129,7 +133,7 @@ function validateLoading(config: Record<string, unknown>) {
 
 function objectMap(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
-    throw Error("Expected a configuration object.");
+    throw new Error("Expected a configuration object.");
   }
 
   return Object.fromEntries(Object.entries(value));
@@ -164,7 +168,7 @@ function fieldRef(model: Model, ref: unknown): FieldReference {
   const field = text(ref["field"]);
 
   if (!model.resources[resource]?.fields[field]) {
-    throw Error("Unknown resource/field reference.");
+    throw new Error("Unknown resource/field reference.");
   }
 
   return { ...ref, resource, field, key: text(ref["key"]) };
@@ -179,7 +183,7 @@ export function deriveApplication(declaration: unknown) {
   const { domain, initialState, application } = declaration;
 
   const runtime = createInterpreter(domain);
-  const model = runtime.model;
+  const { model } = runtime;
   const state = validateState(model, initialState);
   const meta = jsonSnapshot(application);
 
@@ -201,7 +205,7 @@ export function deriveApplication(declaration: unknown) {
   const loading = validateLoading(meta);
 
   if (meta["version"] !== "model-application/v1") {
-    throw Error("Unsupported application version.");
+    throw new Error("Unsupported application version.");
   }
 
   const { title: heading, eyebrow, subtitle, scope } = meta;
@@ -221,7 +225,7 @@ export function deriveApplication(declaration: unknown) {
       const name = optionalText(a["name"]);
 
       if (actorIds.has(id)) {
-        throw Error("Duplicate actor.");
+        throw new Error("Duplicate actor.");
       }
 
       actorIds.add(id);
@@ -231,12 +235,12 @@ export function deriveApplication(declaration: unknown) {
   );
 
   if (!actors.length) {
-    throw Error("Declare local simulation actors.");
+    throw new Error("Declare local simulation actors.");
   }
 
   for (const [name, config] of Object.entries(configs)) {
     if (!Object.hasOwn(model.actions, name)) {
-      throw Error(`Unknown action ${name}`);
+      throw new Error(`Unknown action ${name}`);
     }
 
     objectMap(config);
@@ -257,7 +261,7 @@ export function deriveApplication(declaration: unknown) {
 
         for (const [name, fieldConfig] of Object.entries(fieldConfigs)) {
           if (!Object.hasOwn(a.inputs, name)) {
-            throw Error(`Unknown action input ${name}`);
+            throw new Error(`Unknown action input ${name}`);
           }
 
           objectMap(fieldConfig);
@@ -273,11 +277,11 @@ export function deriveApplication(declaration: unknown) {
         ).map((item) => {
           exact(item, ["name", "mapping"], ["name", "mapping"]);
 
-          const name = item["name"];
+          const { name } = item;
           const raw = item["mapping"];
 
           if (name !== "utc-weekday-range/v1") {
-            throw Error(`Unsupported adapter ${name}`);
+            throw new Error(`Unsupported adapter ${name}`);
           }
 
           exact(raw, ["start", "end", "output"], ["start", "end", "output"]);
@@ -292,7 +296,7 @@ export function deriveApplication(declaration: unknown) {
           adapters[name].validate(mapping, a.inputs);
 
           if (computed.has(mapping.output)) {
-            throw Error("Conflicting adapter output.");
+            throw new Error("Conflicting adapter output.");
           }
 
           computed.add(mapping.output);
@@ -315,15 +319,15 @@ export function deriveApplication(declaration: unknown) {
             if (Object.hasOwn(f, "binding")) {
               const raw = f["binding"];
               exact(raw, ["source", "value"], ["source"]);
-              const source = raw["source"];
+              const { source } = raw;
 
               if (source === "constant") {
                 if (!Object.hasOwn(raw, "value")) {
-                  throw Error("Missing constant.");
+                  throw new Error("Missing constant.");
                 }
 
                 if (!isValue(raw["value"])) {
-                  throw Error("Binding/schema mismatch.");
+                  throw new Error("Binding/schema mismatch.");
                 }
 
                 binding = { ...raw, source, value: raw["value"] };
@@ -333,11 +337,11 @@ export function deriveApplication(declaration: unknown) {
                   source !== "operation-id" &&
                   source !== "clock"
                 ) {
-                  throw Error("Unsupported input binding.");
+                  throw new Error("Unsupported input binding.");
                 }
 
                 if (Object.hasOwn(raw, "value")) {
-                  throw Error("Unexpected binding value.");
+                  throw new Error("Unexpected binding value.");
                 }
 
                 binding = { ...raw, source };
@@ -355,7 +359,7 @@ export function deriveApplication(declaration: unknown) {
                   ref.key !== "$actor" &&
                   !state.records[ref.resource]?.[ref.key]
                 ) {
-                  throw Error("Unknown default record.");
+                  throw new Error("Unknown default record.");
                 }
 
                 values = Object.entries(state.records[ref.resource] ?? {})
@@ -366,7 +370,7 @@ export function deriveApplication(declaration: unknown) {
                 defaultValue = ref;
               } else {
                 if (!isValue(raw)) {
-                  throw Error("Default/schema mismatch.");
+                  throw new Error("Default/schema mismatch.");
                 }
 
                 values = [raw];
@@ -374,7 +378,7 @@ export function deriveApplication(declaration: unknown) {
               }
 
               if (!values.length || values.some((v) => !conforms(schema, v))) {
-                throw Error("Default/schema mismatch.");
+                throw new Error("Default/schema mismatch.");
               }
             }
 
@@ -389,7 +393,7 @@ export function deriveApplication(declaration: unknown) {
                       : ["operation-example"];
 
               if (values.some((v) => !conforms(schema, v))) {
-                throw Error("Binding/schema mismatch.");
+                throw new Error("Binding/schema mismatch.");
               }
             }
 
@@ -407,7 +411,8 @@ export function deriveApplication(declaration: unknown) {
 
             if (!reference) {
               const b = a.bindings.find(
-                (b) => b.key.op === "input" && b.key.name === name
+                (binding2) =>
+                  binding2.key.op === "input" && binding2.key.name === name
               );
 
               if (b) {
@@ -429,12 +434,12 @@ export function deriveApplication(declaration: unknown) {
                 (reference.labelField &&
                   !Object.hasOwn(resource.fields, reference.labelField))
               ) {
-                throw Error("Unknown or incompatible input reference.");
+                throw new Error("Unknown or incompatible input reference.");
               }
             }
 
             if (schema.type === "ids" && !binding) {
-              throw Error(
+              throw new Error(
                 "Visible ids inputs are not supported by this renderer."
               );
             }
@@ -460,7 +465,7 @@ export function deriveApplication(declaration: unknown) {
               widget !== "checkbox" &&
               widget !== "text"
             ) {
-              throw Error("Unsupported field widget.");
+              throw new Error("Unsupported field widget.");
             }
 
             if (
@@ -469,7 +474,7 @@ export function deriveApplication(declaration: unknown) {
               (widget === "checkbox" && schema.type !== "boolean") ||
               (widget === "select" && !choices && !reference)
             ) {
-              throw Error("Widget/schema mismatch.");
+              throw new Error("Widget/schema mismatch.");
             }
 
             if (
@@ -477,22 +482,22 @@ export function deriveApplication(declaration: unknown) {
               ((schema.type === "boolean" && widget !== "checkbox") ||
                 (schema.type === "integer" && widget !== "number"))
             ) {
-              throw Error("Unsupported schema/widget override.");
+              throw new Error("Unsupported schema/widget override.");
             }
 
             if ((choices || reference) && widget !== "select") {
-              throw Error("Enums and references require select widgets.");
+              throw new Error("Enums and references require select widgets.");
             }
 
             if (computed.has(name) && binding) {
-              throw Error("Computed input cannot also have binding.");
+              throw new Error("Computed input cannot also have binding.");
             }
 
             if (
               (binding || computed.has(name)) &&
               Object.hasOwn(f, "default")
             ) {
-              throw Error(
+              throw new Error(
                 "Hidden bound/computed inputs cannot have client defaults."
               );
             }
@@ -505,7 +510,7 @@ export function deriveApplication(declaration: unknown) {
               hidden: !!binding || computed.has(name),
               ...(binding ? { binding } : {}),
               ...(reference ? { reference } : {}),
-              ...(defaultValue !== undefined ? { default: defaultValue } : {}),
+              ...(defaultValue === undefined ? {} : { default: defaultValue }),
             };
           }
         );
@@ -551,14 +556,14 @@ export function deriveApplication(declaration: unknown) {
 
     const viewLoading = validateLoading(v);
     const resourceId = text(v["resource"]);
-    const kind = v["kind"];
+    const { kind } = v;
 
     const resource = Object.hasOwn(model.resources, resourceId)
       ? model.resources[resourceId]
       : undefined;
 
     if (!resource || (kind !== "list" && kind !== "summary")) {
-      throw Error("Unsupported view.");
+      throw new Error("Unsupported view.");
     }
 
     const label = optionalText(v["label"]) ?? title(resourceId);
@@ -569,7 +574,7 @@ export function deriveApplication(declaration: unknown) {
       key !== "$actor" &&
       !state.records[resourceId]?.[key]
     ) {
-      throw Error("Unknown view record.");
+      throw new Error("Unknown view record.");
     }
 
     const ownerField = Object.hasOwn(v, "ownerField")
@@ -577,11 +582,11 @@ export function deriveApplication(declaration: unknown) {
       : undefined;
 
     if (ownerField && !Object.hasOwn(resource.fields, ownerField)) {
-      throw Error("Unknown owner field.");
+      throw new Error("Unknown owner field.");
     }
 
     if (v["fields"] && v["columns"]) {
-      throw Error("Use fields or columns, not both.");
+      throw new Error("Use fields or columns, not both.");
     }
 
     const raw = Object.hasOwn(v, "columns")
@@ -602,17 +607,17 @@ export function deriveApplication(declaration: unknown) {
         : undefined;
 
       if (!spec) {
-        throw Error("Unknown view field.");
+        throw new Error("Unknown view field.");
       }
 
-      const format = c["format"];
+      const { format } = c;
 
       if (format !== undefined && format !== "date" && format !== "text") {
-        throw Error("Unsupported column format.");
+        throw new Error("Unsupported column format.");
       }
 
       if (format === "date" && spec.type !== "string") {
-        throw Error("Date column requires string schema.");
+        throw new Error("Date column requires string schema.");
       }
 
       return {
@@ -669,7 +674,7 @@ export function inputDefaults(
     : undefined;
 
   if (!action) {
-    throw Error("Unknown action.");
+    throw new Error("Unknown action.");
   }
 
   const args: Record<string, Value | undefined> = {};
@@ -713,11 +718,11 @@ export function buildInvocation(
       : undefined;
 
   if (!declaration) {
-    throw Error("Unknown action.");
+    throw new Error("Unknown action.");
   }
 
   if (!contract.actors.some((a) => a.id === actor)) {
-    throw Error("Choose a known person.");
+    throw new Error("Choose a known person.");
   }
 
   exact(

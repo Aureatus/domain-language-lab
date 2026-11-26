@@ -54,8 +54,8 @@ export async function startGateway(
         for await (const c of req) {
           bytes += c.length;
 
-          if (bytes > 16384) {
-            throw Error("Request too large");
+          if (bytes > 16_384) {
+            throw new Error("Request too large");
           }
 
           chunks.push(c);
@@ -78,10 +78,10 @@ export async function startGateway(
         return;
       }
 
-      const file = resolve(root, path === "/" ? "index.html" : "." + path);
+      const file = resolve(root, path === "/" ? "index.html" : `.${path}`);
 
-      if (!file.startsWith(resolve(root) + "/")) {
-        throw Error("Invalid path");
+      if (!file.startsWith(`${resolve(root)}/`)) {
+        throw new Error("Invalid path");
       }
 
       const types: Record<string, string> = {
@@ -98,20 +98,20 @@ export async function startGateway(
         "content-type": types[extname(file)] ?? "application/octet-stream",
       });
       res.end(data);
-    } catch (e) {
+    } catch (error) {
       if (!res.headersSent) {
         res.writeHead(500, { "content-type": "application/json" });
       }
 
-      res.end(encodeJson({ error: errorMessage(e) }));
+      res.end(encodeJson({ error: errorMessage(error) }));
     }
   });
 
   try {
     await once(server.listen(port, "127.0.0.1"), "listening");
-  } catch (e) {
+  } catch (error) {
     await backend.close();
-    throw e;
+    throw error;
   }
 
   const address = server.address();
@@ -119,7 +119,7 @@ export async function startGateway(
   if (!address || typeof address === "string") {
     server.close();
     await backend.close();
-    throw Error("Expected TCP address for Exact gateway");
+    throw new Error("Expected TCP address for Exact gateway");
   }
 
   const host = `127.0.0.1:${address.port}`;
@@ -129,9 +129,9 @@ export async function startGateway(
     url,
     backendUrl: backend.url,
     async close() {
-      const stopped = new Promise<void>((yes, no) =>
-        server.close((e) => (e ? no(e) : yes()))
-      );
+      const stopped = new Promise<void>((resolveStop, rejectStop) => {
+        server.close((e) => (e ? rejectStop(e) : resolveStop()));
+      });
 
       server.closeAllConnections();
 

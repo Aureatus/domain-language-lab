@@ -52,12 +52,17 @@ const isV2 = (runtime: Runtime): runtime is Readonly<V2Runtime> =>
 
 function validateModelState(model: Model, source: unknown): V2State {
   switch (model.format) {
-    case "semantic-core/v1":
+    case "semantic-core/v1": {
       return validateState(model, source);
-    case "semantic-core/v2":
+    }
+
+    case "semantic-core/v2": {
       return validateV2State(model, source);
-    default:
+    }
+
+    default: {
       throw new TypeError("Unsupported semantic model format.");
+    }
   }
 }
 
@@ -127,7 +132,7 @@ function readStored<S>(
         const { key, value } = row;
 
         if (typeof key !== "string" || typeof value !== "string") {
-          throw Error("Malformed durable store metadata.");
+          throw new TypeError("Malformed durable store metadata.");
         }
 
         return [key, value];
@@ -213,6 +218,7 @@ function execute(
   modelKey: string,
   command: InvocationInput
 ): Outcome {
+  // oxlint-disable-next-line oxc/branches-sharing-code -- each branch narrows runtime to a different interpreter version.
   if (isV2(runtime)) {
     const state = readStored(db, modelKey, (source) =>
       validateV2State(runtime.model, source)
@@ -298,7 +304,7 @@ export const durableExecute = (
 
         const result = execute(runtime, db, modelKey, command);
         const snapshot = jsonSnapshot(result);
-        const state = result.state;
+        const { state } = result;
         const stateJson = canonical(state);
         db.prepare("UPDATE durable_meta SET value=? WHERE key=?").run(
           stateJson,
@@ -385,7 +391,9 @@ export const initializeDurableState = (
       } catch (error) {
         try {
           db.exec("ROLLBACK");
-        } catch {}
+        } catch {
+          // The original error is rethrown below; a failed rollback adds nothing.
+        }
 
         throw error;
       }
@@ -414,12 +422,14 @@ export const durableState = (runtime: Runtime, db: DatabaseSync) =>
         }
 
         return state;
-      } catch (e) {
+      } catch (error) {
         try {
           db.exec("ROLLBACK");
-        } catch {}
+        } catch {
+          // The original error is rethrown below; a failed rollback adds nothing.
+        }
 
-        throw e;
+        throw error;
       }
     },
     catch: durableError,
@@ -580,7 +590,9 @@ type OperationOutcome =
   | ReturnType<V2Runtime["approve"]>
   | ReturnType<V2Runtime["resume"]>;
 
-type OperationOptions = { beforeCommit?: (result: OperationOutcome) => void };
+interface OperationOptions {
+  beforeCommit?: (result: OperationOutcome) => void;
+}
 
 function operation(
   runtime: Readonly<V2Runtime>,
@@ -637,9 +649,8 @@ function operation(
       .get(command.invocationId);
 
     const result = jsonSnapshot(
-      !pending
-        ? rejected("missing-request", "No persisted approval request.")
-        : pending["status"] === "consumed"
+      pending
+        ? pending["status"] === "consumed"
           ? rejected("consumed", "Approval request already resumed.")
           : derive(
               state,
@@ -648,6 +659,7 @@ function operation(
                 decodeWith(DurablePendingRequestSchema, pending["request_json"])
               )
             )
+        : rejected("missing-request", "No persisted approval request.")
     );
 
     db.prepare(
@@ -694,7 +706,9 @@ function operation(
   } catch (error) {
     try {
       db.exec("ROLLBACK");
-    } catch {}
+    } catch {
+      // The original error is rethrown below; a failed rollback adds nothing.
+    }
 
     throw error;
   }
@@ -882,7 +896,7 @@ export const durablePending = (
         } | null = null;
 
         if (pending) {
-          const status = pending["status"];
+          const { status } = pending;
           const resumeId = pending["resume_id"];
 
           if (
@@ -910,7 +924,9 @@ export const durablePending = (
       } catch (error) {
         try {
           db.exec("ROLLBACK");
-        } catch {}
+        } catch {
+          // The original error is rethrown below; a failed rollback adds nothing.
+        }
 
         throw error;
       }
@@ -934,7 +950,7 @@ export const pullOutbox = (db: DatabaseSync, { limit = 100 } = {}) =>
         )
         .all(limit)
         .map((row) => {
-          const sequence = row["sequence"];
+          const { sequence } = row;
           const eventId = row["event_id"];
 
           if (typeof sequence !== "number" || typeof eventId !== "string") {

@@ -14,10 +14,10 @@ let selected = -1;
 function $<T extends HTMLElement>(id: string, constructor: new () => T): T;
 function $(id: string): HTMLElement;
 function $(id: string, constructor: new () => HTMLElement = HTMLElement) {
-  const element = document.getElementById(id);
+  const element = document.querySelector(`#${id}`);
 
   if (!(element instanceof constructor)) {
-    throw Error(`Missing inventory control: ${id}`);
+    throw new TypeError(`Missing inventory control: ${id}`);
   }
 
   return element;
@@ -32,7 +32,7 @@ const escapes: Record<string, string> = {
 };
 
 const escape = (value: unknown) =>
-  String(value).replace(/[&<>"']/g, (c) => escapes[c] ?? c);
+  String(value).replaceAll(/[&<>"']/gu, (c) => escapes[c] ?? c);
 
 type Step = ReturnType<typeof createHost>["steps"][number];
 
@@ -47,13 +47,13 @@ function render() {
   const reservations = state.records["reservation"];
 
   if (!camera || !reservations) {
-    throw Error("Missing inventory records");
+    throw new Error("Missing inventory records");
   }
 
   const { available, capacity } = camera.values;
 
   if (typeof available !== "number" || typeof capacity !== "number") {
-    throw Error("Inventory stock counts must be numbers");
+    throw new TypeError("Inventory stock counts must be numbers");
   }
 
   $("available").textContent = String(available);
@@ -75,7 +75,7 @@ function render() {
     selected < 0 ? host.oracle : host.steps[selected]?.observation.oracle;
 
   if (!oracle) {
-    throw Error("Missing selected inventory step");
+    throw new Error("Missing selected inventory step");
   }
 
   $("health").className = oracle.ok ? "health" : "health failed";
@@ -150,10 +150,11 @@ $("command").addEventListener("submit", (event) => {
   event.preventDefault();
   selected = -1;
   const kind = $("kind", HTMLSelectElement).value;
+  sequence += 1;
   host.step({
     type: "execute",
     invocation: invocation(
-      `manual${++sequence}`,
+      `manual${sequence}`,
       kind,
       $("slot", HTMLSelectElement).value,
       $("actor", HTMLSelectElement).value,
@@ -165,30 +166,30 @@ $("command").addEventListener("submit", (event) => {
   render();
 });
 
-$("correct").onclick = () => {
+$("correct").addEventListener("click", () => {
   host = competition(false);
   selected = -1;
   render();
-};
+});
 
-$("broken").onclick = () => {
+$("broken").addEventListener("click", () => {
   host = competition(true);
   selected = -1;
   render();
-};
+});
 
-$("reset").onclick = () => {
+$("reset").addEventListener("click", () => {
   host = createHost();
   selected = -1;
   render();
-};
+});
 
-$("live").onclick = () => {
+$("live").addEventListener("click", () => {
   selected = -1;
   render();
-};
+});
 
-$("steps").onclick = (event) => {
+$("steps").addEventListener("click", (event) => {
   const button =
     event.target instanceof Element &&
     event.target.closest<HTMLButtonElement>("[data-step]");
@@ -197,9 +198,9 @@ $("steps").onclick = (event) => {
     selected = Number(button.dataset["step"]);
     render();
   }
-};
+});
 
-$("replay").onclick = () => {
+$("replay").addEventListener("click", () => {
   try {
     host = replay(JSON.parse(JSON.stringify(host.export())));
     selected = -1;
@@ -209,9 +210,9 @@ $("replay").onclick = () => {
   } catch (error) {
     $("replay-result").textContent = errorMessage(error);
   }
-};
+});
 
-$("export").onclick = () => {
+$("export").addEventListener("click", () => {
   const url = URL.createObjectURL(
     new Blob([encodeJsonPretty(host.export(), InventoryReplaySchema)], {
       type: "application/json",
@@ -223,11 +224,11 @@ $("export").onclick = () => {
   a.download = "inventory-replay.json";
   a.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
-};
+});
 
 const importInput = $("import", HTMLInputElement);
 
-importInput.onchange = async () => {
+importInput.addEventListener("change", async () => {
   try {
     const file = importInput.files?.[0];
 
@@ -242,7 +243,7 @@ importInput.onchange = async () => {
   } catch (error) {
     $("replay-result").textContent = `Import rejected: ${errorMessage(error)}`;
   }
-};
+});
 
 render();
 

@@ -42,11 +42,11 @@ await page.addInitScript(() => {
         { duration: 650 }
       )
     );
-    const caption = document.createElement("div");
-    caption.id = "demo-caption";
-    caption.style.cssText =
+    const banner = document.createElement("div");
+    banner.id = "demo-caption";
+    banner.style.cssText =
       "position:fixed;bottom:16px;left:50%;transform:translateX(-50%);padding:12px 22px;border-radius:8px;background:#16334cf5;color:white;z-index:99999;max-width:1000px;width:max-content;font:18px/1.4 Trebuchet MS,sans-serif;box-shadow:0 3px 15px #16334c44";
-    document.body.append(caption);
+    document.body.append(banner);
   });
 });
 
@@ -59,14 +59,14 @@ const pause = (ms: number) => page.waitForTimeout(ms);
 async function caption(text: string) {
   await page
     .locator("#demo-caption")
-    .evaluate((el, text) => (el.textContent = text), text);
+    .evaluate((el, value) => (el.textContent = value), text);
 }
 
 async function click(selector: string) {
   const box = await page.locator(selector).boundingBox();
 
   if (!box) {
-    throw Error(`Invisible ${selector}`);
+    throw new Error(`Invisible ${selector}`);
   }
 
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2, {
@@ -176,7 +176,7 @@ await context.close();
 await browser.close();
 
 if (!video) {
-  throw Error("Browser video was not recorded");
+  throw new Error("Browser video was not recorded");
 }
 
 const source = await video.path();
@@ -200,7 +200,7 @@ const result = spawnSync(
     "+faststart",
     output,
   ],
-  { encoding: "utf8" }
+  { encoding: "utf-8" }
 );
 
 if (result.status !== 0) {

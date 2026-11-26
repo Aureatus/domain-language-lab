@@ -24,10 +24,10 @@ export function exampleArgs(
     : undefined;
 
   if (!declaration) {
-    throw Error("Unknown action.");
+    throw new Error("Unknown action.");
   }
 
-  for (const f of declaration.fields.filter((f) => !f.hidden)) {
+  for (const f of declaration.fields.filter((field) => !field.hidden)) {
     const x = defaults[f.name];
 
     let choices: readonly Value[] =
@@ -39,7 +39,9 @@ export function exampleArgs(
       Number.isFinite(Date.parse(x))
     ) {
       choices = Array.from({ length: 10 }, (_, i) =>
-        new Date(Date.parse(x) + (i + 1) * 86400000).toISOString().slice(0, 10)
+        new Date(Date.parse(x) + (i + 1) * 86_400_000)
+          .toISOString()
+          .slice(0, 10)
       );
     }
 
@@ -109,20 +111,20 @@ export type ReviewEvent = (
   result?: ApplicationReceipt;
 };
 
-type Receipt = {
+interface Receipt {
   submissionId: string;
   invocationId: string;
   status: string;
   code: string | null;
-};
+}
 
-type ReviewForm = {
+interface ReviewForm {
   submission: SubmissionState<Receipt>;
   receipt: Receipt | null;
   body?: SubmissionBody;
   id?: string;
   evidence: { phase: string; status: string; invocationId: string } | null;
-};
+}
 
 export function actionReview(
   contract: ApplicationContract,
@@ -131,7 +133,7 @@ export function actionReview(
   { mutant }: { mutant?: string } = {}
 ) {
   if (mutant !== undefined && mutant !== "snapshot-unlocks") {
-    throw Error("Unknown review mutant.");
+    throw new Error("Unknown review mutant.");
   }
 
   const forms = new Map<string, ReviewForm>();
@@ -183,12 +185,12 @@ export function actionReview(
         "blocked",
       ].includes(type)
     ) {
-      throw Error("Unknown review event.");
+      throw new Error("Unknown review event.");
     }
 
     if (type === "switch") {
       if (!contract.actors.some((a) => a.id === event.actor)) {
-        throw Error("Unknown review viewer.");
+        throw new Error("Unknown review viewer.");
       }
 
       viewer = event.actor;
@@ -216,7 +218,7 @@ export function actionReview(
         (type !== "receipt" &&
           (!form.receipt || inv.id !== form.receipt.invocationId))
       ) {
-        throw Error("Outcome evidence does not match selected command.");
+        throw new Error("Outcome evidence does not match selected command.");
       }
 
       if (
@@ -228,14 +230,14 @@ export function actionReview(
               r.policyId === event.policyId && r.approvers.includes(event.actor)
           )
       ) {
-        throw Error("Grant requirement mismatch.");
+        throw new Error("Grant requirement mismatch.");
       }
 
       if (type === "receipt") {
-        const id = form.submission.id;
+        const { id } = form.submission;
 
         if (!id || result.submissionId !== id) {
-          throw Error("Unexpected submission receipt.");
+          throw new Error("Unexpected submission receipt.");
         }
 
         const receipt = {
@@ -265,7 +267,7 @@ export function actionReview(
         event.body?.action !== action ||
         !event.id
       ) {
-        throw Error("Draft selection mismatch.");
+        throw new Error("Draft selection mismatch.");
       }
 
       visible.body = event.body;
@@ -274,7 +276,7 @@ export function actionReview(
 
     if (type === "submit") {
       if (!visible.id || !visible.body) {
-        throw Error("Missing submission identity or command.");
+        throw new Error("Missing submission identity or command.");
       }
 
       visible.submission = submissionStep(visible.submission, {
@@ -331,8 +333,10 @@ export function actionReview(
 
     controls.submit &&= !!current?.availability[viewer]?.[action] && !!body;
 
+    number += 1;
+
     return {
-      step: ++number,
+      step: number,
       event: type,
       viewer,
       performedBy: event.actor ?? null,
@@ -354,7 +358,7 @@ export function actionReview(
         const view = contract.views[index];
 
         if (!view) {
-          throw Error("Missing review view.");
+          throw new Error("Missing review view.");
         }
 
         return {

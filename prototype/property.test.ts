@@ -35,7 +35,7 @@ const data = (history: Action[], mutant = false): ReplayData => ({
 });
 
 test("generated sampled reports are deterministic, serializable and non-vacuous", () => {
-  const options = { seed: 12345, samples: 150, maxSteps: 24 };
+  const options = { seed: 12_345, samples: 150, maxSteps: 24 };
   const first = runProperties(options);
   assert.deepEqual(first, runProperties(options));
   assert.deepEqual(first, JSON.parse(JSON.stringify(first)));
@@ -57,20 +57,26 @@ test("generated sampled reports are deterministic, serializable and non-vacuous"
     assert.ok((first.coverage.actions[kind] ?? 0) > 0, kind);
   }
 
-  assert.match(first.engine.sha256, /^[a-f0-9]{64}$/);
+  assert.match(first.engine.sha256, /^[a-f0-9]{64}$/u);
   assert.equal(first.engine.oracle, "independent-snapshot-state-machine/1");
 });
 
 test("property CLI persists its bounded evidence and signals a deliberate counterexample", async (t) => {
   const cwd = await mkdtemp(join(tmpdir(), "premise-property-cli-"));
   t.after(() => rm(cwd, { recursive: true, force: true }));
-  const path = fileURLToPath(new URL("./property.ts", import.meta.url));
+  const path = fileURLToPath(new URL("property.ts", import.meta.url));
 
   const run = (...args: string[]) =>
-    spawnSync(process.execPath, [path, ...args], { cwd, encoding: "utf8" });
+    spawnSync(process.execPath, [path, ...args], { cwd, encoding: "utf-8" });
 
   const output = join(cwd, "artifacts/property-report.json");
-  const options = { seed: 12345, samples: 40, maxSteps: 24, shrinkBudget: 100 };
+
+  const options = {
+    seed: 12_345,
+    samples: 40,
+    maxSteps: 24,
+    shrinkBudget: 100,
+  };
 
   const flags = [
     "--seed",
@@ -97,14 +103,14 @@ test("property CLI persists its bounded evidence and signals a deliberate counte
     /sampled_pass: 40 sampled histories, 0 failures/
   );
   assert.deepEqual(
-    JSON.parse(await readFile(output, "utf8")),
+    JSON.parse(await readFile(output, "utf-8")),
     runProperties(options)
   );
   const failing = run(...flags, "--mutant");
   assert.equal(failing.status, 1, failing.stderr);
   assert.match(failing.stdout, /counterexample: 40 sampled histories/);
   assert.deepEqual(
-    JSON.parse(await readFile(output, "utf8")),
+    JSON.parse(await readFile(output, "utf-8")),
     runProperties({ ...options, staleApprovalMutant: true })
   );
 });
@@ -123,7 +129,7 @@ test("seed zero is reproducible; seeds vary values, order and lengths inside bou
 
 test("known stale-binding mutant is found by generated samples and replayed exactly", () => {
   const report = runProperties({
-    seed: 12345,
+    seed: 12_345,
     samples: 40,
     maxSteps: 24,
     staleApprovalMutant: true,
@@ -182,7 +188,7 @@ test("shrinking removes noise, simplifies values, is deterministic and reaches a
     "stale-approval-commit"
   );
 
-  for (let index = 0; index < shrunk.minimalHistory.length; index++) {
+  for (let index = 0; index < shrunk.minimalHistory.length; index += 1) {
     assert.equal(
       replayHistory(
         data(
@@ -283,7 +289,7 @@ test("budget exhaustion is explicit and invalid inputs cannot silently pass", ()
   assert.equal(shrunk.budgetExhausted, true);
   assert.equal(shrunk.minimality, "budget-limited");
   assert.deepEqual(shrunk.minimalHistory, history);
-  assert.throws(() => shrinkHistory(history, false), /passing/);
+  assert.throws(() => shrinkHistory(history, false), /passing/u);
 
   for (const options of [
     { seed: -1 },
@@ -291,16 +297,16 @@ test("budget exhaustion is explicit and invalid inputs cannot silently pass", ()
     { samples: 0 },
     { maxSteps: 0 },
     { shrinkBudget: -1 },
-    { seed: NaN },
+    { seed: Number.NaN },
     { samples: 1.5 },
   ]) {
     assert.throws(() => runProperties(options), RangeError);
   }
 
-  assert.throws(() => replayHistory({ ...data([]), clock: 2 }), /Unsupported/);
+  assert.throws(() => replayHistory({ ...data([]), clock: 2 }), /Unsupported/u);
   assert.throws(
     () => replayHistory({ ...data([]), history: [{ kind: "unknown" }] }),
-    /Invalid replay action/
+    /Invalid replay action/u
   );
   assert.throws(
     () =>
@@ -308,6 +314,6 @@ test("budget exhaustion is explicit and invalid inputs cannot silently pass", ()
         ...data([]),
         history: [{ kind: "approve", actor: { id: "x", role: "admin" } }],
       }),
-    /Invalid replay action/
+    /Invalid replay action/u
   );
 });

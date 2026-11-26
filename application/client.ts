@@ -18,23 +18,23 @@ import type { ApplicationContract } from "./derive.ts";
 import { submissionWireBody } from "./submission.ts";
 import type { SubmissionBody, SubmissionReceipt } from "./submission.ts";
 
-type PendingEntry = {
+interface PendingEntry {
   id: string;
   status: "pending" | "consumed";
   invocation: ApprovalRequest["invocation"];
   requirements: ApprovalRequest["requirements"];
   grants: readonly Grant[];
   stale: boolean;
-};
+}
 
-export type ApplicationSnapshot = {
+export interface ApplicationSnapshot {
   contractId: string;
   snapshotVersion: number;
   state: State;
   pending: readonly PendingEntry[];
   defaults: Record<string, Record<string, Record<string, Value | undefined>>>;
   availability: Record<string, Record<string, boolean>>;
-};
+}
 
 export type ApplicationReceipt = SubmissionReceipt & {
   contractId: string;
@@ -52,9 +52,15 @@ export type ApplicationReceipt = SubmissionReceipt & {
 
 type ExecuteBody = SubmissionBody & { submissionId?: string };
 
-type ReconcileBody = { actor: string; submissionId: string };
+interface ReconcileBody {
+  actor: string;
+  submissionId: string;
+}
 
-type ResumeBody = { actor: string; requestId: string };
+interface ResumeBody {
+  actor: string;
+  requestId: string;
+}
 
 type GrantBody = ResumeBody & { policyId: string };
 
@@ -101,7 +107,7 @@ export function createApplicationClient(
     const value = decodeJsonObject(await response.text());
 
     if (!response.ok) {
-      const error = Error(
+      const error = new Error(
         typeof value["error"] === "string"
           ? value["error"]
           : `HTTP ${response.status}`
@@ -123,11 +129,13 @@ export function createApplicationClient(
     }
 
     if (contractId && value["contractId"] !== contractId) {
-      throw Error("Application contract changed; reconnect before continuing.");
+      throw new Error(
+        "Application contract changed; reconnect before continuing."
+      );
     }
 
     if (submissionId && value["submissionId"] !== submissionId) {
-      throw Error("Submission receipt identity mismatch.");
+      throw new Error("Submission receipt identity mismatch.");
     }
 
     if (path === "/api/actions/reconcile" && value["message"]) {
@@ -150,7 +158,7 @@ export function createApplicationClient(
       typeof value["contractId"] !== "string" ||
       typeof value["status"] !== "string"
     ) {
-      throw Error("Invalid application receipt.");
+      throw new TypeError("Invalid application receipt.");
     }
 
     return decodeValue(ApplicationReceiptSchema)(value);
@@ -162,15 +170,16 @@ export function createApplicationClient(
       contractId: string;
     }> {
       const value = await request("/api/contract");
-      const contract = value["contract"];
+      const { contract } = value;
 
       if (
         typeof value["contractId"] !== "string" ||
         !isApplicationContract(contract)
       ) {
-        throw Error("Invalid application contract.");
+        throw new Error("Invalid application contract.");
       }
 
+      // oxlint-disable-next-line prefer-destructuring -- the typeof guard above narrows this element access only.
       contractId = value["contractId"];
 
       return { contractId, contract };

@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 
 import type { runDurableDemo } from "./demo.ts";
 
-const demoURL = new URL("./demo.ts", import.meta.url).href;
+const demoURL = new URL("demo.ts", import.meta.url).href;
 
 test("the durable demo publishes separate, inspectable SQLite evidence for all three scenarios", async (t) => {
   const output = await database();
@@ -19,12 +19,12 @@ test("the durable demo publishes separate, inspectable SQLite evidence for all t
 
   const summary = JSON.parse(
     execFileSync(process.execPath, [fileURLToPath(demoURL), target], {
-      encoding: "utf8",
+      encoding: "utf-8",
     })
   );
 
   const report: Awaited<ReturnType<typeof runDurableDemo>> = JSON.parse(
-    await readFile(target, "utf8")
+    await readFile(target, "utf-8")
   );
 
   const evidenceDirectory = report.paths.databaseDirectory;
@@ -54,7 +54,7 @@ test("the durable demo publishes separate, inspectable SQLite evidence for all t
   for (const { databasePath, scenario, steps } of report.scenarios) {
     assert.equal(
       databasePath,
-      resolve(evidenceDirectory, scenario + ".sqlite")
+      resolve(evidenceDirectory, `${scenario}.sqlite`)
     );
     assert.match(
       (await readFile(databasePath)).subarray(0, 16).toString(),
@@ -92,7 +92,7 @@ function phase(path: string, scenario: string, name: string) {
         script,
         JSON.stringify([path, scenario, name]),
       ],
-      { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }
+      { encoding: "utf-8", stdio: ["ignore", "pipe", "pipe"] }
     )
   );
 }
@@ -118,8 +118,8 @@ function inventory(
     8 - Object.values(active).reduce((sum, quantity) => sum + quantity, 0)
   );
   assert.deepEqual(
-    Object.keys(snapshot.state.records.reservation).sort(),
-    [...Object.keys(active), ...Object.keys(terminal)].sort()
+    Object.keys(snapshot.state.records.reservation).toSorted(),
+    [...Object.keys(active), ...Object.keys(terminal)].toSorted()
   );
 
   for (const [id, quantity] of Object.entries(active)) {

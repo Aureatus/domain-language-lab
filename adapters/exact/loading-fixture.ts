@@ -8,7 +8,7 @@ fixture.application.loading = "icon";
 const [view] = leave.application.views;
 
 if (!view) {
-  throw Error("Missing leave view fixture");
+  throw new Error("Missing leave view fixture");
 }
 
 fixture.application.views = [undefined, "text", "skeleton", "wait"].map(

@@ -17,19 +17,19 @@ function actionEntries(
   >(model.actions);
 }
 
-type Invalidation = {
+interface Invalidation {
   view: "history" | "pending" | "snapshot" | "resource" | "relationship";
   resource?: string;
   relationship?: string;
   key?: string;
-};
+}
 
-export type WorkspaceChange = {
+export interface WorkspaceChange {
   sequence?: number;
   invalidations: Invalidation[];
   recipients: Recipient[];
   reason: string;
-};
+}
 
 export function deriveTools(model: Model): {
   name: string;

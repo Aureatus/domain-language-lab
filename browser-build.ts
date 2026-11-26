@@ -23,13 +23,13 @@ export async function bundleBrowser(
     Array.isArray(result) && result.length === 1 ? result[0] : undefined;
 
   if (!bundle || bundle.output.length !== 1) {
-    throw Error(`Expected a single browser bundle for ${entry.pathname}`);
+    throw new Error(`Expected a single browser bundle for ${entry.pathname}`);
   }
 
   const [chunk] = bundle.output;
 
   if (chunk?.type !== "chunk") {
-    throw Error(`Expected a JavaScript bundle for ${entry.pathname}`);
+    throw new Error(`Expected a JavaScript bundle for ${entry.pathname}`);
   }
 
   return chunk.code;

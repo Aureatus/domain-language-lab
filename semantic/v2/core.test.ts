@@ -132,7 +132,7 @@ test("grouped lifecycle, frozen prestate RHS, lifecycle facts and deletion routi
     ["action", "create", "delete"]
   );
   assert.deepEqual(
-    present(r.events[0]).recipients.map((r) => r.recipient),
+    present(r.events[0]).recipients.map((entry) => entry.recipient),
     ["former"]
   );
 
@@ -142,7 +142,7 @@ test("grouped lifecycle, frozen prestate RHS, lifecycle facts and deletion routi
   assert.equal(removed.kind, "delete");
   assert.equal(created.kind, "create");
   assert.deepEqual(removed.before, present(original.records["items"])["old"]);
-  assert(Object.isFrozen(created.after.values));
+  assert.ok(Object.isFrozen(created.after.values));
 });
 
 test("rollback on existing, missing, duplicate insert/delete and aliased update/delete", () => {
@@ -323,7 +323,7 @@ test("malformed IR fails closed even unreachable, exact complete fields and appr
   assert.throws(() =>
     jsonSnapshot({
       get bad() {
-        throw Error("must not run");
+        throw new Error("must not run");
       },
     })
   );
@@ -381,7 +381,8 @@ test("serialized positive grant/resume across interpreter restart and explicit r
   assert.equal(r.status, "committed");
   assert.equal(present(r.events[0]).clock, 12);
   assert.equal(present(r.state.records["items"])["old"], undefined);
-  assert.equal(rt.execute(f.state, f.inv).status, "pending"); // no policy rewrite/bypass persists
+  // no policy rewrite/bypass persists
+  assert.equal(rt.execute(f.state, f.inv).status, "pending");
   assert.equal(
     withStatus(
       rt.resume(f.state, f.inv, f.pending.request, [], { clock: 12 }),
@@ -491,9 +492,12 @@ test("changed full model, policy, args, actor, clock, state and receipt/request 
       policy.approvers = lit("other");
     },
     (m) => {
-      const field = present(present(m.resources["items"]).fields["amount"]);
-      assert.equal(field.type, "integer");
-      field.max = 100;
+      const innerField = present(
+        present(m.resources["items"]).fields["amount"]
+      );
+
+      assert.equal(innerField.type, "integer");
+      innerField.max = 100;
     },
     (m) => {
       present(m.actions["move"]).policies.splice(1);
@@ -514,7 +518,7 @@ test("changed full model, policy, args, actor, clock, state and receipt/request 
       i.actor = "other";
     },
     (i) => {
-      i.clock++;
+      i.clock += 1;
     },
     (i) => {
       i.id = "newCall";
@@ -529,14 +533,14 @@ test("changed full model, policy, args, actor, clock, state and receipt/request 
 
   const states: ((s: typeof f.state) => void)[] = [
     (s) => {
-      s.revision++;
+      s.revision += 1;
     },
     (s) => {
-      present(present(s.records["items"])["old"]).version++;
+      present(present(s.records["items"])["old"]).version += 1;
     },
     (s) => {
-      const values = present(present(s.records["items"])["old"]).values;
-      const amount = values["amount"];
+      const { values } = present(present(s.records["items"])["old"]);
+      const { amount } = values;
 
       assert.ok(typeof amount === "number");
       values["amount"] = amount + 1;
@@ -569,7 +573,7 @@ test("changed full model, policy, args, actor, clock, state and receipt/request 
   assert.equal(resume(f.runtime, f.state, f.inv, request).code, "stale");
 
   const grant = copy(f.receipt);
-  const invocation = grant.request.invocation;
+  const { invocation } = grant.request;
 
   const receipt = {
     ...grant,
@@ -658,7 +662,7 @@ test("optimistic commit compares entire latest state, interpreter-bound tokens a
   const p = rt.prepare(f.state, f.inv);
   const changed = copy(f.state);
 
-  changed.revision++;
+  changed.revision += 1;
   assert.equal(
     withStatus(
       rt.commit(changed, withStatus(p, "prepared").prepared),
@@ -733,7 +737,7 @@ test("mixed update and multiple inserts read prestate, then route poststate; lat
   assert.equal(present(present(r.state.records["items"])["old"]).version, 5);
   assert.equal(r.state.revision, 1);
   assert.deepEqual(
-    present(r.events[0]).recipients.map((r) => r.recipient),
+    present(r.events[0]).recipients.map((entry2) => entry2.recipient),
     ["nextOwner"]
   );
   present(a.updates[1]).value = lit("not a recipient id");
@@ -833,7 +837,7 @@ test("deleted prototype-shaped but valid identity routes from own prestate recor
     true
   );
   assert.deepEqual(
-    present(r.events[0]).recipients.map((r) => r.recipient),
+    present(r.events[0]).recipients.map((entry) => entry.recipient),
     ["former"]
   );
 });

@@ -15,7 +15,7 @@ await mkdir(artifacts, { recursive: true });
 const directory = await mkdtemp("/tmp/opencode/workspace-browser-");
 let server = await createWorkspaceServer({ directory, port: 0 });
 
-const url = server.url;
+const { url } = server;
 const port = Number(new URL(url).port);
 
 const browser = await chromium.launch({ headless: true });
@@ -79,9 +79,9 @@ export async function execute(
 
 async function stock(page: Page, count: number) {
   await page.waitForFunction(
-    (count) =>
+    (innerCount) =>
       document.querySelector('#stock [data-field="available"]')?.textContent ===
-      String(count),
+      String(innerCount),
     count
   );
 }
@@ -195,7 +195,7 @@ try {
   await a.locator("#input-reservationId").focus();
   await a.locator("#input-reservationId").evaluate((el) => {
     if (!(el instanceof HTMLInputElement)) {
-      throw Error("Expected reservation input");
+      throw new TypeError("Expected reservation input");
     }
 
     el.setSelectionRange(2, 7);
@@ -304,11 +304,11 @@ try {
     (await resume(expiring.request.invocation.id, 110)).code,
     "precondition"
   );
-  assert.match(await a.locator("#result").innerText(), /expiry/);
+  assert.match(await a.locator("#result").innerText(), /expiry/u);
   // JSON is editable, uses the exact execute API and retains the same command ID for retry.
   await a.locator("#tool-details").evaluate((el) => {
     if (!(el instanceof HTMLDetailsElement)) {
-      throw Error("Expected tool details");
+      throw new TypeError("Expected tool details");
     }
 
     el.open = true;
@@ -340,7 +340,7 @@ try {
   await stock(b, 6);
   await a.fill("#tool-json", "{");
   await a.click("#execute-json");
-  assert.match(await a.locator("#result").innerText(), /Invalid JSON/);
+  assert.match(await a.locator("#result").innerText(), /Invalid JSON/u);
   await a.fill(
     "#tool-json",
     JSON.stringify({ ...tool, id: "bad-clock", clock: -1 })
@@ -392,7 +392,7 @@ try {
   await ready(a, "v2");
   release();
   await a.unrouteAll({ behavior: "wait" });
-  assert.match(await a.locator("#revision").innerText(), /^v2/);
+  assert.match(await a.locator("#revision").innerText(), /^v2/u);
 
   const { promise: actorHeld, resolve: releaseActor } =
     Promise.withResolvers<void>();
@@ -416,7 +416,10 @@ try {
     await a.locator("#input-reservationId").inputValue(),
     "res-expired-request"
   );
-  assert.match(await a.locator("#inbox-summary").innerText(), /awaiting alice/);
+  assert.match(
+    await a.locator("#inbox-summary").innerText(),
+    /awaiting alice/u
+  );
   checks.push(
     "delayed old profile and actor responses ignored; actor-specific action drafts restored"
   );
@@ -446,12 +449,12 @@ try {
   const audit = await a.evaluate(() => {
     const global: typeof globalThis & {
       axe?: {
-        run(document: Document, options: RunOptions): Promise<AxeResults>;
+        run: (document: Document, options: RunOptions) => Promise<AxeResults>;
       };
     } = globalThis;
 
     if (!global.axe) {
-      throw Error("Accessibility audit script was not loaded.");
+      throw new Error("Accessibility audit script was not loaded.");
     }
 
     return global.axe.run(document, {

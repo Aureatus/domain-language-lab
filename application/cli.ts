@@ -47,7 +47,7 @@ export async function runCLI(argv: string[], { stdout = console.log } = {}) {
 
     if (arg.startsWith("--")) {
       const key = arg.slice(2);
-      const value = args.next().value;
+      const { value } = args.next();
 
       if (
         (key !== "url" &&
@@ -59,11 +59,11 @@ export async function runCLI(argv: string[], { stdout = console.log } = {}) {
         !value ||
         value.startsWith("--")
       ) {
-        throw Error(`Unknown or missing option ${arg}.\n${usage}`);
+        throw new Error(`Unknown or missing option ${arg}.\n${usage}`);
       }
 
       if (Object.hasOwn(options, key)) {
-        throw Error(`Duplicate option ${arg}.`);
+        throw new Error(`Duplicate option ${arg}.`);
       }
 
       options[key] = value;
@@ -94,22 +94,24 @@ export async function runCLI(argv: string[], { stdout = console.log } = {}) {
       "resume",
     ].includes(command)
   ) {
-    throw Error(usage);
+    throw new Error(usage);
   }
 
   if (
     ["preview", "execute", "reconcile", "grant", "resume"].includes(command) &&
     (!options.actor || !id)
   ) {
-    throw Error(`${command} requires an ID and explicit --actor.\n${usage}`);
+    throw new Error(
+      `${command} requires an ID and explicit --actor.\n${usage}`
+    );
   }
 
   if (options["submission-id"] && command !== "execute") {
-    throw Error("--submission-id applies only to execute.");
+    throw new Error("--submission-id applies only to execute.");
   }
 
   if (command === "grant" && !options.policy) {
-    throw Error("grant requires --policy POLICY.");
+    throw new Error("grant requires --policy POLICY.");
   }
 
   const client = createApplicationClient(
@@ -127,7 +129,7 @@ export async function runCLI(argv: string[], { stdout = console.log } = {}) {
     const loaded = loadSource(options.view);
 
     if (loaded.modules.at(-1)?.kind !== "view") {
-      throw Error("--view must select a view module entry.");
+      throw new Error("--view must select a view module entry.");
     }
 
     const derived = deriveApplication(loaded.declaration);
@@ -137,7 +139,7 @@ export async function runCLI(argv: string[], { stdout = console.log } = {}) {
       .digest("hex");
 
     if (expected !== contractId) {
-      throw Error(
+      throw new Error(
         "Local view domain differs from the backend. No command was sent."
       );
     }
@@ -148,14 +150,14 @@ export async function runCLI(argv: string[], { stdout = console.log } = {}) {
   if (command === "list") {
     if (id) {
       if (!Object.hasOwn(contract.resources, id)) {
-        throw Error(`Unknown resource '${id}'.`);
+        throw new Error(`Unknown resource '${id}'.`);
       }
 
       result = (await client.snapshot()).state.records[id];
     } else {
-      const entries = Object.entries(contract.actions).map(([id, a]) => ({
-        id,
-        label: presentation?.actions[id]?.label ?? a.label,
+      const entries = Object.entries(contract.actions).map(([key2, a]) => ({
+        id: key2,
+        label: presentation?.actions[key2]?.label ?? a.label,
         arguments: a.fields
           .filter((f) => !f.hidden)
           .map((f) => ({ name: f.name, schema: f.schema })),
@@ -171,34 +173,36 @@ export async function runCLI(argv: string[], { stdout = console.log } = {}) {
     }
   } else if (command === "inspect") {
     if (id && !Object.hasOwn(contract.actions, id)) {
-      throw Error(`Unknown action '${id}'.`);
+      throw new Error(`Unknown action '${id}'.`);
     }
 
     result = id ? contract.actions[id] : contract;
   } else if (command === "inbox") {
     result = inboxFor(await client.snapshot(), options.actor);
   } else {
-    const actor = options.actor;
+    const { actor } = options;
 
     if (!actor || !id) {
-      throw Error(`${command} requires an ID and explicit --actor.\n${usage}`);
+      throw new Error(
+        `${command} requires an ID and explicit --actor.\n${usage}`
+      );
     }
 
     if (command === "preview" || command === "execute") {
       if (!Object.hasOwn(contract.actions, id)) {
-        throw Error(`Unknown action '${id}'. Use list or inspect.`);
+        throw new Error(`Unknown action '${id}'. Use list or inspect.`);
       }
 
-      let args;
+      let innerArgs;
 
       try {
-        args = decodeJsonObject(options.args ?? "{}");
+        innerArgs = decodeJsonObject(options.args ?? "{}");
       } catch {
-        throw Error("--args must be a JSON object.");
+        throw new Error("--args must be a JSON object.");
       }
 
       if (command === "preview") {
-        receipt = await client.preview({ actor, action: id, args });
+        receipt = await client.preview({ actor, action: id, args: innerArgs });
       } else {
         const submissionId = options["submission-id"] ?? randomUUID();
 
@@ -207,18 +211,19 @@ export async function runCLI(argv: string[], { stdout = console.log } = {}) {
             ...(await client.execute({
               actor,
               action: id,
-              args,
+              args: innerArgs,
               submissionId,
             })),
             submissionId,
           };
-        } catch (e) {
-          if (isNotSubmittedError(e)) {
-            throw e;
+        } catch (error) {
+          if (isNotSubmittedError(error)) {
+            throw error;
           }
 
-          throw Error(
-            `${errorMessage(e)} Check submission ${submissionId} with reconcile before retrying.`
+          throw new Error(
+            `${errorMessage(error)} Check submission ${submissionId} with reconcile before retrying.`,
+            { cause: error }
           );
         }
       }
@@ -226,7 +231,7 @@ export async function runCLI(argv: string[], { stdout = console.log } = {}) {
       receipt = await client.reconcile({ actor, submissionId: id });
     } else if (command === "grant") {
       if (!options.policy) {
-        throw Error("grant requires --policy POLICY.");
+        throw new Error("grant requires --policy POLICY.");
       }
 
       receipt = await client.grant({
@@ -247,10 +252,10 @@ export async function runCLI(argv: string[], { stdout = console.log } = {}) {
     stdout(
       `${receipt.message}\nStatus: ${receipt.status}${receipt.code ? ` (${receipt.code})` : ""}${receipt.submissionId ? `\nSubmission: ${receipt.submissionId}` : ""}${receipt.snapshot ? `\nRevision: ${receipt.snapshot.state.revision}` : ""}`
     );
-  } else if (formattedList !== undefined) {
-    stdout(formattedList);
-  } else {
+  } else if (formattedList === undefined) {
     stdout(encodeJsonPretty(result));
+  } else {
+    stdout(formattedList);
   }
 
   return result;

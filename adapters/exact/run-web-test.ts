@@ -16,13 +16,13 @@ const server = spawn(
 );
 
 try {
-  await new Promise<void>((yes, no) => {
-    server.once("exit", (code) => no(Error(`Server exited ${code}`)));
+  await new Promise<void>((resolve, reject) => {
+    server.once("exit", (code) => reject(new Error(`Server exited ${code}`)));
     server.stdout.on("data", (data) => {
       process.stdout.write(data);
 
       if (String(data).includes("Exact adapter")) {
-        yes();
+        resolve();
       }
     });
   });
@@ -31,12 +31,16 @@ try {
     stdio: "inherit",
   });
 
-  const code = await new Promise((resolve) => result.once("exit", resolve));
+  const code = await new Promise((resolve) => {
+    result.once("exit", resolve);
+  });
 
   if (code !== 0) {
-    throw Error(`Exact UI test exited ${code}`);
+    throw new Error(`Exact UI test exited ${code}`);
   }
 } finally {
   server.kill("SIGTERM");
-  await new Promise((resolve) => server.once("exit", resolve));
+  await new Promise((resolve) => {
+    server.once("exit", resolve);
+  });
 }

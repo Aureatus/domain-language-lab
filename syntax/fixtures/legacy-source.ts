@@ -3,9 +3,9 @@
 import { readFileSync } from "node:fs";
 
 const read = (name: string) =>
-  readFileSync(new URL(`../../leave/${name}.domain`, import.meta.url), "utf8")
+  readFileSync(new URL(`../../leave/${name}.domain`, import.meta.url), "utf-8")
     .split("\n")
-    .filter((line) => !/^(module|import|use)\b/.test(line))
+    .filter((line) => !/^(module|import|use)\b/u.test(line))
     .join("\n");
 
 export default [

@@ -1,11 +1,11 @@
-import {
-  createInterpreter,
-  type Model,
-  type ApprovalRequest,
-  type ApprovalReceipt,
-  type Invocation,
-  type State,
-  type Policy,
+import { createInterpreter } from "./core.ts";
+import type {
+  Model,
+  ApprovalRequest,
+  ApprovalReceipt,
+  Invocation,
+  State,
+  Policy,
 } from "./core.ts";
 
 // Compile-only integration contract; never executed as a runtime test.
@@ -25,7 +25,7 @@ if (p.status === "pending") {
   const [policyId] = p.policyIds;
 
   if (!policyId) {
-    throw Error("Expected pending approval policy");
+    throw new Error("Expected pending approval policy");
   }
 
   const grant = rt.approve(p.request, { policyId, approver: "boss" });

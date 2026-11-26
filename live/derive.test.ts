@@ -34,7 +34,7 @@ const policy = (
 test("declaration diff reports exact roles/routes, no-op and ordering without mutation", () => {
   const app = make();
   const before = capture(app);
-  const model = app.model;
+  const { model } = app;
   const patch = { allowedRoles: ["member"], notify: ["watchers"] };
   const result = describeChange(model, "resolve", patch);
   assert.deepEqual(result.roleChanges, [
@@ -101,8 +101,8 @@ test("generated current-declaration checks exercise both entry points and leave 
       .ok,
     true
   );
-  const state = app.state;
-  const model = app.model;
+  const { state } = app;
+  const { model } = app;
   const before = capture(app);
   const report = runDerivedChecks(app);
   assert.equal(report.result, "passed");
@@ -207,7 +207,7 @@ test("unreachable reopen setup is unknown, never weakens resolve policy to pass"
   for (const actor of app.state.users) {
     const row = policy(report, "reopen", actor.id);
     assert.equal(row.status, "unknown");
-    assert.match(present(row.reason), /no authorized setup actor/);
+    assert.match(present(row.reason), /no authorized setup actor/u);
     assert.equal(row.actual, null);
   }
 
@@ -221,13 +221,14 @@ test("resolve obtains an open witness via permitted create when reopen is denied
   app.setRule("reopen", { allowedRoles: [] });
   const report = runDerivedChecks(app);
   assert.equal(policy(report, "resolve", "u1").status, "passed");
-  assert.equal(report.result, "unknown"); // denied reopen has no positive coverage
+  // denied reopen has no positive coverage
+  assert.equal(report.result, "unknown");
 });
 
 test("failed setup dispatch and exhausted history remain unknown rather than false success", () => {
   const app = make();
 
-  for (let index = 0; index < 500; index++) {
+  for (let index = 0; index < 500; index += 1) {
     assert.equal(app.setRule("watch", { notify: [] }).ok, true);
   }
 
@@ -238,12 +239,12 @@ test("failed setup dispatch and exhausted history remain unknown rather than fal
   assert.equal(reopen.status, "unknown");
   assert.match(
     present(reopen.reason),
-    /Setup unavailable: resolve: Workspace history limit exceeded/
+    /Setup unavailable: resolve: Workspace history limit exceeded/u
   );
   assert.equal(policy(report, "comment", "u1").status, "unknown");
   assert.match(
     present(policy(report, "comment", "u1").reason),
-    /Resource-bound/
+    /Resource-bound/u
   );
   assert.ok(
     report.cases
@@ -263,16 +264,23 @@ test("invalid reconstruction is reported explicitly as unknown", () => {
   assert.equal(report.result, "unknown");
   assert.equal(report.revision, null);
   assert.equal(present(report.cases[0]).status, "unknown");
-  const reason = present(report.cases[0]).reason;
+  const { reason } = present(report.cases[0]);
   assert.ok(reason);
-  assert.match(reason, /schema/);
+  assert.match(reason, /schema/u);
 });
 
 test("history and prepared setup forks preserve exact parent evidence without sampling its clock", () => {
   let calls = 0;
-  const app = createApp({ clock: () => ++calls });
 
-  for (let index = 0; index < 100; index++) {
+  const app = createApp({
+    clock: () => {
+      calls += 1;
+
+      return calls;
+    },
+  });
+
+  for (let index = 0; index < 100; index += 1) {
     assert.equal(
       app.dispatch("comment", { issueId: "i1", body: "Existing history" }, "u2")
         .ok,
@@ -281,8 +289,8 @@ test("history and prepared setup forks preserve exact parent evidence without sa
   }
 
   const before = capture(app);
-  const state = app.state;
-  const model = app.model;
+  const { state } = app;
+  const { model } = app;
 
   const report = runDerivedChecks(app);
   assert.equal(report.result, "passed");

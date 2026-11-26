@@ -44,12 +44,12 @@ const get = async (f: Fixture, profile = "v2") => {
 test("serves the workspace browser bundle without exposing TypeScript sources", async (t) => {
   const f = await fixture(t);
   const page = await fetch(f.url);
-  assert.match(await page.text(), /src="\/app\.js"/);
-  const script = await fetch(f.url + "/app.js");
+  assert.match(await page.text(), /src="\/app\.js"/u);
+  const script = await fetch(`${f.url}/app.js`);
   assert.equal(script.status, 200);
-  assert.match(script.headers.get("content-type") ?? "", /^text\/javascript/);
+  assert.match(script.headers.get("content-type") ?? "", /^text\/javascript/u);
   assert.ok((await script.text()).length > 0);
-  assert.equal((await fetch(f.url + "/app.ts")).status, 404);
+  assert.equal((await fetch(`${f.url}/app.ts`)).status, 404);
 });
 
 async function post(
@@ -113,7 +113,7 @@ async function sse(f: Fixture, t: TestContext, actor = "alice", last?: number) {
       const frame = buffer.slice(0, index);
 
       buffer = buffer.slice(index + 2);
-      assert(frame.includes("event: change"));
+      assert.ok(frame.includes("event: change"));
       const data = frame.split("\n").find((x) => x.startsWith("data: "));
       assert.ok(data);
 
@@ -149,7 +149,7 @@ test("v1 persists interpreter outcomes, schema/tool parity and independent v2 DB
   assert.equal((await get(f)).state.revision, 0);
   const after = await get(f, "v1");
   assert.equal(after.state.revision, 1);
-  assert(after.events.length > 0);
+  assert.ok(after.events.length > 0);
   await f.restart();
   assert.deepEqual(await get(f, "v1"), after);
   assert.equal(
@@ -228,8 +228,8 @@ test("multi-client SSE preserves actor views, grant changes and reconnect/restar
   const b = await bob.next();
 
   assert.deepEqual(a, b);
-  assert(a.invalidations.some((x) => x.resource === "reservation"));
-  assert(!a.recipients.some((x) => x.recipient === "alice"));
+  assert.ok(a.invalidations.some((x) => x.resource === "reservation"));
+  assert.ok(!a.recipients.some((x) => x.recipient === "alice"));
   const first = await get(f);
   assert.equal(first.state.revision, 1);
   alice.close();
@@ -243,11 +243,11 @@ test("multi-client SSE preserves actor views, grant changes and reconnect/restar
   const reconnected = await sse(f, t, "alice", first.sequence);
   const resync = await reconnected.next();
   assert.equal(resync.reason, "resync");
-  assert(resync.sequence !== undefined && resync.sequence > first.sequence);
+  assert.ok(resync.sequence !== undefined && resync.sequence > first.sequence);
   const current = await get(f);
   assert.equal(current.pending[0].grants.length, 1);
   await resume(f, "resume", "large");
-  assert(
+  assert.ok(
     (await reconnected.next()).invalidations.some((x) => x.view === "pending")
   );
   reconnected.close();
@@ -266,7 +266,7 @@ test("multi-client SSE preserves actor views, grant changes and reconnect/restar
   const again = await sse(f, t, "bob", 0);
   assert.equal((await again.next()).reason, "resync");
   assert.deepEqual(await get(f), saved);
-  assert(saved.events.length > first.events.length);
+  assert.ok(saved.events.length > first.events.length);
   again.close();
 });
 
@@ -289,7 +289,7 @@ test("stale/expired approvals, competing commands, denied grant and invalid sche
     )
   );
 
-  assert.deepEqual(competing.map((x) => x.status).sort(), [
+  assert.deepEqual(competing.map((x) => x.status).toSorted(), [
     "committed",
     "rejected",
   ]);
@@ -329,7 +329,9 @@ test("stale/expired approvals, competing commands, denied grant and invalid sche
   assert.equal((await execute(f, "v2", invalid)).code, "schema");
   const snap = await get(f);
   assert.equal(snap.state.revision, 1);
-  assert(snap.pending.every((x: { status: string }) => x.status === "pending"));
+  assert.ok(
+    snap.pending.every((x: { status: string }) => x.status === "pending")
+  );
 });
 
 test("both clients mutate the same durable backend and observe pending/grant invalidations", async (t) => {
@@ -346,7 +348,7 @@ test("both clients mutate the same durable backend and observe pending/grant inv
   );
 
   for (const stream of [alice, bob]) {
-    assert(
+    assert.ok(
       (await stream.next()).invalidations.some((x) => x.view === "pending")
     );
   }
@@ -440,8 +442,10 @@ test("every tool schema is enforced by its profile interpreter, not a UI-only de
 
         args[field] = schema.type === "integer" ? "not-integer" : 42;
 
+        n += 1;
+
         const result = await execute(f, profile, {
-          id: `schema-${++n}`,
+          id: `schema-${n}`,
           action: tool.name,
           args,
           actor: "alice",
@@ -483,7 +487,7 @@ test("bounded exact API, cross-origin/Host guard, missing routes and SQLite lock
     },
     400
   );
-  await post(f, "execute", { pad: "x".repeat(270000) }, 413);
+  await post(f, "execute", { pad: "x".repeat(270_000) }, 413);
 
   let response = await fetch(`${f.url}/api/execute`, {
     method: "POST",
@@ -502,13 +506,13 @@ test("bounded exact API, cross-origin/Host guard, missing routes and SQLite lock
   });
   assert.equal(response.status, 403);
 
-  const hostStatus = await new Promise((accept, reject) => {
+  const hostStatus = await new Promise((resolve, reject) => {
     const req = request(
       `${f.url}/api/snapshot?profile=v2`,
       { headers: { Host: "evil.example" } },
       (res) => {
         res.resume();
-        accept(res.statusCode);
+        resolve(res.statusCode);
       }
     );
 
@@ -537,7 +541,7 @@ test("bounded exact API, cross-origin/Host guard, missing routes and SQLite lock
     500
   );
 
-  assert.match(locked.error, /locked|busy/i);
+  assert.match(locked.error, /locked|busy/iu);
   db.exec("ROLLBACK");
   assert.equal((await get(f)).sequence, 0);
   db.prepare(
@@ -558,7 +562,7 @@ test("startup port failure cleans databases; close is idempotent and terminates 
       directory: f.directory,
       port: Number(new URL(f.url).port),
     }),
-    /EADDRINUSE/
+    /EADDRINUSE/u
   );
   await f.close();
   await f.close();
@@ -610,11 +614,11 @@ test("snapshot refuses corrupt persisted approval evidence without altering the 
           )
           .run(value),
       corrupt: (value: string) => {
-        const request = JSON.parse(value);
+        const innerRequest = JSON.parse(value);
 
         return JSON.stringify({
-          ...request,
-          invocation: { ...request.invocation, id: "other" },
+          ...innerRequest,
+          invocation: { ...innerRequest.invocation, id: "other" },
         });
       },
       error: /Malformed stored pending request/,
@@ -638,7 +642,7 @@ test("snapshot refuses corrupt persisted approval evidence without altering the 
     const value = db.prepare(read).get()?.[field];
     assert.ok(typeof value === "string");
     write(corrupt(value));
-    const response = await fetch(f.url + "/api/snapshot?profile=v2");
+    const response = await fetch(`${f.url}/api/snapshot?profile=v2`);
     assert.equal(response.status, 500);
     assert.match((await response.json()).error, error);
     assert.deepEqual(await get(f, "v1"), other);
@@ -646,14 +650,14 @@ test("snapshot refuses corrupt persisted approval evidence without altering the 
     assert.deepEqual(await get(f), original);
   }
 
-  const invalidActor = await fetch(f.url + "/api/snapshot?profile=v2&actor=");
+  const invalidActor = await fetch(`${f.url}/api/snapshot?profile=v2&actor=`);
   assert.equal(invalidActor.status, 400);
   assert.match(
     (await invalidActor.json()).error,
     /bounded simulation identity/
   );
 
-  const nonJson = await fetch(f.url + "/api/execute", {
+  const nonJson = await fetch(`${f.url}/api/execute`, {
     method: "POST",
     body: "{}",
   });
@@ -663,7 +667,7 @@ test("snapshot refuses corrupt persisted approval evidence without altering the 
 });
 
 test("snapshot selection is exact and rejected commands leave the profile unchanged", async (t) => {
-  await assert.rejects(createWorkspaceServer({ port: 65536 }), /Invalid port/);
+  await assert.rejects(createWorkspaceServer({ port: 65_536 }), /Invalid port/);
   const f = await fixture(t);
 
   for (const [path, method, status, message] of [
@@ -695,7 +699,7 @@ test("snapshot selection is exact and rejected commands leave the profile unchan
     assert.match((await response.json()).error, message);
   }
 
-  const defaultViewer = await fetch(f.url + "/api/snapshot?profile=v2");
+  const defaultViewer = await fetch(`${f.url}/api/snapshot?profile=v2`);
   assert.equal(defaultViewer.status, 200);
   assert.deepEqual(await defaultViewer.json(), await get(f));
   assert.equal((await get(f)).state.revision, 0);

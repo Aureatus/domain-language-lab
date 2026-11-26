@@ -263,7 +263,7 @@ test("all matching approval policies must be granted; inbox records actual requi
 
     const p = r.snapshot.pending[0];
     assert.deepEqual(
-      p.requirements.map((r: { approvers: string[] }) => r.approvers),
+      p.requirements.map((entry: { approvers: string[] }) => entry.approvers),
       [["rory"], ["quinn"]]
     );
     await post("approvals/grant", {

@@ -27,20 +27,20 @@ export type Action =
   | { kind: "resource"; field: "priority"; value: Priority }
   | { kind: "resource"; field: "watchers"; value: string[] };
 
-export type PropertyOptions = {
+export interface PropertyOptions {
   seed?: number;
   samples?: number;
   maxSteps?: number;
   shrinkBudget?: number;
   staleApprovalMutant?: boolean;
-};
+}
 
-export type ReplayData = {
+export interface ReplayData {
   format: "approval-property-replay/1";
   clock: 1000;
   staleApprovalMutant: boolean;
   history: Action[];
-};
+}
 
 const roles: Role[] = ["support", "reviewer", "viewer"];
 const priorities: Priority[] = ["normal", "high"];
@@ -68,7 +68,7 @@ function random(seed: number) {
   let state = seed >>> 0;
 
   return () => {
-    state = (state + 0x6d2b79f5) >>> 0;
+    state = (state + 0x6d_2b_79_f5) >>> 0;
     let t = Math.imul(state ^ (state >>> 15), 1 | state);
     t ^= t + Math.imul(t ^ (t >>> 7), 61 | t);
 
@@ -78,7 +78,7 @@ function random(seed: number) {
 
 /** One reproducible sample. Half the samples bias toward an approval/change/execute motif. */
 export function generateHistory(seed: number, maxSteps = 32): Action[] {
-  integer("seed", seed, 0, 0xffffffff);
+  integer("seed", seed, 0, 0xff_ff_ff_ff);
   integer("maxSteps", maxSteps, 1, 1000);
   const next = random(seed);
 
@@ -86,7 +86,7 @@ export function generateHistory(seed: number, maxSteps = 32): Action[] {
     const item = items[next() % items.length];
 
     if (item === undefined) {
-      throw Error("Expected a nonempty selection pool");
+      throw new Error("Expected a nonempty selection pool");
     }
 
     return item;
@@ -118,16 +118,25 @@ export function generateHistory(seed: number, maxSteps = 32): Action[] {
 
   const action = (): Action => {
     switch (next() % 7) {
-      case 0:
+      case 0: {
         return { kind: "request", actor: actor(), summary: pick(summaries) };
-      case 1:
+      }
+
+      case 1: {
         return { kind: "approve", actor: actor() };
-      case 2:
+      }
+
+      case 2: {
         return { kind: "edit", summary: pick(summaries) };
-      case 3:
+      }
+
+      case 3: {
         return { kind: "execute" };
-      default:
+      }
+
+      default: {
         return mutation();
+      }
     }
   };
 
@@ -155,20 +164,20 @@ export function generateHistory(seed: number, maxSteps = 32): Action[] {
   return clone(history);
 }
 
-type Invocation = {
+interface Invocation {
   id: string;
   actor: Actor;
   summary: string;
   state: "pending" | "ready" | "completed";
-};
+}
 
-type Subject = {
+interface Subject {
   invocation: string;
   actor: Actor;
   summary: string;
   ticket: Ticket;
   model: Model;
-};
+}
 
 type Outcome = { status: string; reason?: string } | null;
 
@@ -228,7 +237,7 @@ class SnapshotOracle {
         return { status: this.invocation.state };
       }
 
-      case "approve":
+      case "approve": {
         if (!i || i.state === "completed") {
           return reject("no-active-invocation");
         }
@@ -241,7 +250,9 @@ class SnapshotOracle {
         i.state = "ready";
 
         return { status: "ready" };
-      case "edit":
+      }
+
+      case "edit": {
         if (!i || i.state === "completed") {
           return reject("no-active-invocation");
         }
@@ -253,6 +264,8 @@ class SnapshotOracle {
         i.summary = action.summary;
 
         return { status: i.state };
+      }
+
       case "execute": {
         if (!i) {
           return reject("no-active-invocation");
@@ -288,15 +301,19 @@ class SnapshotOracle {
         return { status: "completed" };
       }
 
-      case "policy":
+      case "policy": {
         this.model.policy[action.role][action.priority] = action.decision;
 
         return null;
-      case "revision":
+      }
+
+      case "revision": {
         this.model.revision = action.value;
 
         return null;
-      case "resource":
+      }
+
+      case "resource": {
         if (action.field === "version") {
           this.ticket.version = action.value;
         }
@@ -310,20 +327,30 @@ class SnapshotOracle {
         }
 
         return null;
+      }
+      // no default: the cases cover every action.kind variant.
     }
   }
 }
 
 function apply(runtime: Runtime, action: Action, mutant: boolean): Outcome {
   switch (action.kind) {
-    case "request":
+    case "request": {
       return runtime.request(action.actor, action.summary);
-    case "approve":
+    }
+
+    case "approve": {
       return runtime.approve(action.actor);
-    case "edit":
+    }
+
+    case "edit": {
       return runtime.editSummary(action.summary);
-    case "execute":
+    }
+
+    case "execute": {
       return runtime.execute({ staleApprovalMutant: mutant });
+    }
+
     case "policy": {
       const next = clone(runtime.model);
       next.policy[action.role][action.priority] = action.decision;
@@ -340,7 +367,7 @@ function apply(runtime: Runtime, action: Action, mutant: boolean): Outcome {
       return null;
     }
 
-    case "resource":
+    case "resource": {
       if (action.field === "version") {
         runtime.ticket.version = action.value;
       }
@@ -354,6 +381,8 @@ function apply(runtime: Runtime, action: Action, mutant: boolean): Outcome {
       }
 
       return null;
+    }
+    // no default: the cases cover every action.kind variant.
   }
 }
 
@@ -388,28 +417,40 @@ function validateAction(action: unknown): asserts action is Action {
   let valid = false;
 
   switch (kind) {
-    case "request":
+    case "request": {
       valid = validActor(actor) && typeof summary === "string";
       break;
-    case "approve":
+    }
+
+    case "approve": {
       valid = validActor(actor);
       break;
-    case "edit":
+    }
+
+    case "edit": {
       valid = typeof summary === "string";
       break;
-    case "execute":
+    }
+
+    case "execute": {
       valid = true;
       break;
-    case "policy":
+    }
+
+    case "policy": {
       valid =
         member(roles, role) &&
         member(priorities, priority) &&
         member(decisions, decision);
       break;
-    case "revision":
+    }
+
+    case "revision": {
       valid = natural(value);
       break;
-    case "resource":
+    }
+
+    case "resource": {
       if (field === "version") {
         valid = natural(value) && value < Number.MAX_SAFE_INTEGER;
       }
@@ -425,6 +466,8 @@ function validateAction(action: unknown): asserts action is Action {
       }
 
       break;
+    }
+    // no default: the cases cover every kind variant.
   }
 
   if (!valid) {
@@ -480,20 +523,20 @@ export function replayHistory(data: unknown) {
 
     const expected = oracle.apply(action);
     const actual = apply(runtime, action, staleApprovalMutant);
-    coverage.steps++;
+    coverage.steps += 1;
 
     if (action.kind === "execute") {
-      coverage.executes++;
+      coverage.executes += 1;
 
       if (expected?.reason === "stale-approval") {
-        coverage.staleRejections++;
+        coverage.staleRejections += 1;
       }
 
       if (!wasCompleted && actual?.status === "completed") {
-        coverage.commits++;
+        coverage.commits += 1;
 
         if (approvalRequired) {
-          coverage.approvalRequiredCommits++;
+          coverage.approvalRequiredCommits += 1;
         }
       }
     }
@@ -550,7 +593,7 @@ function replayData(history: Action[], mutant: boolean): ReplayData {
 
 function simpler(action: Action): Action[] {
   switch (action.kind) {
-    case "request":
+    case "request": {
       return [
         ...["", "a", "b"]
           .filter((s) => s.length < action.summary.length)
@@ -559,17 +602,25 @@ function simpler(action: Action): Action[] {
           ? []
           : [{ ...action, actor: { ...action.actor, id: "a" } }]),
       ];
-    case "approve":
+    }
+
+    case "approve": {
       return action.actor.id === "a"
         ? []
         : [{ ...action, actor: { ...action.actor, id: "a" } }];
-    case "edit":
+    }
+
+    case "edit": {
       return ["", "a", "b"]
         .filter((s) => s.length < action.summary.length)
         .map((summary) => ({ ...action, summary }));
-    case "revision":
+    }
+
+    case "revision": {
       return action.value === 0 ? [] : [{ ...action, value: 0 }];
-    case "resource":
+    }
+
+    case "resource": {
       if (action.field === "version") {
         return action.value === 0 ? [] : [{ ...action, value: 0 }];
       }
@@ -579,8 +630,11 @@ function simpler(action: Action): Action[] {
       }
 
       return [];
-    default:
+    }
+
+    default: {
       return [];
+    }
   }
 }
 
@@ -590,14 +644,14 @@ export function shrinkHistory(
   mutant = false,
   budget = 2000
 ) {
-  integer("shrinkBudget", budget, 0, 100000);
+  integer("shrinkBudget", budget, 0, 100_000);
   const original = replayHistory(replayData(history, mutant));
 
   if (!original.failure) {
     throw new Error("Cannot shrink a passing history");
   }
 
-  const kind = original.failure.kind;
+  const { kind } = original.failure;
   let minimal = clone(history);
   let attempts = 0;
 
@@ -606,7 +660,7 @@ export function shrinkHistory(
       return false;
     }
 
-    attempts++;
+    attempts += 1;
 
     return replayHistory(replayData(candidate, mutant)).failure?.kind === kind;
   };
@@ -625,7 +679,7 @@ export function shrinkHistory(
       if (accepts(candidate)) {
         minimal = candidate;
       } else {
-        start++;
+        start += 1;
       }
     }
   }
@@ -635,7 +689,11 @@ export function shrinkHistory(
   while (changed && attempts < budget) {
     changed = false;
 
-    for (let index = 0; index < minimal.length && attempts < budget; index++) {
+    for (
+      let index = 0;
+      index < minimal.length && attempts < budget;
+      index += 1
+    ) {
       const candidate = minimal.filter((_, i) => i !== index);
 
       if (accepts(candidate)) {
@@ -647,15 +705,15 @@ export function shrinkHistory(
       const action = minimal[index];
 
       if (!action) {
-        throw Error("Missing action in shrink history");
+        throw new Error("Missing action in shrink history");
       }
 
       for (const value of simpler(action)) {
-        const candidate = clone(minimal);
-        candidate[index] = value;
+        const innerCandidate = clone(minimal);
+        innerCandidate[index] = value;
 
-        if (accepts(candidate)) {
-          minimal = candidate;
+        if (accepts(innerCandidate)) {
+          minimal = innerCandidate;
           changed = true;
           break;
         }
@@ -704,15 +762,15 @@ function provenance() {
 
 /** Purely in-memory, synchronous sampled check. Infrastructure errors throw, never become passes. */
 export function runProperties(options: PropertyOptions = {}) {
-  const seed = integer("seed", options.seed ?? 0x5eed, 0, 0xffffffff);
-  const samples = integer("samples", options.samples ?? 200, 1, 10000);
+  const seed = integer("seed", options.seed ?? 0x5e_ed, 0, 0xff_ff_ff_ff);
+  const samples = integer("samples", options.samples ?? 200, 1, 10_000);
   const maxSteps = integer("maxSteps", options.maxSteps ?? 32, 1, 1000);
 
   const shrinkBudget = integer(
     "shrinkBudget",
     options.shrinkBudget ?? 2000,
     0,
-    100000
+    100_000
   );
 
   const mutant = options.staleApprovalMutant ?? false;
@@ -742,7 +800,7 @@ export function runProperties(options: PropertyOptions = {}) {
     actions,
   };
 
-  for (let sample = 0; sample < samples; sample++) {
+  for (let sample = 0; sample < samples; sample += 1) {
     const sampleSeed = next();
     const history = generateHistory(sampleSeed, maxSteps);
     const observed = replayHistory(replayData(history, mutant));
@@ -818,7 +876,7 @@ if (
   const options: PropertyOptions = {};
   const args = process.argv.slice(2);
 
-  for (let i = 0; i < args.length; i++) {
+  for (let i = 0; i < args.length; i += 1) {
     const flag = args[i];
 
     if (flag === "--mutant") {
@@ -847,14 +905,14 @@ if (
     }
 
     options[option] = Number(value);
-    i++;
+    i += 1;
   }
 
   const report = runProperties(options);
   await mkdir("artifacts", { recursive: true });
   await writeFile(
     "artifacts/property-report.json",
-    JSON.stringify(report, null, 2) + "\n"
+    `${JSON.stringify(report, null, 2)}\n`
   );
   console.log(
     `${report.result}: ${report.sampleCount} sampled histories, ${report.failures.length} failures. Wrote artifacts/property-report.json`

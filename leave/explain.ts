@@ -12,11 +12,11 @@ function declaration<T>(id: string, value: T, path: string) {
   const span = sourceMap[id];
 
   if (!span) {
-    throw Error(`Missing declaration ${id}`);
+    throw new Error(`Missing declaration ${id}`);
   }
 
-  const source = readFileSync(span.filename, "utf8").split("\n");
-  const line = span.start.line;
+  const source = readFileSync(span.filename, "utf-8").split("\n");
+  const { line } = span.start;
 
   return {
     id,
@@ -44,7 +44,7 @@ export function explainEvaluation(
   const a = leaveModel.actions[invocation.action];
 
   if (!a) {
-    throw Error(`Unknown leave action: ${invocation.action}`);
+    throw new Error(`Unknown leave action: ${invocation.action}`);
   }
 
   const checks = [
@@ -92,7 +92,7 @@ export function explainEvaluation(
     };
   });
 
-  const employeeId = invocation.args["employeeId"];
+  const { employeeId } = invocation.args;
 
   const employee =
     typeof employeeId === "string"

@@ -52,12 +52,12 @@ test("edits, resource changes and model changes invalidate approval", () => {
     }
 
     if (change === "resource") {
-      r.ticket.version++;
+      r.ticket.version += 1;
     }
 
     if (change === "model") {
       const next = structuredClone(model);
-      next.revision++;
+      next.revision += 1;
       r.replaceModel(next);
     }
 

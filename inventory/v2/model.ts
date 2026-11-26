@@ -229,22 +229,22 @@ export const initialState = validateState(inventoryV2Model, {
 
 export const runtime = createInterpreter(inventoryV2Model);
 
-type InvocationOptions = {
+interface InvocationOptions {
   reservationId: string;
   actor?: string;
   clock?: number;
   stockId?: string;
   quantity?: number;
   expiresAt?: number;
-};
+}
 
-type Command<A> = {
+interface Command<A> {
   id: string;
   action: string;
   actor: string;
   clock: number;
   args: A;
-};
+}
 
 type InventoryArgs = Record<string, Scalar> & { reservationId: string };
 

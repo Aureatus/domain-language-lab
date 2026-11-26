@@ -362,7 +362,7 @@ test("safe integer boundaries, exact intermediate arithmetic and atomic failure"
   );
 
   for (const badNumber of [
-    NaN,
+    Number.NaN,
     Infinity,
     1.5,
     -0,
@@ -460,10 +460,10 @@ test("malformed inputs/state, accessors, sparse arrays, cycles rejected without 
   Object.defineProperty(getter, "id", {
     enumerable: true,
     get() {
-      throw Error("getter ran");
+      throw new Error("getter ran");
     },
   });
-  assert.throws(() => jsonSnapshot(getter), /Unsafe JSON property/);
+  assert.throws(() => jsonSnapshot(getter), /Unsafe JSON property/u);
   const cyclic: { self?: object } = {};
   cyclic.self = cyclic;
 
@@ -515,7 +515,7 @@ test("routing uses poststate and retains multiple support paths, deterministic i
   const rt = createInterpreter(model);
   const r = rt.execute(issueState, invocation());
 
-  const recipients = present(withStatus(r, "committed").events[0]).recipients;
+  const { recipients } = present(withStatus(r, "committed").events[0]);
   assert.equal(recipients.length, 1);
   assert.equal(present(recipients[0]).recipient, "jon");
   assert.deepEqual(
@@ -658,7 +658,7 @@ test("bounded arithmetic cross-check: add/subtract versus exact mathematical int
             ? BigInt(left) + BigInt(right)
             : BigInt(left) - BigInt(right);
 
-        if (exact < -9007199254740991n || exact > 9007199254740991n) {
+        if (exact < -9_007_199_254_740_991n || exact > 9_007_199_254_740_991n) {
           assert.equal(withStatus(actual, "rejected").code, "overflow");
         } else {
           assert.equal(actual.status, "committed");

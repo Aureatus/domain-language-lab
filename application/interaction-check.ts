@@ -35,7 +35,7 @@ function* schedules(
   const at = events.findIndex((e) => e.type === "submit");
   const receiptAt = events.findIndex((e) => e.type === "receipt");
 
-  if (at < 0 || receiptAt < 0) {
+  if (at === -1 || receiptAt === -1) {
     yield { name: "recorded only", events };
 
     return;
@@ -52,7 +52,7 @@ function* schedules(
   const receipt = events.find((e) => e.type === "receipt");
 
   if (!lost || !check || !receipt || !snap) {
-    throw Error("Incomplete recorded recovery");
+    throw new Error("Incomplete recorded recovery");
   }
 
   const recovery = [lost, check, receipt];
@@ -79,7 +79,7 @@ function* schedules(
     const draft = base.find((e) => e.type === "draft");
 
     if (!draft?.body || !draft.id) {
-      throw Error("Missing recorded draft");
+      throw new Error("Missing recorded draft");
     }
 
     const { body, id } = draft;
@@ -146,7 +146,7 @@ export function interactionOracle(actor: string) {
 
     if (event.type === "draft" && viewer === actor) {
       draft = event.body.args;
-      id = event.id;
+      ({ id } = event);
     }
 
     if (event.type === "submit") {
@@ -278,7 +278,7 @@ export function interactionOracle(actor: string) {
 
     if (event.type === "grant" && event.result.status === "approved") {
       if (!event.result.snapshot) {
-        throw Error("Missing grant snapshot.");
+        throw new Error("Missing grant snapshot.");
       }
 
       if (
@@ -298,7 +298,7 @@ export function interactionOracle(actor: string) {
 
     if (event.type === "receipt") {
       if (!event.result.snapshot) {
-        throw Error("Missing receipt snapshot.");
+        throw new Error("Missing receipt snapshot.");
       }
 
       grantState = event.result.snapshot.state;
@@ -335,7 +335,7 @@ export async function checkInteractions(
   const families = new Set();
 
   for (const schedule of schedules(events, peer)) {
-    count++;
+    count += 1;
     families.add(schedule.name);
 
     const fold = actionReview(contract, command.actor, command.action, options);
@@ -344,15 +344,15 @@ export async function checkInteractions(
     fold({ type: "open" });
 
     for (const [i, event] of schedule.events.entries()) {
-      observations++;
+      observations += 1;
       let rule;
       let step: Observation | undefined;
 
       try {
         step = fold(event);
         rule = check(event, step);
-      } catch (e) {
-        rule = `projection.error: ${errorMessage(e)}`;
+      } catch (error) {
+        rule = `projection.error: ${errorMessage(error)}`;
       }
 
       if (rule) {

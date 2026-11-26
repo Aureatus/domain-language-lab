@@ -32,7 +32,7 @@ async function scratch(t: TestContext, prefix: string) {
 
 test(
   "Exact gateway CLI serves the selected view and shuts down after SIGTERM",
-  { timeout: 15000 },
+  { timeout: 15_000 },
   async (t) => {
     const directory = await scratch(t, "exact-cli-");
     await writeFile(
@@ -49,7 +49,7 @@ test(
       );
 
       let stderr = "";
-      child.stderr.setEncoding("utf8").on("data", (chunk) => {
+      child.stderr.setEncoding("utf-8").on("data", (chunk) => {
         stderr += chunk;
       });
       const stopped = once(child, "close");
@@ -63,9 +63,11 @@ test(
       const stdout = createInterface({ input: child.stdout });
 
       const line = await Promise.race([
-        once(stdout, "line").then(([line]) => String(line)),
+        once(stdout, "line").then(([innerLine]) => String(innerLine)),
         stopped.then(([status]) => {
-          throw Error(`Gateway exited before readiness (${status}): ${stderr}`);
+          throw new Error(
+            `Gateway exited before readiness (${status}): ${stderr}`
+          );
         }),
       ]);
 
@@ -76,28 +78,28 @@ test(
       const page = await fetch(url);
       assert.equal(page.headers.get("content-type"), "text/html");
       assert.equal(await page.text(), "<title>Local fixture</title>");
-      const file = await fetch(url + "/payload.bin");
+      const file = await fetch(`${url}/payload.bin`);
       assert.equal(
         file.headers.get("content-type"),
         "application/octet-stream"
       );
       assert.deepEqual(await file.bytes(), new Uint8Array([4, 9]));
-      assert.equal((await fetch(url + "/api/contract")).status, 200);
+      assert.equal((await fetch(`${url}/api/contract`)).status, 200);
 
       for (const headers of [
         { origin: "http://localhost:1" },
         { "sec-fetch-site": "cross-site" },
       ] satisfies HeadersInit[]) {
-        const refused = await fetch(url + "/api/contract", { headers });
+        const refused = await fetch(`${url}/api/contract`, { headers });
         assert.equal(refused.status, 403);
         assert.match(await refused.text(), /Unexpected host or origin/);
       }
 
-      assert.equal((await fetch(url + "/api/events")).status, 404);
+      assert.equal((await fetch(`${url}/api/events`)).status, 404);
 
-      const oversized = await fetch(url + "/api/actions/execute", {
+      const oversized = await fetch(`${url}/api/actions/execute`, {
         method: "POST",
-        body: "x".repeat(16385),
+        body: "x".repeat(16_385),
       });
 
       assert.equal(oversized.status, 500);
@@ -117,7 +119,7 @@ test("Exact gateway closes its backing application after a failed bind", async (
     startGateway(declaration, { directory, root: directory, port }),
     { code: "EADDRINUSE" }
   );
-  assert.equal((await fetch(first.url + "/api/snapshot")).status, 200);
+  assert.equal((await fetch(`${first.url}/api/snapshot`)).status, 200);
 });
 
 test("Exact gateway leaves no pooled API connection for an unanswered execute to replay on", async (t) => {
@@ -140,7 +142,7 @@ test("Exact gateway leaves no pooled API connection for an unanswered execute to
       text: string;
     }>((resolve, reject) => {
       const req = request(
-        gateway.url + "/api/" + path,
+        `${gateway.url}/api/${path}`,
         {
           agent,
           ...(body
@@ -151,9 +153,9 @@ test("Exact gateway leaves no pooled API connection for an unanswered execute to
             : {}),
         },
         (res) => {
-          const socket = res.socket;
+          const { socket } = res;
           let text = "";
-          res.setEncoding("utf8");
+          res.setEncoding("utf-8");
           res.on("data", (chunk) => {
             text += chunk;
           });
@@ -221,19 +223,21 @@ test("each Exact placeholder follows its view; waiting never suppresses another 
   const output = render();
   assert.match(
     output,
-    /progress .*aria-label="Loading Record group 0…" testId="loading:0:icon"/
+    /progress .*aria-label="Loading Record group 0…" testId="loading:0:icon"/u
   );
-  assert.match(output, /text "Loading Record group 1…" role="status"/);
+  assert.match(output, /text "Loading Record group 1…" role="status"/u);
   assert.match(
     output,
-    /column role="status" aria-label="Loading Record group 2…".*\n +box /
+    /column role="status" aria-label="Loading Record group 2…".*\n +box /u
   );
-  assert.doesNotMatch(output, /Loading Record group 3|loading:3:/);
-  contract.views.forEach((v) => {
+  assert.doesNotMatch(output, /Loading Record group 3|loading:3:/u);
+
+  for (const v of contract.views) {
     v.loading = "wait";
-  });
-  assert.doesNotMatch(render(), /testId="loading:/);
-  assert.match(render(), /testId="screen-failed"/);
+  }
+
+  assert.doesNotMatch(render(), /testId="loading:/u);
+  assert.match(render(), /testId="screen-failed"/u);
 });
 
 test("generated Exact mapping uses real durable HTTP pending, grants, resume and balance", async (t) => {
@@ -241,7 +245,7 @@ test("generated Exact mapping uses real durable HTTP pending, grants, resume and
   const server = await createApplicationServer(declaration, { directory });
 
   try {
-    const envelope = await (await fetch(server.url + "/api/contract")).json();
+    const envelope = await (await fetch(`${server.url}/api/contract`)).json();
     const c = createClient(envelope, server.url);
     await c.snapshot();
     const output = generate(envelope, { api: server.url });
@@ -274,18 +278,18 @@ test("generated Exact mapping uses real durable HTTP pending, grants, resume and
     const start = await balance();
     assert.ok(typeof start === "number");
 
-    const request = {
+    const leaveRequest = {
       actor: "maya",
       action: "leave.request",
       args: { start: "2026-11-23", end: "2026-11-25" },
     };
 
-    const preview = await c.request("actions/preview", request);
+    const preview = await c.request("actions/preview", leaveRequest);
     assert.equal(preview.status, "pending");
-    const execute = await c.command("actions/execute", request);
+    const execute = await c.command("actions/execute", leaveRequest);
     assert.equal(execute.ok, true);
     assert.equal(await balance(), start);
-    let s = await c.snapshot();
+    const s = await c.snapshot();
 
     const p = present(s.pending.at(-1));
     const r = present(p.requirements[0]);
@@ -325,8 +329,11 @@ test("generated Exact mapping uses real durable HTTP pending, grants, resume and
     });
 
     assert.equal(duplicate.ok, false);
-    assert.match(duplicate.message, /Approval is saved, but completion failed/);
-    await c.request("actions/execute", { ...request, actor: "leo" });
+    assert.match(
+      duplicate.message,
+      /Approval is saved, but completion failed/u
+    );
+    await c.request("actions/execute", { ...leaveRequest, actor: "leo" });
     const staleRequest = present((await c.snapshot()).pending.at(-1));
     await c.request("approvals/grant", {
       actor: approver,
@@ -345,7 +352,7 @@ test("generated Exact mapping uses real durable HTTP pending, grants, resume and
     });
 
     assert.equal(stale.ok, false);
-    assert.match(stale.message, /Approval is saved, but completion failed/);
+    assert.match(stale.message, /Approval is saved, but completion failed/u);
     const retained = present((await c.snapshot()).pending.at(-1));
     assert.equal(retained.grants.length, 1);
     assert.equal(retained.stale, true);
@@ -361,7 +368,7 @@ test("generated Exact mapping uses real durable HTTP pending, grants, resume and
     ).schema.type = "ids";
     assert.throws(
       () => generate(bad, { api: server.url }),
-      /Unsupported field/
+      /Unsupported field/u
     );
 
     const mismatch = createClient(
@@ -369,15 +376,15 @@ test("generated Exact mapping uses real durable HTTP pending, grants, resume and
       server.url
     );
 
-    await assert.rejects(() => mismatch.snapshot(), /Declaration changed/);
+    await assert.rejects(() => mismatch.snapshot(), /Declaration changed/u);
 
     const offline = createClient(envelope, server.url, async () => {
-      throw Error("offline");
+      throw new Error("offline");
     });
 
     const failure = await offline.command("approvals/resume", {});
     assert.equal(failure.ok, false);
-    assert.match(failure.message, /ambiguous outcome/);
+    assert.match(failure.message, /ambiguous outcome/u);
     await writeFile(
       "artifacts/exact-http-report.json",
       JSON.stringify(
@@ -414,16 +421,16 @@ test("renamed non-leave schemas generate references, enums, integers and boolean
   });
 
   try {
-    const envelope = await (await fetch(server.url + "/api/contract")).json();
+    const envelope = await (await fetch(`${server.url}/api/contract`)).json();
     const c = createClient(envelope, server.url);
 
     const generated = await writeAdapter(envelope, "artifacts/exact-fixture", {
       api: "http://127.0.0.1:4186",
     });
 
-    assert.match(generated.contract, /type="checkbox"/);
-    assert.match(generated.contract, /select value=/);
-    assert.match(generated.ts, /Number\(v1\)/);
+    assert.match(generated.contract, /type="checkbox"/u);
+    assert.match(generated.contract, /select value=/u);
+    assert.match(generated.ts, /Number\(v1\)/u);
     assert.ok(!generated.ts.includes("leave.request"));
 
     const s = await c.snapshot();
@@ -483,7 +490,7 @@ test("inbox coverage follows every captured server requirement, not a single man
   );
 
   try {
-    const envelope = await (await fetch(server.url + "/api/contract")).json();
+    const envelope = await (await fetch(`${server.url}/api/contract`)).json();
     const c = createClient(envelope, server.url);
     const s = await c.snapshot();
 
@@ -576,5 +583,5 @@ test("transport never overwrites a newer accepted snapshot with an older HTTP re
   assert.ok("marker" in first && "marker" in second);
   assert.equal(first.marker, "new");
   assert.equal(second.marker, "new");
-  await assert.rejects(() => c.snapshot(), /Declaration changed/);
+  await assert.rejects(() => c.snapshot(), /Declaration changed/u);
 });

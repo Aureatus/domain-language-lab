@@ -25,7 +25,7 @@ test("six seeded 30-step SQLite histories predict outcomes and replay exact obse
     )
   );
   assert.equal(report.seeds.length, 6);
-  assert.equal(report.seeds[0], 0x51a7);
+  assert.equal(report.seeds[0], 0x51_a7);
   assert.equal(report.replay.status, "passed");
 
   for (const item of report.cases) {
@@ -84,7 +84,7 @@ test("six seeded 30-step SQLite histories predict outcomes and replay exact obse
         "cause" in check
     );
     assert.equal(check.detected, true);
-    const cause = check.cause;
+    const { cause } = check;
     assert.ok(
       cause && typeof cause === "object" && "message" in cause && cause.message
     );
@@ -162,7 +162,7 @@ test("seed-specific counterexample persists actual cause/full prefix and CLI rep
   });
 
   assert.equal(report.status, "counterexample");
-  const saved = JSON.parse(await readFile(reportPath, "utf8"));
+  const saved = JSON.parse(await readFile(reportPath, "utf-8"));
   assert.equal(saved.cases[0].counterexample.index, 2);
   assert.match(
     saved.cases[0].counterexample.cause.message,
@@ -179,13 +179,13 @@ test("seed-specific counterexample persists actual cause/full prefix and CLI rep
       "--report",
       join(dir, "replay.json"),
     ],
-    { encoding: "utf8" }
+    { encoding: "utf-8" }
   );
 
   assert.equal(cli.status, 1, cli.stderr);
   assert.equal(JSON.parse(cli.stdout).status, "counterexample");
   assert.deepEqual(
-    JSON.parse(await readFile(join(dir, "replay.json"), "utf8")).cases[0]
+    JSON.parse(await readFile(join(dir, "replay.json"), "utf-8")).cases[0]
       .counterexample.failingPrefix,
     commands
   );
@@ -208,23 +208,23 @@ test("CLI seed/runs/steps report can be replayed directly into fresh SQLite", as
       "--report",
       path,
     ],
-    { encoding: "utf8" }
+    { encoding: "utf-8" }
   );
 
   assert.equal(cli.status, 0, cli.stderr + cli.stdout);
-  const report = JSON.parse(await readFile(path, "utf8"));
+  const report = JSON.parse(await readFile(path, "utf-8"));
   assert.equal(report.cases[0].commands.length, 32);
   const replayPath = join(dir, "replayed.json");
 
   const replay = spawnSync(
     process.execPath,
     ["inventory/v2/generated.ts", "--replay", path, "--report", replayPath],
-    { encoding: "utf8" }
+    { encoding: "utf-8" }
   );
 
   assert.equal(replay.status, 0, replay.stderr + replay.stdout);
   assert.deepEqual(
-    JSON.parse(await readFile(replayPath, "utf8")).cases[0].observations,
+    JSON.parse(await readFile(replayPath, "utf-8")).cases[0].observations,
     report.cases[0].observations
   );
 });

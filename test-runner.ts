@@ -8,7 +8,7 @@ const unitTests = globSync("**/*.test.ts", {
     "artifacts/**",
     "adapters/effect-ui/browser.test.ts",
   ],
-}).sort();
+}).toSorted();
 
 const result = spawnSync(
   process.execPath,

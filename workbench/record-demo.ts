@@ -22,13 +22,13 @@ const context = await browser.newContext({
 const page = await context.newPage();
 const video = page.video();
 
-type Mark = {
+interface Mark {
   selector: string;
   caption: string;
   beforeSeconds: number;
   pulseSeconds?: number;
   afterSeconds?: number;
-};
+}
 
 const marks: Mark[] = [];
 
@@ -48,15 +48,15 @@ try {
       '<svg viewBox="0 0 30 38" aria-hidden="true"><path d="M3 2 L3 29 L10 23 L16 35 L22 32 L16 20 L26 19 Z" fill="white" stroke="#252625" stroke-width="2.5" stroke-linejoin="round"/></svg>';
     const pulse = document.createElement("div");
     pulse.id = "demo-pulse";
-    const caption = document.createElement("div");
-    caption.id = "demo-caption";
-    document.body.append(pointer, pulse, caption);
+    const innerCaption = document.createElement("div");
+    innerCaption.id = "demo-caption";
+    document.body.append(pointer, pulse, innerCaption);
     document.addEventListener("mousemove", (e) => {
       pointer.style.transform = `translate(${e.clientX}px,${e.clientY}px)`;
     });
     document.addEventListener("pointerdown", (e) => {
-      pulse.style.left = e.clientX + "px";
-      pulse.style.top = e.clientY + "px";
+      pulse.style.left = `${e.clientX}px`;
+      pulse.style.top = `${e.clientY}px`;
       pulse.classList.remove("active");
       void pulse.offsetWidth;
       pulse.classList.add("active");
@@ -65,12 +65,13 @@ try {
   const started = Date.now();
   let cursor = { x: 1070, y: 120 };
   await page.mouse.move(cursor.x, cursor.y);
-  const wait = (ms: number) => page.waitForTimeout(ms); // editorial pacing, not agent polling
+  // editorial pacing, not agent polling
+  const wait = (ms: number) => page.waitForTimeout(ms);
 
   async function caption(text: string) {
     await page
       .locator("#demo-caption")
-      .evaluate((el, text) => (el.textContent = text), text);
+      .evaluate((el, innerText) => (el.textContent = innerText), text);
   }
 
   async function click(
@@ -85,12 +86,12 @@ try {
     const box = await target.boundingBox();
 
     if (!box) {
-      throw new Error("Invisible target: " + selector);
+      throw new Error(`Invisible target: ${selector}`);
     }
 
     const end = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
 
-    for (let i = 1; i <= 30; i++) {
+    for (let i = 1; i <= 30; i += 1) {
       const t = i / 30;
       const eased = t * t * (3 - 2 * t);
       await page.mouse.move(
@@ -226,7 +227,7 @@ try {
 }
 
 if (!video) {
-  throw Error("Missing workbench recording");
+  throw new Error("Missing workbench recording");
 }
 
 const source = await video.path();
@@ -250,7 +251,7 @@ const result = spawnSync(
     "+faststart",
     output,
   ],
-  { encoding: "utf8" }
+  { encoding: "utf-8" }
 );
 
 if (result.status !== 0) {

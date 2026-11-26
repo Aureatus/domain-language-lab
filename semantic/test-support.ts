@@ -19,6 +19,7 @@ export function withStatus<T extends { status: string }, S extends T["status"]>(
   return result;
 }
 
+// oxlint-disable-next-line anti-slop/no-object-parameters, anti-slop/no-unknown-returns -- tests pass arbitrary results and assert on the events themselves.
 export function observedEvents(result: object): unknown {
   return "events" in result ? result.events : undefined;
 }

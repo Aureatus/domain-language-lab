@@ -50,9 +50,9 @@ try {
     );
     assert.equal(await page.locator("iframe").count(), parsed.modules.length);
 
-    for (const [i, module] of parsed.modules.entries()) {
+    for (const [i, innerModule] of parsed.modules.entries()) {
       const frame = page.frameLocator("iframe").nth(i);
-      const source = module.source;
+      const { source } = innerModule;
 
       assert.equal(
         await frame.locator(".line").count(),
@@ -62,7 +62,7 @@ try {
         await frame
           .locator(".text")
           .allTextContents()
-          .then((a) => a.join("\n") + "\n"),
+          .then((a) => `${a.join("\n")}\n`),
         source
       );
       assert.equal(await frame.locator("#raw-text").textContent(), source);
@@ -71,13 +71,13 @@ try {
       const download = page.waitForEvent("download");
       await frame.locator("#download").click();
       assert.equal(
-        await readFile(await (await download).path(), "utf8"),
+        await readFile(await (await download).path(), "utf-8"),
         source
       );
       await frame.locator("#copy").click();
       await frame
         .locator("#status")
-        .filter({ hasText: /copied|Clipboard unavailable/ })
+        .filter({ hasText: /copied|Clipboard unavailable/u })
         .waitFor();
       const links = frame.locator("nav a");
 
@@ -114,7 +114,7 @@ try {
   assert.equal(await page.locator("img").count(), 0);
   await writeFile(
     "artifacts/time-away-source-reader-report.json",
-    JSON.stringify(
+    `${JSON.stringify(
       {
         scope:
           "Sampled Chromium source import-closure reader; not semantic proof or installed editor evidence",
@@ -122,7 +122,7 @@ try {
       },
       null,
       2
-    ) + "\n"
+    )}\n`
   );
   console.log(
     "PASS modular source reader: 1440/728/390, complete domain/data/view files, exact source/download, visible IDs, keyboard navigation and clipboard/fallback"

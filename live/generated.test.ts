@@ -11,7 +11,7 @@ import type { createApp } from "./core.ts";
 import { runGenerated } from "./generated.ts";
 
 test("fixed-seed generated live histories exercise every action and failure class", () => {
-  const report = runGenerated({ seed: 0x51eed, runs: 40, maxSteps: 80 });
+  const report = runGenerated({ seed: 0x5_1e_ed, runs: 40, maxSteps: 80 });
   assert.equal(report.status, "sampled_pass");
   assert.ok(report.actionsExecuted > 0);
 
@@ -34,17 +34,22 @@ test("fixed-seed generated live histories exercise every action and failure clas
 });
 
 test("snapshot oracle detects nested corruption when deep freeze is deliberately removed", async () => {
-  const source = await readFile(new URL("./core.ts", import.meta.url), "utf8");
-  const weakened = source.replace("Object.values(value).forEach(freeze);", "");
+  const source = await readFile(new URL("core.ts", import.meta.url), "utf-8");
+
+  const weakened = source.replace(
+    /for \(const item of Object\.values\(value\)\) \{\s*freeze\(item\);\s*\}/u,
+    ""
+  );
+
   assert.notEqual(weakened, source);
 
-  const coreURL =
-    "data:text/javascript;base64," +
-    Buffer.from(stripTypeScriptTypes(weakened)).toString("base64");
+  const coreURL = `data:text/javascript;base64,${Buffer.from(
+    stripTypeScriptTypes(weakened)
+  ).toString("base64")}`;
 
   const generated = await readFile(
-    new URL("./generated.ts", import.meta.url),
-    "utf8"
+    new URL("generated.ts", import.meta.url),
+    "utf-8"
   );
 
   const runner = generated.replace(
@@ -56,8 +61,9 @@ test("snapshot oracle detects nested corruption when deep freeze is deliberately
 
   const { runGenerated: run }: { runGenerated: typeof runGenerated } =
     await import(
-      "data:text/javascript;base64," +
-        Buffer.from(stripTypeScriptTypes(runner)).toString("base64")
+      `data:text/javascript;base64,${Buffer.from(
+        stripTypeScriptTypes(runner)
+      ).toString("base64")}`
     );
 
   const report = run({
@@ -132,12 +138,12 @@ test("independent checker detects policy decision mutator", () => {
 test("live generator CLI reports seeded coverage within its requested bounds", async (t) => {
   const cwd = await mkdtemp(join(tmpdir(), "premise-live-generator-"));
   t.after(() => rm(cwd, { recursive: true, force: true }));
-  const entry = fileURLToPath(new URL("./generated.ts", import.meta.url));
+  const entry = fileURLToPath(new URL("generated.ts", import.meta.url));
 
   const run = (runs: string) =>
     spawnSync(process.execPath, [entry], {
       cwd,
-      encoding: "utf8",
+      encoding: "utf-8",
       env: { ...process.env, SEED: "47", RUNS: runs, MAX_STEPS: "13" },
     });
 
@@ -154,7 +160,7 @@ test("live generator CLI reports seeded coverage within its requested bounds", a
   const result = JSON.parse(valid.stdout);
   assert.equal(result.status, "sampled_pass");
   assert.ok(result.actionsExecuted <= 26);
-  assert.deepEqual(result, JSON.parse(await readFile(path, "utf8")));
+  assert.deepEqual(result, JSON.parse(await readFile(path, "utf-8")));
   assert.deepEqual(result, runGenerated({ seed: 47, runs: 2, maxSteps: 13 }));
 });
 

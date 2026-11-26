@@ -17,7 +17,7 @@ export async function checkerBuild() {
     hash
       .update(file)
       .update("\0")
-      .update(await readFile(new URL(`./${file}.ts`, import.meta.url)))
+      .update(await readFile(new URL(`${file}.ts`, import.meta.url)))
       .update("\0");
   }
 

@@ -22,7 +22,7 @@ test("only a bound 400 no-write disposition unlocks an Exact submission", async 
       { contract, contractId: "c" },
       "http://127.0.0.1:1",
       async (_, options) => {
-        calls++;
+        calls += 1;
         assert.ok(typeof options?.body === "string");
         const { submissionId } = JSON.parse(options.body);
         const status = fault === "http" ? 500 : 400;
@@ -69,7 +69,7 @@ test("Exact submission recovery retries the captured command, not the latest dra
       assert.equal(body.expectedContractId, "c");
 
       if (commands.length === 1) {
-        throw Error("No response");
+        throw new Error("No response");
       }
 
       const receipt = { contractId: "c", submissionId: body.submissionId };

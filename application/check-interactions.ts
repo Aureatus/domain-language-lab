@@ -28,13 +28,13 @@ const { positionals, values } = parseArgs({
 const [entry, action] = positionals;
 
 if (!entry || !action || positionals.length !== 2) {
-  throw Error(
+  throw new Error(
     "Usage: check:interactions -- VIEW.domain ACTION [--actor ID] [--args JSON] [--mutant snapshot-unlocks] [--out PATH]"
   );
 }
 
 if (values.mutant !== undefined && values.mutant !== "snapshot-unlocks") {
-  throw Error("Unknown test mutant.");
+  throw new Error("Unknown test mutant.");
 }
 
 const { declaration } = loadSource(entry);
@@ -48,7 +48,7 @@ if (
   !Object.hasOwn(contract.actions, action) ||
   !contract.actors.some((a) => a.id === actor)
 ) {
-  throw Error("Unknown action or actor.");
+  throw new Error("Unknown action or actor.");
 }
 
 const { args, selection } = values.args

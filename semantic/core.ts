@@ -41,17 +41,30 @@ type Patch = Pick<
 
 type Snapshot = State["records"][string][string];
 
-type Bound = { resource: string; key: string; record: Snapshot };
+interface Bound {
+  resource: string;
+  key: string;
+  record: Snapshot;
+}
 
-type Token = { readonly kind: "semantic-prepared/v1" };
+interface Token {
+  readonly kind: "semantic-prepared/v1";
+}
 
-type Plan = { before: string; state: State; events: Event[] };
+interface Plan {
+  before: string;
+  state: State;
+  events: Event[];
+}
 
-export { ownValue };
+export { ownValue } from "./primitives.ts";
 
 const freeze = <T>(x: T): T => {
   if (x && typeof x === "object") {
-    Object.values(x).forEach(freeze);
+    for (const item of Object.values(x)) {
+      freeze(item);
+    }
+
     Object.freeze(x);
   }
 
@@ -59,19 +72,21 @@ const freeze = <T>(x: T): T => {
 };
 
 /** Reject accessors, cycles, exotic objects, sparse arrays and non-safe JSON numbers. */
-export function jsonSnapshot<T>(value: T): T {
+export function jsonSnapshot<T>(innerValue: T): T {
   let nodes = 0;
   const seen = new Set<object>();
 
+  // oxlint-disable-next-line anti-slop/no-unknown-returns -- returns the frozen copy of arbitrary JSON input.
   function visit(x: unknown, depth: number): unknown {
-    assert(++nodes <= 100000 && depth <= 40, "JSON complexity limit");
+    nodes += 1;
+    assert(nodes <= 100_000 && depth <= 40, "JSON complexity limit");
 
     if (x === null || typeof x === "boolean") {
       return x;
     }
 
     if (typeof x === "string") {
-      assert(x.length <= 100000, "String limit");
+      assert(x.length <= 100_000, "String limit");
 
       return x;
     }
@@ -123,13 +138,13 @@ export function jsonSnapshot<T>(value: T): T {
     return result;
   }
 
-  // oxlint-disable-next-line typescript/consistent-type-assertions -- The walker copies every permitted value and key without coercion.
-  return freeze(visit(value, 0)) as T;
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: The walker copies every permitted value and key without coercion.
+  return freeze(visit(innerValue, 0)) as T;
 }
 
 /** Validate the entire declaration, including unreachable expressions. Returns frozen JSON. */
 export function validateModel(source: unknown): Model {
-  // oxlint-disable-next-line typescript/consistent-type-assertions -- The checks below validate the frozen declaration before returning it.
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: The checks below validate the frozen declaration before returning it.
   const m = jsonSnapshot(source) as Model;
   keys(m, ["format", "id", "resources", "relationships", "actions"]);
   assert(m.format === "semantic-core/v1", "Unsupported semantic profile");

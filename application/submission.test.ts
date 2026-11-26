@@ -28,7 +28,7 @@ test("oversized UTF-8 payloads never dispatch; wrong receipt IDs never resolve t
   const client = createApplicationClient("http://localhost", {
     fetch: async () =>
       Response.json(
-        ++calls === 1
+        (calls += 1) === 1
           ? { contractId: "c", contract }
           : { contractId: "c", submissionId: "wrong", status: "committed" }
       ),
@@ -49,7 +49,7 @@ test("oversized UTF-8 payloads never dispatch; wrong receipt IDs never resolve t
   );
   assert.equal(calls, 1);
   body.args.note = "ok";
-  await assert.rejects(client.execute(body), /identity mismatch/);
+  await assert.rejects(client.execute(body), /identity mismatch/u);
   assert.equal(calls, 2);
 });
 
@@ -57,19 +57,19 @@ test("submission size counts two-, three- and four-byte characters at the wire l
   const command = (input: string) => ({ args: { input } });
 
   const remaining =
-    16384 - Buffer.byteLength(submissionWireBody(command(""), "c"));
+    16_384 - Buffer.byteLength(submissionWireBody(command(""), "c"));
 
   const mixed = "Aé雪🙂";
   const input = mixed + "x".repeat(remaining - Buffer.byteLength(mixed));
   const wire = submissionWireBody(command(input), "c");
-  assert.equal(Buffer.byteLength(wire), 16384);
+  assert.equal(Buffer.byteLength(wire), 16_384);
   assert.deepEqual(JSON.parse(wire), {
     ...command(input),
     expectedContractId: "c",
   });
   assert.throws(
-    () => submissionWireBody(command(input + "🙂"), "c"),
-    /Submission is too large/
+    () => submissionWireBody(command(`${input}🙂`), "c"),
+    /Submission is too large/u
   );
 });
 

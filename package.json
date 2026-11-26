@@ -4,7 +4,8 @@
   "type": "module",
   "scripts": {
     "knip": "knip",
-    "lint": "vp lint -c .oxlintrc.json",
+    "lint": "vp lint --deny-warnings",
+    "lint:fix": "vp lint --fix",
     "fmt": "vp fmt",
     "fmt:check": "vp fmt --check",
     "dup": "jscpd .",

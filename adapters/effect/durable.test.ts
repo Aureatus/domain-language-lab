@@ -28,7 +28,7 @@ const invoke = (id: string, args = { issueId: "i1" }) => ({
   action: "issue.resolve",
   args,
   actor: "maya",
-  clock: 1730000000000,
+  clock: 1_730_000_000_000,
 });
 
 const run = Effect.runPromise;
@@ -46,13 +46,13 @@ function withStatus<T extends { status: string }, S extends T["status"]>(
 }
 
 const temp = () => mkdtempSync(join(tmpdir(), "effect-durable-"));
-const worker = new URL("./durable-worker.ts", import.meta.url).pathname;
+const worker = new URL("durable-worker.ts", import.meta.url).pathname;
 
 const child = (path: string, mode: string, id?: string) =>
   spawnSync(
     process.execPath,
     [worker, path, mode, ...(id === undefined ? [] : [id])],
-    { encoding: "utf8" }
+    { encoding: "utf-8" }
   );
 
 test("durable store layer supplies a SQLite handle and closes it when its scope ends", async (t) => {
@@ -73,7 +73,7 @@ test("restart keeps outcomes and immutable command identity", async (t) => {
   t.after(() => rmSync(dir, { recursive: true, force: true }));
 
   let db = await run(makeDurableStore(path));
-  let runtime = makeDurableRuntime(issueModel);
+  const runtime = makeDurableRuntime(issueModel);
 
   await run(initializeDurableState(runtime, db, issueState));
   const source = invoke("durable1");
@@ -89,7 +89,7 @@ test("restart keeps outcomes and immutable command identity", async (t) => {
   assert.equal(replay.result.status, "committed");
 
   const reordered = {
-    clock: 1730000000000,
+    clock: 1_730_000_000_000,
     actor: "maya",
     args: { issueId: "i1" },
     action: "issue.resolve",
@@ -162,7 +162,7 @@ test("failure injection rolls back state, ledger, and outbox in one transaction"
     run(
       durableExecute(rt, db, invoke("rollback"), {
         beforeCommit: () => {
-          throw Error("injected");
+          throw new Error("injected");
         },
       })
     )
@@ -209,7 +209,7 @@ test("separate processes serialize contenders against one SQLite state", async (
       (id) =>
         new Promise<ReturnType<typeof child>>((resolve) => {
           const p = spawnSync(process.execPath, [worker, path, "execute", id], {
-            encoding: "utf8",
+            encoding: "utf-8",
           });
 
           resolve(p);
@@ -240,7 +240,7 @@ test("two processes competing to reserve 3 from stock 5 admit only one", async (
 
   const contenders = ["stock-a", "stock-b"].map((id) =>
     spawnSync(process.execPath, [worker, path, "stock", id], {
-      encoding: "utf8",
+      encoding: "utf-8",
     })
   );
 
@@ -285,7 +285,7 @@ test("process death before commit rolls back; death after commit survives restar
   assert.equal(killed.signal, "SIGKILL");
 
   let db = await run(makeDurableStore(path));
-  let rt = makeDurableRuntime(issueModel);
+  const rt = makeDurableRuntime(issueModel);
 
   assert.deepEqual(await run(durableState(rt, db)), issueState);
   await run(closeDurableStore(db));

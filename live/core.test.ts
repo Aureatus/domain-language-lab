@@ -4,7 +4,7 @@ import test from "node:test";
 import { present } from "../semantic/test-support.ts";
 import { createApp, forkApp } from "./core.ts";
 
-const app = () => createApp({ clock: () => 1794391200000 });
+const app = () => createApp({ clock: () => 1_794_391_200_000 });
 
 type App = ReturnType<typeof createApp>;
 
@@ -18,17 +18,33 @@ const accepted = <T extends object>(
 
 test("trusted forks isolate siblings, prepared snapshots, restores, rule edits and clock contracts", () => {
   let calls = 0;
-  const parent = createApp({ clock: () => 100 + ++calls });
+
+  const parent = createApp({
+    clock: () => {
+      calls += 1;
+
+      return 100 + calls;
+    },
+  });
+
   accepted(
     parent.dispatch("comment", { issueId: "i1", body: "Before fork" }, "u2")
   );
 
-  const state = parent.state;
-  const model = parent.model;
+  const { state } = parent;
+  const { model } = parent;
   const document = parent.exportWorkspace();
 
   let forkCalls = 0;
-  const child = forkApp(parent, { clock: () => 200 + ++forkCalls });
+
+  const child = forkApp(parent, {
+    clock: () => {
+      forkCalls += 1;
+
+      return 200 + forkCalls;
+    },
+  });
+
   const sibling = forkApp(parent);
   audit(child);
   audit(sibling);
@@ -91,16 +107,16 @@ test("trusted forks isolate siblings, prepared snapshots, restores, rule edits a
     Object.freeze({ state, model }),
     Object.create(parent),
   ]) {
-    assert.throws(() => forkApp(fake), /trusted runtime/);
+    assert.throws(() => forkApp(fake), /trusted runtime/u);
   }
 
-  assert.throws(() => forkApp(parent, { state }), /Unknown fork option/);
-  assert.throws(() => forkApp(parent, { clock: 42 }), /clock/);
+  assert.throws(() => forkApp(parent, { state }), /Unknown fork option/u);
+  assert.throws(() => forkApp(parent, { clock: 42 }), /clock/u);
   assert.throws(
     () => createApp({ state, model }),
-    /Unknown application option/
+    /Unknown application option/u
   );
-  const broken = forkApp(parent, { clock: () => NaN });
+  const broken = forkApp(parent, { clock: () => Number.NaN });
   const before = broken.exportWorkspace();
   rejectedWithoutChange(broken, "comment", {
     issueId: "i1",
@@ -114,14 +130,14 @@ test("explainAction is a frozen pure query sharing dispatch preparation", () => 
 
   const runtime = createApp({
     clock: () => {
-      samples++;
+      samples += 1;
 
-      return 1794391200000;
+      return 1_794_391_200_000;
     },
   });
 
-  const state = runtime.state;
-  const model = runtime.model;
+  const { state } = runtime;
+  const { model } = runtime;
   const journal = runtime.exportWorkspace();
 
   const cases = [
@@ -195,7 +211,7 @@ test("availability tracks applied revisions and preconditions but does not promi
 
   const broken = createApp({
     clock: () => {
-      throw Error("clock unavailable");
+      throw new Error("clock unavailable");
     },
   });
 
@@ -215,7 +231,7 @@ function rejectedWithoutChange(
   actor = "u1"
 ) {
   const before = runtime.state;
-  const model = runtime.model;
+  const { model } = runtime;
   const result = runtime.dispatch(action, args, actor);
   assert.equal(result.ok, false);
   assert.equal(typeof result.reason, "string");
@@ -254,7 +270,7 @@ test("sparse rule arrays reject atomically instead of creating an unreplayable j
 
   for (const field of ["notify", "allowedRoles"]) {
     const before = runtime.exportWorkspace();
-    const model = runtime.model;
+    const { model } = runtime;
     assert.equal(runtime.setRule("comment", { [field]: Array(1) }).ok, false);
     assert.strictEqual(runtime.model, model);
     assert.deepEqual(runtime.exportWorkspace(), before);
@@ -286,7 +302,7 @@ test("live create, assign, comment, resolve, reopen and watch workflow", () => {
   );
 
   assert.equal(present(comment.value.comments[0]).author, "u3");
-  assert.equal(present(comment.value.comments[0]).createdAt, 1794391200000);
+  assert.equal(present(comment.value.comments[0]).createdAt, 1_794_391_200_000);
   assert.deepEqual(
     comment.event.recipients.map((item) => item.recipient),
     ["u2"]
@@ -318,11 +334,16 @@ test("policy edits immediately change authorization and derived tool declaration
     })
   );
   assert.equal(runtime.model.revision, 2);
-  const tool = present(runtime.tools().find((tool) => tool.name === "resolve"));
+
+  const tool = present(
+    runtime.tools().find((innerTool2) => innerTool2.name === "resolve")
+  );
+
   assert.deepEqual(tool.allowedRoles, ["member"]);
   assert.deepEqual(tool.notify, ["assignee"]);
   assert.deepEqual(
-    present(oldTools.find((tool) => tool.name === "resolve")).allowedRoles,
+    present(oldTools.find((innerTool) => innerTool.name === "resolve"))
+      .allowedRoles,
     ["lead"]
   );
   rejectedWithoutChange(runtime, "resolve", { issueId: "i1" }, "u1");
@@ -402,7 +423,8 @@ test("historical why retains rule, actor, relationship and change snapshots", ()
   const historical = runtime.explain(result.event.id);
   assert.ok(historical);
   const encoded = JSON.stringify(historical);
-  accepted(runtime.dispatch("watch", { issueId: "i1" }, "u2")); // remove prior recipient path
+  // remove prior recipient path
+  accepted(runtime.dispatch("watch", { issueId: "i1" }, "u2"));
   accepted(runtime.dispatch("assign", { issueId: "i1", assignee: "u1" }, "u1"));
 
   const patch: { notify: string[]; allowedRoles: string[] } = {
@@ -423,7 +445,7 @@ test("historical why retains rule, actor, relationship and change snapshots", ()
   assert.throws(() => {
     historical.actor.role = "lead";
   }, TypeError);
-  const after = present(historical.changes[0]).after;
+  const { after } = present(historical.changes[0]);
   assert.ok(Array.isArray(after));
   const savedComment = present(after[0]);
   assert.equal(typeof savedComment.body, "string");
@@ -507,9 +529,9 @@ test("unknown schema/rule extension attempts fail rather than silently weakening
       createApp({
         model: { actions: { bad: { inputs: { type: "mystery" } } } },
       }),
-    /Unknown application option/
+    /Unknown application option/u
   );
-  assert.throws(() => createApp({ clock: 1 }), /clock/);
+  assert.throws(() => createApp({ clock: 1 }), /clock/u);
   audit(runtime);
 });
 
@@ -570,11 +592,11 @@ test("commit groups issue changes, event and inbox; retained state sees no parti
 
 test("failing clocks do not publish a partial mutation or consume event identity", () => {
   for (const clock of [
-    () => NaN,
+    () => Number.NaN,
     () => Infinity,
     () => "now",
     () => {
-      throw Error("Clock unavailable");
+      throw new Error("Clock unavailable");
     },
   ]) {
     const runtime = createApp({ clock });
@@ -587,7 +609,15 @@ test("failing clocks do not publish a partial mutation or consume event identity
   }
 
   let calls = 0;
-  const runtime = createApp({ clock: () => ++calls });
+
+  const runtime = createApp({
+    clock: () => {
+      calls += 1;
+
+      return calls;
+    },
+  });
+
   rejectedWithoutChange(runtime, "resolve", { issueId: "i1" }, "u2");
   assert.equal(calls, 0);
   const result = accepted(runtime.dispatch("resolve", { issueId: "i1" }, "u1"));
@@ -598,7 +628,7 @@ test("failing clocks do not publish a partial mutation or consume event identity
 const mutable = <T>(value: T): T => JSON.parse(JSON.stringify(value));
 
 function mixedHistory() {
-  let time = 1794391200000;
+  let time = 1_794_391_200_000;
   const runtime = createApp({ clock: () => (time += 37) });
   const prefixes = [{ state: runtime.state, model: runtime.model }];
 
@@ -640,7 +670,8 @@ function mixedHistory() {
   save(runtime.dispatch("resolve", { issueId: "i3" }, "u2"));
   save(runtime.dispatch("reopen", { issueId: "i3" }, "u3"));
   save(runtime.dispatch("assign", { issueId: "i3", assignee: null }, "u1"));
-  save(runtime.setRule("watch", { notify: [] })); // accepted no-op revision
+  // accepted no-op revision
+  save(runtime.setRule("watch", { notify: [] }));
 
   return { runtime, prefixes };
 }
@@ -651,7 +682,7 @@ test("workspace roundtrip preserves mixed history, IDs, revisions and event-time
 
   const restored = createApp({
     workspace: mutable(document),
-    clock: () => 987654321,
+    clock: () => 987_654_321,
   });
 
   assert.deepEqual(restored.state, runtime.state);
@@ -667,7 +698,7 @@ test("workspace roundtrip preserves mixed history, IDs, revisions and event-time
       priority: "high",
     },
     actorId: "u2",
-    createdAt: 1794391200037,
+    createdAt: 1_794_391_200_037,
     eventId: "e1",
     issueId: "i3",
     revision: 1,
@@ -702,7 +733,7 @@ test("workspace roundtrip preserves mixed history, IDs, revisions and event-time
 
   assert.equal(next.value.id, "i4");
   assert.equal(next.event.id, "e9");
-  assert.equal(next.event.createdAt, 987654321);
+  assert.equal(next.event.createdAt, 987_654_321);
   assert.equal(
     restored.exportWorkspace().journal.length,
     document.journal.length + 1
@@ -740,11 +771,11 @@ test("exports are deeply detached frozen JSON and do not journal rejected operat
 
 test("every replay prefix is read-only, exact, and never changes the live journal or calls its clock", () => {
   const { runtime, prefixes } = mixedHistory();
-  const state = runtime.state;
-  const model = runtime.model;
+  const { state } = runtime;
+  const { model } = runtime;
   const journal = runtime.exportWorkspace();
 
-  for (let index = prefixes.length - 1; index >= 0; index--) {
+  for (let index = prefixes.length - 1; index >= 0; index -= 1) {
     const preview = accepted(runtime.previewWorkspace(index));
     assert.deepEqual(preview.state, present(prefixes[index]).state);
     assert.deepEqual(preview.model, present(prefixes[index]).model);
@@ -760,7 +791,7 @@ test("every replay prefix is read-only, exact, and never changes the live journa
   for (const count of [
     -1,
     0.5,
-    NaN,
+    Number.NaN,
     Infinity,
     "1",
     null,
@@ -778,7 +809,15 @@ test("every replay prefix is read-only, exact, and never changes the live journa
 test("restore replaces privately reconstructed state atomically and retains original future clock", () => {
   const { runtime: source } = mixedHistory();
   let calls = 0;
-  const runtime = createApp({ clock: () => 1000 + ++calls });
+
+  const runtime = createApp({
+    clock: () => {
+      calls += 1;
+
+      return 1000 + calls;
+    },
+  });
+
   accepted(
     runtime.dispatch("comment", { issueId: "i1", body: "Old state" }, "u1")
   );
@@ -809,11 +848,11 @@ test("restore replaces privately reconstructed state atomically and retains orig
 test("malformed imports including late replay failures preserve state/model/events/journal identities", () => {
   const { runtime } = mixedHistory();
   const valid = runtime.exportWorkspace();
-  const state = runtime.state;
-  const model = runtime.model;
-  const events = runtime.state.events;
+  const { state } = runtime;
+  const { model } = runtime;
+  const { events } = runtime.state;
 
-  type EditableEntry = {
+  interface EditableEntry {
     kind?: unknown;
     step?: unknown;
     action?: unknown;
@@ -824,14 +863,14 @@ test("malformed imports including late replay failures preserve state/model/even
     revision?: unknown;
     createdAt?: unknown;
     patch: Record<string, unknown>;
-  };
+  }
 
-  type EditableDocument = {
+  interface EditableDocument {
     format?: unknown;
     seedVersion?: unknown;
     extra?: unknown;
     journal: EditableEntry[];
-  };
+  }
 
   const edits: ((doc: EditableDocument) => void)[] = [
     (doc) => {
@@ -869,7 +908,8 @@ test("malformed imports including late replay failures preserve state/model/even
     },
     (doc) => {
       delete present(doc.journal[0]).args["description"];
-    }, // canonical validated arguments required
+      // canonical validated arguments required
+    },
     (doc) => {
       present(doc.journal[0]).args["schema"] = { type: "unknown" };
     },
@@ -886,7 +926,7 @@ test("malformed imports including late replay failures preserve state/model/even
       present(doc.journal[0]).createdAt = Infinity;
     },
     (doc) => {
-      present(doc.journal[0]).createdAt = NaN;
+      present(doc.journal[0]).createdAt = Number.NaN;
     },
     (doc) => {
       present(doc.journal[0]).createdAt = 1e100;
@@ -914,7 +954,8 @@ test("malformed imports including late replay failures preserve state/model/even
     },
     (doc) => {
       present(doc.journal.at(-1)).revision = 100;
-    }, // late failure after accepted actions
+      // late failure after accepted actions
+    },
     (doc) => {
       present(doc.journal.at(-1)).patch = {};
     },
@@ -940,7 +981,7 @@ test("malformed imports including late replay failures preserve state/model/even
 
   assert.throws(
     () => createApp({ workspace: { ...valid, seedVersion: 99 } }),
-    /Unsupported.*version/
+    /Unsupported.*version/u
   );
 
   for (const document of [
@@ -957,7 +998,7 @@ test("malformed imports including late replay failures preserve state/model/even
 
 test("imports reject lossy JSON, executable properties, oversized documents and history", () => {
   const runtime = app();
-  const state = runtime.state;
+  const { state } = runtime;
 
   const document = (): { format: string; journal: unknown[] } =>
     JSON.parse(JSON.stringify(runtime.exportWorkspace()));
@@ -970,7 +1011,7 @@ test("imports reject lossy JSON, executable properties, oversized documents and 
   Object.defineProperty(accessor, "format", {
     enumerable: true,
     get() {
-      throw Error("must not execute");
+      throw new Error("must not execute");
     },
   });
   const symbol = document();
@@ -991,12 +1032,12 @@ test("imports reject lossy JSON, executable properties, oversized documents and 
 test("history limit rejects new actions and rule edits without publishing partial changes", () => {
   const runtime = app();
 
-  for (let index = 0; index < 500; index++) {
+  for (let index = 0; index < 500; index += 1) {
     accepted(runtime.setRule("watch", { notify: [] }));
   }
 
-  const state = runtime.state;
-  const model = runtime.model;
+  const { state } = runtime;
+  const { model } = runtime;
   const document = runtime.exportWorkspace();
   assert.equal(
     runtime.explainAction("create", { title: "Beyond history limit" }, "u1")
@@ -1018,9 +1059,9 @@ test("large comment evidence is bounded before publication and accepted prefixes
   const runtime = app();
   let rejected = false;
 
-  for (let index = 0; index < 100; index++) {
-    const state = runtime.state;
-    const model = runtime.model;
+  for (let index = 0; index < 100; index += 1) {
+    const { state } = runtime;
+    const { model } = runtime;
     const document = runtime.exportWorkspace();
 
     const result = runtime.dispatch(
@@ -1030,7 +1071,7 @@ test("large comment evidence is bounded before publication and accepted prefixes
     );
 
     if (!result.ok) {
-      assert.match(result.reason, /materialized state is too large/);
+      assert.match(result.reason, /materialized state is too large/u);
       assert.strictEqual(runtime.state, state);
       assert.strictEqual(runtime.model, model);
       assert.deepEqual(runtime.exportWorkspace(), document);

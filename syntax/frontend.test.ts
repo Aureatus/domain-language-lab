@@ -55,7 +55,7 @@ test("stable IDs map to exact spans; whitespace/comments change no semantic cont
     "settings.set-threshold",
   ]) {
     const s = present(sourceMap[id]);
-    const actual = readFileSync(s.filename, "utf8");
+    const actual = readFileSync(s.filename, "utf-8");
     const excerpt = actual.slice(s.start.offset, s.end.offset);
 
     assert.ok(
@@ -71,7 +71,7 @@ test("stable IDs map to exact spans; whitespace/comments change no semantic cont
     assert.equal(s.start.column, prefix.length + 1);
 
     if (id === "leave.create") {
-      assert.match(excerpt, /end$/);
+      assert.match(excerpt, /end$/u);
     }
   }
 
@@ -118,7 +118,7 @@ test("strings, escapes, comments, keyword-looking field end and tight operators 
           'field name label "Days remaining"'
         )
       ),
-    /Duplicate view field/
+    /Duplicate view field/u
   );
   assert.throws(
     () =>
@@ -128,7 +128,7 @@ test("strings, escapes, comments, keyword-looking field end and tight operators 
           'employee from settings key "leave-rule" id "request.settings"'
         )
       ),
-    /Duplicate binding alias/
+    /Duplicate binding alias/u
   );
 });
 
@@ -212,7 +212,7 @@ for (const [label, mutate, pattern] of [
   ],
   [
     "duplicate application",
-    (s) => s + "application\nend\n",
+    (s) => `${s}application\nend\n`,
     /Duplicate application/,
   ],
   [
@@ -237,7 +237,7 @@ for (const [label, mutate, pattern] of [
   ],
   [
     "duplicate initial state",
-    (s) => s + "initial revision 0\nend\n",
+    (s) => `${s}initial revision 0\nend\n`,
     /Duplicate initial block/,
   ],
   [
@@ -250,51 +250,51 @@ for (const [label, mutate, pattern] of [
     (s) => s.replace("records leave", "records missing"),
     /Unknown resource 'missing'/,
   ],
-  ["unknown statement", (s) => s + 'import "evil"\n', /Expected resource/],
+  ["unknown statement", (s) => `${s}import "evil"\n`, /Expected resource/],
   [
     "unknown expression",
     (s) => s.replace("days <= employee.balance", "mystery <= employee.balance"),
-    /Unknown expression/,
+    /Unknown expression/u,
   ],
   [
     "unknown field",
     (s) => s.replace("days <= employee.balance", "days <= employee.missing"),
-    /Unknown binding\/field/,
+    /Unknown binding\/field/u,
   ],
   [
     "unknown resource",
     (s) => s.replace("employee from employee", "employee from missing"),
-    /Unknown resource/,
+    /Unknown resource/u,
   ],
   [
     "unknown relationship",
     (s) => s.replace('through "leave.owner"', 'through "missing"'),
-    /validation.*observation/i,
+    /validation.*observation/iu,
   ],
   [
     "unknown input metadata",
     (s) => s.replace("field employeeId\n", "field missing\n"),
-    /Unknown action input/,
+    /Unknown action input/u,
   ],
   [
     "unknown adapter",
     (s) => s.replace('"utc-weekday-range/v1"', '"foreign/v1"'),
-    /Unsupported adapter/,
+    /Unsupported adapter/u,
   ],
   [
     "duplicate action",
     (s) => s.replace('action "settings.change"', 'action "leave.request"'),
-    /Duplicate semantic ID/,
+    /Duplicate semantic ID/u,
   ],
   [
     "duplicate field",
     (s) => s.replace("    balance\n", "    name\n"),
-    /Duplicate declaration/,
+    /Duplicate declaration/u,
   ],
   [
     "duplicate input",
     (s) => s.replace("    leaveId string", "    employeeId string"),
-    /Duplicate declaration/,
+    /Duplicate declaration/u,
   ],
   [
     "duplicate binding",
@@ -303,54 +303,54 @@ for (const [label, mutate, pattern] of [
         'settings from settings key "leave-rule" id "request.settings"',
         'employee from settings key "leave-rule" id "request.settings"'
       ),
-    /Duplicate binding/,
+    /Duplicate binding/u,
   ],
   [
     "duplicate semantic ID",
     (s) => s.replace('id "leave.deduct-days"', 'id "leave.enough-days"'),
-    /Duplicate semantic ID/,
+    /Duplicate semantic ID/u,
   ],
   [
     "duplicate metadata",
     (s) => s.replace('title "Time away"', 'title "Time away"\n title "Again"'),
-    /Duplicate declaration/,
+    /Duplicate declaration/u,
   ],
   [
     "bad escape",
     (s) => s.replace('title "Time away"', 'title "bad\\q"'),
-    /Unsupported string escape/,
+    /Unsupported string escape/u,
   ],
   [
     "unclosed string",
     (s) => s.replace('title "Time away"', 'title "Time away'),
-    /Unterminated string/,
+    /Unterminated string/u,
   ],
-  ["missing end", (s) => s.trimEnd().slice(0, -3), /Unclosed block/],
+  ["missing end", (s) => s.trimEnd().slice(0, -3), /Unclosed block/u],
   [
     "brace payload",
     (s) => s.replace("days <= employee.balance", "{days: 2}"),
-    /Unexpected character/,
+    /Unexpected character/u,
   ],
   [
     "function call",
     (s) => s.replace("days <= employee.balance", "check(days)"),
-    /Unknown expression/,
+    /Unknown expression/u,
   ],
   [
     "unknown operator",
     (s) =>
       s.replace("days <= employee.balance", "days * 2 <= employee.balance"),
-    /Expected 'id'/,
+    /Expected 'id'/u,
   ],
   [
     "ill typed expression",
     (s) => s.replace("days <= employee.balance", '"days" <= employee.balance'),
-    /Binary type mismatch/,
+    /Binary type mismatch/u,
   ],
   [
     "unsafe integer",
     (s) => s.replace("balance = 5", "balance = 9007199254740992"),
-    /safe integer/,
+    /safe integer/u,
   ],
 ] satisfies [string, (source: string) => string, RegExp][]) {
   test(`reject ${label} with filename, line and column`, () => {
@@ -358,7 +358,7 @@ for (const [label, mutate, pattern] of [
       () => parse(mutate(source)),
       (e) =>
         e instanceof SourceError &&
-        /^fixture\.domain:\d+:\d+:/.test(e.message) &&
+        /^fixture\.domain:\d+:\d+:/u.test(e.message) &&
         pattern.test(e.message),
       label
     );
@@ -517,7 +517,7 @@ test("existing prior-model SQLite pending binding survives text loader with no m
 
   try {
     const p = pending.snapshot.pending[0];
-    const policyId = p.requirements[0].policyId;
+    const { policyId } = p.requirements[0];
 
     assert.equal(
       (
@@ -546,7 +546,7 @@ test("source counter includes domain author text rather than hiding it behind th
   const result = spawnSync(
     process.execPath,
     ["application/count.ts", "leave", "model.ts", "server.ts"],
-    { encoding: "utf8" }
+    { encoding: "utf-8" }
   );
 
   assert.equal(result.status, 0, result.stderr);
@@ -569,7 +569,7 @@ test("source accounting writes the same report as stdout and refuses opaque impo
 
   const run = (...args: string[]) =>
     spawnSync(process.execPath, ["application/count.ts", ...args], {
-      encoding: "utf8",
+      encoding: "utf-8",
     });
 
   const missing = run("leave");
@@ -579,7 +579,7 @@ test("source accounting writes the same report as stdout and refuses opaque impo
   assert.equal(counted.status, 0, counted.stderr);
   assert.deepEqual(
     JSON.parse(counted.stdout),
-    JSON.parse(await readFile(output, "utf8"))
+    JSON.parse(await readFile(output, "utf-8"))
   );
   const file = join(directory, "entry.ts");
 

@@ -18,7 +18,7 @@ let browser;
 
 try {
   server = await createApplicationServer(declaration, { directory });
-  const url = server.url;
+  const { url } = server;
 
   const cli = async (...args: string[]) =>
     JSON.parse(
@@ -34,7 +34,7 @@ try {
             url,
             "--json",
           ],
-          { timeout: 15000 }
+          { timeout: 15_000 }
         )
       ).stdout
     );
@@ -44,7 +44,7 @@ try {
   const page = await browser.newPage();
   const errors: string[] = [];
 
-  page.setDefaultTimeout(10000);
+  page.setDefaultTimeout(10_000);
   page.on("pageerror", (e) => errors.push(e.message));
 
   const execute = "/api/actions/execute";
@@ -53,12 +53,12 @@ try {
   let executeCount = 0;
   page.on("request", (req) => {
     if (new URL(req.url()).pathname === execute) {
-      executeCount++;
+      executeCount += 1;
     }
   });
   await page.goto(server.url);
   const balance = page.locator('[data-record="maya"] [data-field="balance"]');
-  await balance.filter({ hasText: /^5$/ }).waitFor();
+  await balance.filter({ hasText: /^5$/u }).waitFor();
   const form = page.locator('[data-action="leave.request"]');
 
   const start = form.locator("[name=start]");
@@ -69,7 +69,7 @@ try {
   await end.fill(dates.end);
   await form
     .locator("[data-preview]")
-    .filter({ hasText: /Needs Sam/ })
+    .filter({ hasText: /Needs Sam/u })
     .waitFor();
 
   // Deliver the actual POST once; only Chromium loses the reply, after the
@@ -161,7 +161,7 @@ try {
     "committed"
   );
   // No navigation, actor switch or manual snapshot refresh.
-  await balance.filter({ hasText: /^2$/ }).waitFor();
+  await balance.filter({ hasText: /^2$/u }).waitFor();
   const saved = page.locator('[data-resource="leave"] [data-record]');
   await saved.waitFor();
   assert.equal(
@@ -175,7 +175,7 @@ try {
   );
 
   const snapshot = async () =>
-    await (await fetch(url + "/api/snapshot")).json();
+    await (await fetch(`${url}/api/snapshot`)).json();
 
   const before = await snapshot();
 
@@ -239,7 +239,7 @@ try {
   ]);
 
   assert.deepEqual(redelivery.postDataJSON(), intercepted);
-  await balance.filter({ hasText: /^1$/ }).waitFor();
+  await balance.filter({ hasText: /^1$/u }).waitFor();
   assert.deepEqual(errors, []);
   console.log(
     "sampled_pass: one lost execute response → retained draft → browser check → original CLI grant/resume → live 5→2; one leave after replay."

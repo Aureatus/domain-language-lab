@@ -1,18 +1,22 @@
 // Trusted host adapter registry. Configuration never supplies executable code.
 import type { FieldSchema } from "../semantic/v2/types.ts";
 
-type DateMapping = { start: string; end: string; output: string };
+interface DateMapping {
+  start: string;
+  end: string;
+  output: string;
+}
 
 export function businessDays(start: unknown, end: unknown) {
   const parse = (value: unknown) => {
-    if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
-      throw Error("Choose valid dates in YYYY-MM-DD format.");
+    if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/u.test(value)) {
+      throw new Error("Choose valid dates in YYYY-MM-DD format.");
     }
 
     const d = new Date(`${value}T00:00:00Z`);
 
     if (!Number.isFinite(+d) || d.toISOString().slice(0, 10) !== value) {
-      throw Error("Choose real calendar dates.");
+      throw new Error("Choose real calendar dates.");
     }
 
     return +d;
@@ -22,23 +26,23 @@ export function businessDays(start: unknown, end: unknown) {
   const b = parse(end);
 
   if (b < a) {
-    throw Error("The end date must be on or after the start date.");
+    throw new Error("The end date must be on or after the start date.");
   }
 
-  if ((b - a) / 86400000 > 3660) {
-    throw Error("Choose a date range shorter than ten years.");
+  if ((b - a) / 86_400_000 > 3660) {
+    throw new Error("Choose a date range shorter than ten years.");
   }
 
   let days = 0;
 
-  for (let t = a; t <= b; t += 86400000) {
+  for (let t = a; t <= b; t += 86_400_000) {
     if (![0, 6].includes(new Date(t).getUTCDay())) {
-      days++;
+      days += 1;
     }
   }
 
   if (!days) {
-    throw Error("Choose at least one weekday.");
+    throw new Error("Choose at least one weekday.");
   }
 
   return days;
@@ -50,17 +54,17 @@ export const adapters = {
       mapping: DateMapping,
       inputs: Readonly<Record<string, FieldSchema>>
     ) {
-      if (Object.keys(mapping).sort().join(",") !== "end,output,start") {
-        throw Error("Date adapter requires start, end, output mappings.");
+      if (Object.keys(mapping).toSorted().join(",") !== "end,output,start") {
+        throw new Error("Date adapter requires start, end, output mappings.");
       }
 
       if (new Set(Object.values(mapping)).size !== 3) {
-        throw Error("Date adapter mappings must be distinct.");
+        throw new Error("Date adapter mappings must be distinct.");
       }
 
       for (const name of Object.values(mapping)) {
         if (!inputs[name]) {
-          throw Error(`Unknown adapter input ${name}`);
+          throw new Error(`Unknown adapter input ${name}`);
         }
       }
 
@@ -69,14 +73,14 @@ export const adapters = {
         inputs[mapping.end]?.type !== "string" ||
         inputs[mapping.output]?.type !== "integer"
       ) {
-        throw Error("Date adapter schema mismatch.");
+        throw new Error("Date adapter schema mismatch.");
       }
     },
     apply(args: Record<string, unknown>, mapping: DateMapping) {
       const days = businessDays(args[mapping.start], args[mapping.end]);
 
       if (args[mapping.output] !== undefined && args[mapping.output] !== days) {
-        throw Error(
+        throw new Error(
           "The number of days must match the weekdays in these dates."
         );
       }

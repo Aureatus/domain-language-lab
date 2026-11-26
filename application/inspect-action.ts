@@ -34,13 +34,13 @@ const { values, positionals } = parseArgs({
 const [entry, action] = positionals;
 
 if (!entry || !action || positionals.length !== 2) {
-  throw Error(
+  throw new Error(
     "Usage: pnpm run inspect:action VIEW.domain ACTION [--actor ID] [--args JSON] [--json]"
   );
 }
 
 if (values.replay && (values.args || values.record)) {
-  throw Error("--replay cannot be combined with --args or --record.");
+  throw new Error("--replay cannot be combined with --args or --record.");
 }
 
 const { declaration } = loadSource(entry);
@@ -57,10 +57,10 @@ if (values.replay) {
   try {
     trace = decodeJson(
       ActionEventsTraceSchema,
-      await readFile(values.replay, "utf8")
+      await readFile(values.replay, "utf-8")
     );
   } catch {
-    throw Error(
+    throw new Error(
       "Event trace does not match the selected contract, action and actor."
     );
   }
@@ -77,7 +77,7 @@ if (
   !contract.actors.some((a) => a.id === actor) ||
   !declarationAction
 ) {
-  throw Error("Unknown actor or action.");
+  throw new Error("Unknown actor or action.");
 }
 
 if (
@@ -86,7 +86,7 @@ if (
     trace.actor !== actor ||
     trace.action !== action)
 ) {
-  throw Error(
+  throw new Error(
     "Event trace does not match the selected contract, action and actor."
   );
 }
@@ -98,13 +98,13 @@ const { args, selection } =
     : exampleArgs(derived, action, actor));
 
 if (!args || typeof args !== "object" || Array.isArray(args)) {
-  throw Error("Expected action arguments object.");
+  throw new Error("Expected action arguments object.");
 }
 
 const mutant = trace?.["mutant"];
 
 if (mutant && mutant !== "snapshot-unlocks") {
-  throw Error("Unknown replay mutant.");
+  throw new Error("Unknown replay mutant.");
 }
 
 const fold = actionReview(
@@ -120,7 +120,9 @@ const check = interactionOracle(actor);
 let firstFailure: { rule: string; eventCount: number } | null = null;
 
 if (trace?.["failure"] && trace["checkerBuild"] !== (await checkerBuild())) {
-  throw Error("Incompatible counterexample: checker/projection build differs.");
+  throw new Error(
+    "Incompatible counterexample: checker/projection build differs."
+  );
 }
 
 const events: unknown[] = [];
@@ -146,7 +148,7 @@ for await (const event of trace?.events ??
       !("contractId" in snap) ||
       snap.contractId !== contractId)
   ) {
-    throw Error("Snapshot contract mismatch.");
+    throw new Error("Snapshot contract mismatch.");
   }
 
   let rule: string | null = null;
@@ -160,12 +162,12 @@ for await (const event of trace?.events ??
     if (trace?.["failure"]) {
       rule = check(reviewEvent, step);
     }
-  } catch (e) {
+  } catch (error) {
     if (!trace?.["failure"]) {
-      throw e;
+      throw error;
     }
 
-    rule = `projection.error: ${errorMessage(e)}`;
+    rule = `projection.error: ${errorMessage(error)}`;
   }
 
   events.push(event);
@@ -194,17 +196,17 @@ if (values.record) {
 
 const failure = trace?.["failure"];
 
-const replayStatus = !failure
-  ? undefined
-  : firstFailure &&
-      typeof failure === "object" &&
-      "rule" in failure &&
-      "eventCount" in failure &&
-      firstFailure.rule === failure["rule"] &&
-      firstFailure.eventCount === failure["eventCount"] &&
-      events.length === trace?.events.length
+const replayStatus = failure
+  ? firstFailure &&
+    typeof failure === "object" &&
+    "rule" in failure &&
+    "eventCount" in failure &&
+    firstFailure.rule === failure["rule"] &&
+    firstFailure.eventCount === failure["eventCount"] &&
+    events.length === trace?.events.length
     ? "reproduced"
-    : "not-reproduced";
+    : "not-reproduced"
+  : undefined;
 
 if (replayStatus === "not-reproduced") {
   process.exitCode = 1;
@@ -247,7 +249,7 @@ if (values.json) {
         .join(", ") || "none";
 
     console.log(
-      `${s.step}. ${s.event}${s.performedBy ? " by " + s.performedBy : ""} [${s.source}] → ${s.submission}; submission lifecycle permits: ${actions}`
+      `${s.step}. ${s.event}${s.performedBy ? ` by ${s.performedBy}` : ""} [${s.source}] → ${s.submission}; submission lifecycle permits: ${actions}`
     );
 
     if (s.message) {

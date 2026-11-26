@@ -31,7 +31,7 @@ test("reserve is grouped, routed and conserved; cancel returns stock", () => {
   );
   assert.equal(r.events.length, 5);
   assert.deepEqual(
-    present(r.events[0]).recipients.map((r) => r.recipient),
+    present(r.events[0]).recipients.map((entry2) => entry2.recipient),
     ["bob", "warehouse"]
   );
   const cancelled = run(h, invocation("cancelA", "cancel"));
@@ -61,7 +61,9 @@ test("expiry boundary is inclusive; owner receives operator event with both supp
   assert.ok(h.oracle.ok);
   assert.equal(
     present(
-      present(r.events[0]).recipients.find((r) => r.recipient === "alice")
+      present(r.events[0]).recipients.find(
+        (entry) => entry.recipient === "alice"
+      )
     ).paths.length,
     2
   );
@@ -186,12 +188,13 @@ test("both mutant schedules actually lose accepted reservation and oversell; det
     assert.equal(present(h.steps[3]).observation.status, "committed");
     assert.equal(h.state.revision, 1);
     assert.equal(h.oracle.ok, false);
-    assert.match(h.oracle.failures.join(" "), /oversold/);
-    assert.match(h.oracle.failures.join(" "), /lost reservation/);
+    assert.match(h.oracle.failures.join(" "), /oversold/u);
+    assert.match(h.oracle.failures.join(" "), /lost reservation/u);
 
     // Snapshot-only conservation cannot expose the overwritten promise.
-    const available = present(present(h.state.records["stock"])["camera"])
-      .values["available"];
+    const { available } = present(
+      present(h.state.records["stock"])["camera"]
+    ).values;
 
     assert.ok(typeof available === "number");
     assert.equal(
@@ -226,7 +229,7 @@ test("JSON replay includes declarations; tampered observations fail closed", () 
     /Invalid replay operation/
   );
   present(b.steps[0]).observation.status = "committed";
-  assert.throws(() => replay(b), /mismatch/);
+  assert.throws(() => replay(b), /mismatch/u);
 });
 
 test("inventory replay rejects malformed operations before comparing observations", () => {

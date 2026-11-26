@@ -26,7 +26,7 @@ if (
   !contract.actions[action] ||
   !contract.actors.some((a) => a.id === actor)
 ) {
-  throw Error("Unknown action or actor.");
+  throw new Error("Unknown action or actor.");
 }
 
 const body = {
@@ -39,21 +39,25 @@ function traceEvent(
   event: (typeof SubmissionTraceSchema)["Type"][number]
 ): SubmissionEvent {
   if (event.type === "submit") {
-    const { actor, action, args } = event.body;
+    const { actor: innerActor, action: innerAction, args } = event.body;
 
     if (
-      typeof actor !== "string" ||
-      typeof action !== "string" ||
+      typeof innerActor !== "string" ||
+      typeof innerAction !== "string" ||
       !args ||
       typeof args !== "object" ||
       Array.isArray(args)
     ) {
-      throw Error("Missing submission identity or command.");
+      throw new Error("Missing submission identity or command.");
     }
 
     return {
       ...event,
-      body: { actor, action, args: Object.fromEntries(Object.entries(args)) },
+      body: {
+        actor: innerActor,
+        action: innerAction,
+        args: Object.fromEntries(Object.entries(args)),
+      },
     };
   }
 
@@ -61,7 +65,7 @@ function traceEvent(
     const { status, message } = event.result;
 
     if (typeof status !== "string") {
-      throw Error("Invalid execution receipt.");
+      throw new TypeError("Invalid execution receipt.");
     }
 
     return {
@@ -71,10 +75,10 @@ function traceEvent(
   }
 
   if (event.type === "invalid") {
-    const message = event["message"];
+    const { message } = event;
 
     if (typeof message !== "string") {
-      throw Error("Missing submission error message.");
+      throw new TypeError("Missing submission error message.");
     }
 
     return { ...event, message };
@@ -91,7 +95,7 @@ function replay(events: readonly SubmissionEvent[]) {
       event.type === "submit" &&
       (event.body?.actor !== actor || event.body?.action !== action)
     ) {
-      throw Error("Trace actor/action differs from selected action.");
+      throw new Error("Trace actor/action differs from selected action.");
     }
 
     state = submissionStep(state, event);
@@ -114,7 +118,7 @@ console.log(
           trace: replay(
             decodeJson(
               SubmissionTraceSchema,
-              readFileSync(tracePath, "utf8")
+              readFileSync(tracePath, "utf-8")
             ).map(traceEvent)
           ),
         }

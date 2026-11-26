@@ -237,17 +237,17 @@ test("browser Inventory replay codec preserves exact observation and final-state
           encodeJson({ ...bundle, final: { ...bundle.final, revision: 0 } })
         )
       ),
-    /Replay final mismatch/
+    /Replay final mismatch/u
   );
 
   const reordered = {
     ...bundle,
-    final: Object.fromEntries(Object.entries(bundle.final).reverse()),
+    final: Object.fromEntries(Object.entries(bundle.final).toReversed()),
   };
 
   assert.throws(
     () => replay(decode(encodeJson(reordered))),
-    /Replay final mismatch/
+    /Replay final mismatch/u
   );
 });
 

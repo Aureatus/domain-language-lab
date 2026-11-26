@@ -54,28 +54,37 @@ type Patch<K extends "change" | "create" | "delete"> = Omit<
   | "recipients"
 >;
 
-export { jsonSnapshot };
+export { jsonSnapshot } from "../core.ts";
 
-type Address = { resource: string; key: string };
+interface Address {
+  resource: string;
+  key: string;
+}
 
 type Bound = Address & { record: RecordSnapshot };
 
-type Token = { readonly kind: "semantic-prepared/v2" };
+interface Token {
+  readonly kind: "semantic-prepared/v2";
+}
 
-type Plan = { before: string; state: State; events: readonly Event[] };
+interface Plan {
+  before: string;
+  state: State;
+  events: readonly Event[];
+}
 
-type MutableState = {
+interface MutableState {
   revision: number;
   records: Record<
     string,
     Record<string, { version: number; values: Record<string, Value> }>
   >;
-};
+}
 
 const equal = (a: unknown, b: unknown) => canonical(a) === canonical(b);
 
 export function validateModel(source: unknown): Model {
-  // oxlint-disable-next-line typescript/consistent-type-assertions -- The checks below validate the frozen declaration before returning it.
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: The checks below validate the frozen declaration before returning it.
   const m = jsonSnapshot(source) as Model;
   keys(m, ["format", "id", "resources", "relationships", "actions"]);
   assert(m.format === "semantic-core/v2", "Unsupported semantic profile");
@@ -322,7 +331,7 @@ function checkState(model: Model, source: unknown): State {
 
 function assertState(model: Model, s: unknown): asserts s is State {
   const record = keys(s, ["revision", "records"]);
-  const revision = record["revision"];
+  const { revision } = record;
 
   assert(
     typeof revision === "number" &&
@@ -408,7 +417,7 @@ export function createInterpreter(source: unknown): Readonly<Interpreter> {
           policyId: p.id,
           approvers: [...new Set(ids)]
             .filter((x) => p.allowSelfApproval === true || x !== inv.actor)
-            .sort(),
+            .toSorted(),
           allowSelfApproval: p.allowSelfApproval === true,
         };
       });
@@ -425,8 +434,8 @@ export function createInterpreter(source: unknown): Readonly<Interpreter> {
       requirements: c.requirements,
     });
 
-  function checkedRequest(source: ApprovalRequest) {
-    const request = jsonSnapshot(source);
+  function checkedRequest(innerSource: ApprovalRequest) {
+    const request = jsonSnapshot(innerSource);
     keys(request, [
       "format",
       "model",
@@ -684,14 +693,21 @@ export function createInterpreter(source: unknown): Readonly<Interpreter> {
     }
   }
 
-  function approve(source: ApprovalRequest, grant: Grant): ApprovalResult {
+  function approve(
+    innerSource2: ApprovalRequest,
+    grant: Grant
+  ): ApprovalResult {
     try {
-      const { request } = checkedRequest(source);
+      const { request } = checkedRequest(innerSource2);
       const g = jsonSnapshot(grant);
 
       keys(g, ["policyId", "approver"]);
       assert(safeKey(g.approver), "Invalid approver");
-      const p = request.requirements.find((p) => p.policyId === g.policyId);
+
+      const p = request.requirements.find(
+        (pending2) => pending2.policyId === g.policyId
+      );
+
       assert(
         p && p.approvers.includes(g.approver),
         "Approver not eligible",
@@ -725,12 +741,12 @@ export function createInterpreter(source: unknown): Readonly<Interpreter> {
   function prepareResume(
     state: State,
     invocation: InvocationInput,
-    source: ApprovalRequest,
+    innerSource: ApprovalRequest,
     receipts: readonly ApprovalReceipt[],
     options: { readonly clock: number }
   ): PreparedResult | Rejected {
     try {
-      const { request } = checkedRequest(source);
+      const { request } = checkedRequest(innerSource);
       const inv = jsonSnapshot(invocation);
       const opts = jsonSnapshot(options);
 

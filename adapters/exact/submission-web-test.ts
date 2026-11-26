@@ -5,7 +5,7 @@ import { createRequire } from "node:module";
 const url = process.argv[2];
 
 if (!url || !/^http:\/\/127\.0\.0\.1:\d+$/.test(url) || url.endsWith(":4186")) {
-  throw Error("Supply an isolated adapter URL.");
+  throw new Error("Supply an isolated adapter URL.");
 }
 
 const require = createRequire(
@@ -27,10 +27,10 @@ try {
   const notice = page.getByTestId("notice");
 
   const field = (name: string) =>
-    page.getByTestId("maya:leave.request:" + name);
+    page.getByTestId(`maya:leave.request:${name}`);
 
   const balance = async () =>
-    (await (await fetch(url + "/api/snapshot")).json()).state.records.employee
+    (await (await fetch(`${url}/api/snapshot`)).json()).state.records.employee
       .maya.values.balance;
 
   assert.equal(await balance(), 5);

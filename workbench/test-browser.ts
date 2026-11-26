@@ -14,7 +14,9 @@ import type { Action } from "../prototype/property.ts";
 
 declare global {
   interface Window {
-    axe?: { run(document: Document, options: RunOptions): Promise<AxeResults> };
+    axe?: {
+      run: (document: Document, options: RunOptions) => Promise<AxeResults>;
+    };
   }
 }
 
@@ -27,7 +29,7 @@ async function scanAccessibility(page: Page) {
 
   return page.evaluate(() => {
     if (!window.axe) {
-      throw Error("Accessibility audit script was not loaded.");
+      throw new Error("Accessibility audit script was not loaded.");
     }
 
     return window.axe.run(document, {
@@ -38,17 +40,17 @@ async function scanAccessibility(page: Page) {
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 const artifact = resolve(root, "artifacts/workbench.html");
-const html = await readFile(artifact, "utf8");
+const html = await readFile(artifact, "utf-8");
 
 const payload = html.match(
-  /<script id="workbench-data" type="application\/json">([\s\S]*?)<\/script>/
+  /<script id="workbench-data" type="application\/json">([\s\S]*?)<\/script>/u
 )?.[1];
 
 assert.ok(payload);
 
 type Schedule = ("approve" | "edit" | "execute")[];
 
-type Example = {
+interface Example {
   sampleSeed: number;
   originalHistory: Action[];
   minimalHistory: Action[];
@@ -56,9 +58,9 @@ type Example = {
     "original" | "shrunk",
     Record<"true" | "false", ReturnType<typeof replayHistory>[]>
   >;
-};
+}
 
-type WorkbenchData = {
+interface WorkbenchData {
   cases: Record<
     string,
     {
@@ -80,23 +82,23 @@ type WorkbenchData = {
     string,
     { availability: string; path: string; reason?: string; data?: unknown }
   >;
-};
+}
 
 const data: WorkbenchData = JSON.parse(payload);
 const inlineArtifact = resolve(root, "artifacts/workbench-inline.html");
-const inlineHTML = await readFile(inlineArtifact, "utf8");
+const inlineHTML = await readFile(inlineArtifact, "utf-8");
 
-assert.ok(inlineHTML.length < 512000);
+assert.ok(inlineHTML.length < 512_000);
 
-assert.ok(Buffer.byteLength(inlineHTML) < 512000);
+assert.ok(Buffer.byteLength(inlineHTML) < 512_000);
 
-const stylesheet = inlineHTML.match(/<style>([\s\S]*?)<\/style>/)?.[1];
+const stylesheet = inlineHTML.match(/<style>([\s\S]*?)<\/style>/u)?.[1];
 
 assert.ok(stylesheet);
 
-assert.ok(!/\dvh|height:100%|#[0-9a-f]{3,8}\b/i.test(stylesheet));
+assert.ok(!/\dvh|height:100%|#[0-9a-f]{3,8}\b/iu.test(stylesheet));
 
-assert.ok(!/<script[^>]+src=/.test(inlineHTML));
+assert.ok(!/<script[^>]+src=/u.test(inlineHTML));
 
 assert.equal(Object.keys(data.cases).length, 216);
 
@@ -115,19 +117,19 @@ try {
 
   page.on("pageerror", (error) => errors.push(error.message));
   page.on("request", (request) => {
-    if (/^https?:/.test(request.url())) {
+    if (/^https?:/u.test(request.url())) {
       network.push(request.url());
     }
   });
   await page.goto(pathToFileURL(artifact).href);
   assert.match(
     (await page.locator("#outcome-title").textContent()) ?? "",
-    /stale-approval/
+    /stale-approval/u
   );
   await page.locator("#mutant").check();
   assert.match(
     (await page.locator("#outcome-title").textContent()) ?? "",
-    /counterexample/
+    /counterexample/u
   );
   assert.equal(
     await page.locator("#delivery-count").textContent(),
@@ -142,12 +144,12 @@ try {
     .click();
   assert.match(
     (await page.locator("#causal").textContent()) ?? "",
-    /committed/
+    /committed/u
   );
   await page.locator("#causal summary").click();
   assert.match(
     (await page.locator("#causal pre").textContent()) ?? "",
-    /"approvalMatches": false/
+    /"approvalMatches": false/u
   );
   await page.locator("#back").click();
   assert.equal(
@@ -161,15 +163,21 @@ try {
   assert.equal(await page.locator(".event").count(), 1);
   await page.locator("#scrub").focus();
   await page.keyboard.press("End");
-  assert.match((await page.locator("#counter").textContent()) ?? "", /^4 \/ 4/);
+  assert.match(
+    (await page.locator("#counter").textContent()) ?? "",
+    /^4 \/ 4/u
+  );
   await page.locator("#play").click();
   assert.equal(await page.locator("#play").textContent(), "Pause replay");
   await page.waitForFunction(
     () => document.querySelector("#play")?.textContent === "Play replay",
     undefined,
-    { timeout: 10000 }
+    { timeout: 10_000 }
   );
-  assert.match((await page.locator("#counter").textContent()) ?? "", /^4 \/ 4/);
+  assert.match(
+    (await page.locator("#counter").textContent()) ?? "",
+    /^4 \/ 4/u
+  );
   await page.locator("#play").click();
   await page.locator("#play").click();
   assert.equal(await page.locator("#play").textContent(), "Play replay");
@@ -191,10 +199,9 @@ try {
       assert.match(
         (await page.locator("#property-meta").textContent()) ?? "",
         new RegExp(
-          "original " +
-            example.originalHistory.length +
-            " → shrunk " +
+          `original ${example.originalHistory.length} → shrunk ${
             example.minimalHistory.length
+          }`
         )
       );
 
@@ -209,17 +216,17 @@ try {
             .click();
           assert.match(
             (await page.locator("#property-result").textContent()) ?? "",
-            mode === "true" ? /counterexample/ : /sampled_pass/
+            mode === "true" ? /counterexample/u : /sampled_pass/u
           );
           await page.locator("#property-replay").click();
           assert.match(
             (await page.locator("#property-result").textContent()) ?? "",
-            /step 0/
+            /step 0/u
           );
           await page.locator("#property-next").click();
           assert.match(
             (await page.locator("#property-result").textContent()) ?? "",
-            /step 1/
+            /step 1/u
           );
           await page.locator("#property-step").focus();
           await page.keyboard.press("End");
@@ -235,7 +242,7 @@ try {
           await page.locator("#property-export").click();
 
           const replay = JSON.parse(
-            await readFile(await (await downloadEvent).path(), "utf8")
+            await readFile(await (await downloadEvent).path(), "utf-8")
           );
 
           assert.deepEqual(
@@ -266,7 +273,9 @@ try {
     await page
       .locator("#schedule")
       .selectOption(
-        String(data.schedules.findIndex((s) => s.join() === i.schedule.join()))
+        String(
+          data.schedules.findIndex((s) => s.join(",") === i.schedule.join(","))
+        )
       );
     await page.locator("#mutant").setChecked(i.mutant);
     const final = c.frames.at(-1);
@@ -282,7 +291,7 @@ try {
     if (c.violations.length) {
       assert.match(
         (await page.locator("#outcome-title").textContent()) ?? "",
-        /counterexample/
+        /counterexample/u
       );
     }
   }
@@ -291,24 +300,28 @@ try {
   await page.locator('[data-for="policy"][data-choice="allow"]').click();
   assert.match(
     (await page.locator("#diff").textContent()) ?? "",
-    /approval.*allow/s
+    /approval.*allow/su
   );
   assert.match(
     (await page.locator("#outcome-title").textContent()) ?? "",
-    /committed/
+    /committed/u
   );
   await page.locator("#priority").selectOption("normal");
   await page.locator("#role").selectOption("viewer");
   assert.match(
     (await page.locator("#outcome-title").textContent()) ?? "",
-    /rejected/
+    /rejected/u
   );
   await page.locator("#reset").click();
   await page.locator("#tab-evidence").click();
   const downloadEvent = page.waitForEvent("download");
   await page.locator("#download").click();
   const download = await downloadEvent;
-  const explanation = JSON.parse(await readFile(await download.path(), "utf8"));
+
+  const explanation = JSON.parse(
+    await readFile(await download.path(), "utf-8")
+  );
+
   assert.equal(explanation.kind, "simulated");
   const control = data.cases["approval|support|high|0|false"];
   assert.ok(control);
@@ -340,7 +353,7 @@ try {
   );
 
   for (const panel of ["changes", "failures", "evidence"]) {
-    await page.locator("#tab-" + panel).click();
+    await page.locator(`#tab-${panel}`).click();
     const scan = await scanAccessibility(page);
     assert.deepEqual(
       scan.violations.map((v) => ({
@@ -377,7 +390,7 @@ try {
   );
 
   for (const panel of ["changes", "failures", "evidence"]) {
-    await page.locator("#tab-" + panel).click();
+    await page.locator(`#tab-${panel}`).click();
     assert.equal(
       await page.evaluate(
         () => document.documentElement.scrollWidth <= innerWidth
@@ -415,18 +428,18 @@ try {
   page.on("pageerror", (error) => errors.push(error.message));
   await page.setContent(
     html.replace(
-      /(<script id="workbench-data" type="application\/json">)[\s\S]*?(<\/script>)/,
+      /(<script id="workbench-data" type="application\/json">)[\s\S]*?(<\/script>)/u,
       (_, before, after) =>
-        before + JSON.stringify(missingData).replace(/</g, "\\u003c") + after
+        before + JSON.stringify(missingData).replaceAll("<", "\\u003c") + after
     )
   );
   assert.match(
     (await page.locator("#reports").textContent()) ?? "",
-    /Unavailable/
+    /Unavailable/u
   );
   assert.match(
     (await page.locator("#reports").textContent()) ?? "",
-    /Report attached · inspect below/
+    /Report attached · inspect below/u
   );
   await page.goto(pathToFileURL(inlineArtifact).href);
   await page.waitForFunction(() =>
@@ -444,12 +457,12 @@ try {
   await page.locator("#mutant").check();
   assert.match(
     (await page.locator("#outcome-title").textContent()) ?? "",
-    /counterexample/
+    /counterexample/u
   );
   await page.locator('[data-for="policy"][data-choice="deny"]').click();
   assert.match(
     (await page.locator("#outcome-title").textContent()) ?? "",
-    /rejected/
+    /rejected/u
   );
   await page.locator("#reset").click();
 
@@ -461,7 +474,7 @@ try {
         const element = document.querySelector(selector);
 
         if (!element) {
-          throw Error(`Missing element: ${selector}`);
+          throw new Error(`Missing element: ${selector}`);
         }
 
         return element;
@@ -495,7 +508,7 @@ try {
     );
 
     for (const panel of ["changes", "failures", "evidence"]) {
-      await page.locator("#tab-" + panel).click();
+      await page.locator(`#tab-${panel}`).click();
       assert.equal(
         await page.evaluate(
           () => document.documentElement.scrollWidth <= innerWidth

@@ -1,6 +1,6 @@
 // Proof strategy is separate from both the transition declarations and source law.
 // A failed tactic is a rejected obligation, never a weakened proposition.
-type Template = {
+interface Template {
   adapter: string;
   projection: string;
   metadata: {
@@ -17,7 +17,7 @@ type Template = {
   witnessPre: string;
   witnessInputs: string;
   witnessPost: string;
-};
+}
 
 export function render({
   adapter,

@@ -17,7 +17,9 @@ import defaultCommand from "../leave/review-request.json" with { type: "json" };
 import type { ApplicationReceipt } from "./client.ts";
 import { createApplicationServer } from "./server.ts";
 
-type DeliverySnapshot = { pending: { invocation: { clock?: number } }[] };
+interface DeliverySnapshot {
+  pending: { invocation: { clock?: number } }[];
+}
 
 declare global {
   interface Window {
@@ -28,15 +30,15 @@ declare global {
 const exec = promisify(execFile);
 const exactRevision = "d8863f736172954b605c3bff22f51337c6983170";
 
-type RecordedDraft = {
+interface RecordedDraft {
   actor: string;
   action: string;
   args: Record<string, string>;
-};
+}
 
 async function readSchedule(path: string) {
   const { format, actor, action, args, contractId, events } = JSON.parse(
-    await readFile(path, "utf8")
+    await readFile(path, "utf-8")
   );
 
   assert.equal(format, "action-events/v1", "Unsupported trace format");
@@ -48,7 +50,7 @@ async function readSchedule(path: string) {
   assert.equal(actor, "maya", "Unsupported renderer replay actor");
   assert.equal(action, "leave.request", "Unsupported renderer replay action");
   assert.deepEqual(
-    Object.keys(args).sort(),
+    Object.keys(args).toSorted(),
     ["end", "start"],
     "Unsupported draft fields"
   );
@@ -85,6 +87,7 @@ async function readSchedule(path: string) {
 function installDeliveryGate(exact: boolean) {
   const gate = Promise.withResolvers<void>();
 
+  // oxlint-disable-next-line no-multi-assign -- the page global and the local probe are the same gate.
   const probe: Window["deliveryGate"] = (window.deliveryGate = {
     held: null,
     release: gate.resolve,
@@ -110,7 +113,7 @@ function installDeliveryGate(exact: boolean) {
     };
   } else {
     const add = EventSource.prototype.addEventListener;
-    EventSource.prototype.addEventListener = function (
+    EventSource.prototype.addEventListener = function addEventListener(
       this: EventSource,
       type: string,
       listener:
@@ -156,7 +159,7 @@ function normalizedUpdate(snapshot: DeliverySnapshot) {
 }
 
 async function mountExact(page: Page, url: string, dir: string) {
-  await writeAdapter(await (await fetch(url + "/api/contract")).json(), dir, {
+  await writeAdapter(await (await fetch(`${url}/api/contract`)).json(), dir, {
     api: url,
   });
 
@@ -171,7 +174,7 @@ async function mountExact(page: Page, url: string, dir: string) {
     await exec(env.BUN, ["exact.mjs", ...args], {
       cwd: dir,
       env,
-      timeout: 120000,
+      timeout: 120_000,
     });
   }
 
@@ -213,7 +216,7 @@ async function trace(
     const errors: string[] = [];
     const writes: string[] = [];
 
-    page.setDefaultTimeout(15000);
+    page.setDefaultTimeout(15_000);
     page.on("pageerror", (e) => errors.push(e.message));
     page.on("request", (r) => {
       if (r.method() === "POST" && !r.url().endsWith("/preview")) {
@@ -265,7 +268,7 @@ async function trace(
             .filter({ hasText: new RegExp(`^${n}$`) });
 
     const snapshot = async () =>
-      await (await fetch(url + "/api/snapshot")).json();
+      await (await fetch(`${url}/api/snapshot`)).json();
 
     const initialSnapshot = await snapshot();
     const initial = initialSnapshot.state;
@@ -361,7 +364,7 @@ async function trace(
     assert.equal(receipt.snapshot.pending.length, 1);
     const [original] = receipt.snapshot.pending;
     assert.ok(original);
-    const leaveId = original.invocation.args["leaveId"];
+    const { leaveId } = original.invocation.args;
 
     if (!schedule) {
       assert.equal(original.invocation.args["days"], 3);
@@ -377,7 +380,7 @@ async function trace(
     }
 
     assert.equal(
-      await page.getByRole("button", { name: /retry.*submission/i }).count(),
+      await page.getByRole("button", { name: /retry.*submission/iu }).count(),
       0
     );
     await pending.waitFor();
@@ -386,11 +389,11 @@ async function trace(
       // Stop at the counterexample boundary: Check is offered, never pressed.
       await page
         .getByText(
-          exact ? /Submission has an ambiguous outcome/ : /Outcome unknown\./
+          exact ? /Submission has an ambiguous outcome/u : /Outcome unknown\./u
         )
         .waitFor();
       assert.equal(
-        await page.getByText(/Original submission outcome:/).count(),
+        await page.getByText(/Original submission outcome:/u).count(),
         0
       );
       assert.deepEqual(writes, ["/api/actions/execute"]);
@@ -406,7 +409,7 @@ async function trace(
       const [reply] = await Promise.all([
         page.waitForResponse(
           (r) =>
-            r.url() === url + "/api/" + path && r.request().method() === "POST"
+            r.url() === `${url}/api/${path}` && r.request().method() === "POST"
         ),
         control.click(),
       ]);
@@ -430,7 +433,7 @@ async function trace(
     assert.deepEqual(checked.result.evidence, receipt.evidence);
     await check.waitFor({ state: "hidden" });
     await page
-      .getByText(/Original submission outcome: Approval needed/)
+      .getByText(/Original submission outcome: Approval needed/u)
       .waitFor();
     await select.selectOption("sam");
     const grant = await press(button("Save approval"), "approvals/grant");
@@ -456,7 +459,7 @@ async function trace(
       : page.locator(`[data-resource="leave"] [data-record="${leaveId}"]`);
 
     await row.waitFor();
-    const state = completed.result.snapshot.state;
+    const { state } = completed.result.snapshot;
     assert.deepEqual(Object.keys(state.records.leave), [leaveId]);
     assert.deepEqual(writes, [
       "/api/actions/execute",
@@ -466,7 +469,7 @@ async function trace(
     ]);
 
     // Independent backend probe: an actual second resume cannot debit again.
-    const again = await fetch(url + "/api/approvals/resume", {
+    const again = await fetch(`${url}/api/approvals/resume`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(completed.body),
@@ -486,7 +489,7 @@ async function trace(
 }
 
 if (process.argv.length > 3) {
-  throw Error(
+  throw new Error(
     "Usage: node application/action-review-browser-test.ts [counterexample.json]"
   );
 }
@@ -494,7 +497,7 @@ if (process.argv.length > 3) {
 const schedule = process.argv[2] ? await readSchedule(process.argv[2]) : null;
 
 if (!process.env["EXACT_ROOT"] || !process.env["EXACT_TEMPLATE"]) {
-  throw Error(
+  throw new Error(
     "Set EXACT_ROOT and EXACT_TEMPLATE as described in docs/exact-adapter.md."
   );
 }

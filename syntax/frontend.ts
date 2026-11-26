@@ -14,18 +14,26 @@ type Mutable<T> = T extends object
   ? { -readonly [K in keyof T]: Mutable<T[K]> }
   : T;
 
-type Point = { line: number; column: number; filename?: string };
+interface Point {
+  line: number;
+  column: number;
+  filename?: string;
+}
 
 type OffsetPoint = Point & { offset: number };
 
-type SourceSpan = { filename: string; start: OffsetPoint; end: OffsetPoint };
+interface SourceSpan {
+  filename: string;
+  start: OffsetPoint;
+  end: OffsetPoint;
+}
 
-type Section = {
+interface Section {
   kind: string | number;
   name: string | number;
   line: number;
   filename?: string;
-};
+}
 
 type Token = Point & { start: number; end: number } & (
     | { kind: "number"; value: number }
@@ -36,7 +44,11 @@ type MutableAction = Mutable<Action>;
 
 type Binding = Pick<MutableAction["bindings"][number], "id" | "resource">;
 
-type Candidate = { resource: string; token: Token; key: Mutable<Expr> };
+interface Candidate {
+  resource: string;
+  token: Token;
+  key: Mutable<Expr>;
+}
 
 type BindingOrigin = Binding & {
   alias: string;
@@ -45,9 +57,13 @@ type BindingOrigin = Binding & {
   key: Mutable<Expr>;
 };
 
-type ViewColumn = { field: string; label?: string; format?: string };
+interface ViewColumn {
+  field: string;
+  label?: string;
+  format?: string;
+}
 
-type Presentation = {
+interface Presentation {
   label?: string;
   description?: string;
   fields: Record<
@@ -60,9 +76,9 @@ type Presentation = {
     }
   >;
   adapters?: { name: string; mapping: Record<string, string | number> }[];
-};
+}
 
-type View = {
+interface View {
   kind: string;
   resource: string;
   key?: string;
@@ -70,9 +86,9 @@ type View = {
   fields?: ViewColumn[];
   columns?: ViewColumn[];
   loading?: string;
-};
+}
 
-type Application = {
+interface Application {
   version: string;
   actors: { id: string; label: string; name?: string }[];
   actions: Record<string, Presentation>;
@@ -82,19 +98,19 @@ type Application = {
   subtitle?: string;
   scope?: string;
   loading?: string;
-};
+}
 
-type SchemaShape = {
+interface SchemaBase {
   type: "string" | "integer" | "boolean";
   min?: number;
   max?: number;
   enum?: string[];
-};
+}
 
-type ScalarSchema = SchemaShape &
+type ScalarSchema = SchemaBase &
   ({ type: "string" } | { type: "integer" } | { type: "boolean" });
 
-type Parsed<A = Application | undefined> = {
+interface Parsed<A = Application | undefined> {
   declaration: {
     domain: Mutable<Model>;
     initialState: Mutable<State>;
@@ -104,7 +120,7 @@ type Parsed<A = Application | undefined> = {
   sections: Section[];
   inputLocations: Record<string, Record<string, Point>>;
   bindingOrigins: BindingOrigin[];
-};
+}
 
 export class SourceError extends SyntaxError {
   declare filename: string;
@@ -145,38 +161,39 @@ export function tokenize(source: string, filename = "<source>") {
     const ch = source.charAt(i);
 
     if (ch === " " || ch === "\t" || ch === "\r") {
-      i++;
-      column++;
+      i += 1;
+      column += 1;
       continue;
     }
 
     if (ch === "#") {
       while (i < source.length && source[i] !== "\n") {
-        i++;
-        column++;
+        i += 1;
+        column += 1;
       }
 
       continue;
     }
 
     if (ch === "\n") {
-      i++;
+      i += 1;
       push({ kind: "newline", value: "\n", start, line: l, column: c });
-      line++;
+      line += 1;
       column = 1;
       continue;
     }
 
     if (ch === '"') {
-      i++;
-      column++;
+      i += 1;
+      column += 1;
 
       let value = "";
       let closed = false;
 
       while (i < source.length && source[i] !== "\n") {
-        let v = source.charAt(i++);
-        column++;
+        let v = source.charAt(i);
+        i += 1;
+        column += 1;
 
         if (v === '"') {
           closed = true;
@@ -184,8 +201,9 @@ export function tokenize(source: string, filename = "<source>") {
         }
 
         if (v === "\\") {
-          const escape = source.charAt(i++);
-          column++;
+          const escape = source.charAt(i);
+          i += 1;
+          column += 1;
 
           const escapes: Record<string, string> = {
             n: "\n",
@@ -223,7 +241,7 @@ export function tokenize(source: string, filename = "<source>") {
       continue;
     }
 
-    const word = /^[A-Za-z_$][A-Za-z0-9_$]*/.exec(source.slice(i));
+    const word = /^[A-Za-z_$][A-Za-z0-9_$]*/u.exec(source.slice(i));
 
     if (word) {
       i += word[0].length;
@@ -232,7 +250,7 @@ export function tokenize(source: string, filename = "<source>") {
       continue;
     }
 
-    const number = /^\d+/.exec(source.slice(i));
+    const number = /^\d+/u.exec(source.slice(i));
 
     if (number) {
       i += number[0].length;
@@ -247,7 +265,7 @@ export function tokenize(source: string, filename = "<source>") {
       continue;
     }
 
-    const op = /^(<=|>=|==|!=|[.()+*\-<>=])/.exec(source.slice(i));
+    const op = /^(<=|>=|==|!=|[.()+*\-<>=])/u.exec(source.slice(i));
 
     if (op) {
       i += op[0].length;
@@ -263,8 +281,10 @@ export function tokenize(source: string, filename = "<source>") {
     );
   }
 
-  out.push({ kind: "newline", value: "\n", start: i, end: i, line, column });
-  out.push({ kind: "eof", value: "<eof>", start: i, end: i, line, column });
+  out.push(
+    { kind: "newline", value: "\n", start: i, end: i, line, column },
+    { kind: "eof", value: "<eof>", start: i, end: i, line, column }
+  );
 
   return out;
 }
@@ -332,7 +352,7 @@ export function parseSource(
 
   const take = () => {
     last = peek();
-    pos++;
+    pos += 1;
 
     return last;
   };
@@ -395,7 +415,11 @@ export function parseSource(
     }
   };
 
-  const unique = <T>(object: object, key: PropertyKey, value: T): T => {
+  const unique = <T, O extends object = object>(
+    object: O,
+    key: PropertyKey,
+    value: T
+  ): T => {
     if (Object.hasOwn(object, key)) {
       fail(`Duplicate declaration '${String(key)}'.`, last);
     }
@@ -773,7 +797,7 @@ export function parseSource(
     currentAction = a;
     identity = accept("identity") ? name() : id;
     const locations: Record<string, Point> = Object.create(null);
-    inputs = a.inputs;
+    ({ inputs } = a);
     inputLocations[id] = locations;
     bindings.clear();
     references.clear();
@@ -964,8 +988,8 @@ export function parseSource(
           "observations",
         ].some(is)
       ) {
-        const group = take().value;
-        block(() => row(group));
+        const innerGroup = take().value;
+        block(() => row(innerGroup));
         nl();
       } else {
         fail(
@@ -980,7 +1004,7 @@ export function parseSource(
   }
 
   function presentation() {
-    const loading = (target: object) => {
+    const loading = <T extends object>(target: T) => {
       expect("loading");
 
       if (!loadingModes.some(is)) {
@@ -1050,10 +1074,10 @@ export function parseSource(
                 unique(f, k, k === "label" ? text() : name());
                 nl();
               } else if (accept("bind")) {
-                const source = name();
+                const innerSource = name();
                 unique(f, "binding", {
-                  source,
-                  ...(source === "constant" ? { value: scalar() } : {}),
+                  source: innerSource,
+                  ...(innerSource === "constant" ? { value: scalar() } : {}),
                 });
                 nl();
               } else if (accept("default")) {
@@ -1077,7 +1101,7 @@ export function parseSource(
             });
             nl();
           } else if (accept("adapter")) {
-            const name = text();
+            const innerName = text();
             const mapping = {};
 
             block(() => {
@@ -1090,7 +1114,7 @@ export function parseSource(
               unique(mapping, k, take().value);
               nl();
             });
-            (p.adapters ??= []).push({ name, mapping });
+            (p.adapters ??= []).push({ name: innerName, mapping });
             nl();
           } else {
             fail("Expected label, description, field or adapter.");

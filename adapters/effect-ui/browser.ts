@@ -344,9 +344,9 @@ function actionForm({
           : $.evolve({ refreshing: true, refreshError: false }).run(
               Refresh.make({})
             ),
-      SnapshotReceived: ($, { snapshot }) =>
+      SnapshotReceived: ($, { snapshot: received }) =>
         $.evolve({
-          snapshot: nextSnapshot($.model.snapshot, snapshot),
+          snapshot: nextSnapshot($.model.snapshot, received),
           refreshing: false,
         }),
       RefreshFailed: ($) => $.evolve({ refreshing: false, refreshError: true }),
@@ -417,7 +417,7 @@ function actionForm({
 const root = document.querySelector("#app");
 
 if (!root) {
-  throw Error("Missing Effect UI mount point.");
+  throw new Error("Missing Effect UI mount point.");
 }
 
 try {
@@ -436,7 +436,7 @@ try {
     : undefined;
 
   if (contract.format !== "derived-application/v1" || !actor || !action) {
-    throw Error("Unsupported contract, actor or action.");
+    throw new Error("Unsupported contract, actor or action.");
   }
 
   const fields = action.fields.filter((field) => !field.hidden);
@@ -447,13 +447,13 @@ try {
         !["date", "text"].includes(widget) || schema.type !== "string"
     )
   ) {
-    throw Error("This spike supports only date and text inputs.");
+    throw new Error("This spike supports only date and text inputs.");
   }
 
   const snapshot = await client.snapshot();
 
   if (!acceptsSnapshot(undefined, snapshot, contractId)) {
-    throw Error("Invalid application snapshot.");
+    throw new Error("Invalid application snapshot.");
   }
 
   const host = document.createElement("div");

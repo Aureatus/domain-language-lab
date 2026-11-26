@@ -18,7 +18,7 @@ import { check, PINNED_LEAN } from "./check.ts";
 import { model, obligation } from "./fixture.ts";
 import { generate, hash, MAX, Unsupported } from "./generate.ts";
 
-const out = fileURLToPath(new URL("./test-output", import.meta.url));
+const out = fileURLToPath(new URL("test-output", import.meta.url));
 
 mkdirSync(out, { recursive: true });
 
@@ -29,12 +29,12 @@ const input = (name: string) => ({ op: "input", name });
 const add = <L, R>(left: L, right: R) => ({ op: "add", left, right });
 const sub = <L, R>(left: L, right: R) => ({ op: "sub", left, right });
 
-type Capacity = {
+interface Capacity {
   remaining: number;
   previous: number;
   revision: number;
   version: number;
-};
+}
 
 const record = (s: Capacity) =>
   `{ remaining := (${s.remaining} : Int), previous := (${s.previous} : Int), revision := (${s.revision} : Int), version := (${s.version} : Int) }`;
@@ -101,8 +101,8 @@ function differential(
     if (result.status === "committed") {
       const r = present(present(result.state.records["capacity"])["main"]);
 
-      const remaining = r.values["remaining"];
-      const previous = r.values["previous"];
+      const { remaining } = r.values;
+      const { previous } = r.values;
 
       assert.ok(typeof remaining === "number" && typeof previous === "number");
       expected = `.committed ${record({ remaining, previous, revision: result.state.revision, version: r.version })}`;
@@ -127,8 +127,8 @@ function differential(
   writeFileSync(path, lean);
 
   const run = spawnSync(PINNED_LEAN, [path], {
-    encoding: "utf8",
-    timeout: 120000,
+    encoding: "utf-8",
+    timeout: 120_000,
   });
 
   assert.equal(
@@ -151,7 +151,7 @@ test("pinned Lean checks generated nonvacuous law and complete axiom reports", (
     hash(
       readFileSync(
         new URL("../../semantic/primitives.ts", import.meta.url),
-        "utf8"
+        "utf-8"
       )
     )
   );
@@ -161,22 +161,22 @@ test("Lean command-line reports agree with persisted proof evidence and fail on 
   const directory = mkdtempSync(resolve(tmpdir(), "premise-lean-cli-"));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
 
-  const input = resolve(directory, "model.json");
+  const innerInput = resolve(directory, "model.json");
   const law = resolve(directory, "law.json");
 
-  writeFileSync(input, JSON.stringify(model));
+  writeFileSync(innerInput, JSON.stringify(model));
 
   const run = (entry: string, args: string[]) =>
-    spawnSync(process.execPath, [entry, ...args], { encoding: "utf8" });
+    spawnSync(process.execPath, [entry, ...args], { encoding: "utf-8" });
 
   const valid = resolve(directory, "valid");
   writeFileSync(law, JSON.stringify(obligation));
-  const checked = run("adapters/lean/check.ts", [input, law, valid]);
+  const checked = run("adapters/lean/check.ts", [innerInput, law, valid]);
   assert.equal(checked.status, 0, checked.stderr);
   const report = JSON.parse(checked.stdout);
   assert.deepEqual(
     report,
-    JSON.parse(readFileSync(resolve(valid, "report.json"), "utf8"))
+    JSON.parse(readFileSync(resolve(valid, "report.json"), "utf-8"))
   );
   assert.equal(report.status, "proof_checked");
   assert.deepEqual(report.theorem_axioms, {
@@ -195,7 +195,13 @@ test("Lean command-line reports agree with persisted proof evidence and fail on 
   ] satisfies [object, RegExp][]) {
     const rejected = resolve(directory, "rejected");
     writeFileSync(law, JSON.stringify({ ...obligation, ...patch }));
-    const unsupported = run("adapters/lean/check.ts", [input, law, rejected]);
+
+    const unsupported = run("adapters/lean/check.ts", [
+      innerInput,
+      law,
+      rejected,
+    ]);
+
     assert.equal(unsupported.status, 1, unsupported.stderr);
     const failure = JSON.parse(unsupported.stdout);
     assert.equal(failure.status, "unsupported");
@@ -210,7 +216,7 @@ test("Lean command-line reports agree with persisted proof evidence and fail on 
   const summary = JSON.parse(projected.stdout);
 
   const persisted = JSON.parse(
-    readFileSync(resolve(inventory, "report.json"), "utf8")
+    readFileSync(resolve(inventory, "report.json"), "utf-8")
   );
 
   assert.equal(summary.status, "proof_checked");
@@ -270,18 +276,18 @@ test("changed declaration changes actual generated semantics; overselling fails 
     original.metadata.source_sha256,
     mutant.metadata.source_sha256
   );
-  assert.match(mutant.code, /s.remaining - \(i.amount \+ \(1 : Int\)\)/);
+  assert.match(mutant.code, /s.remaining - \(i.amount \+ \(1 : Int\)\)/u);
   // Give the mutant its correct successful witness: failure must be the law,
   // not merely the unchanged positive example.
   const mutantLaw = clone(obligation);
   mutantLaw.witness.post.remaining = 6;
   const report = check(m, mutantLaw, resolve(out, "overselling"));
   assert.equal(report.status, "not_checked");
-  const log = readFileSync(resolve(out, "overselling/check.log"), "utf8");
-  assert.match(log, /omega could not prove the goal/);
+  const log = readFileSync(resolve(out, "overselling/check.log"), "utf-8");
+  assert.match(log, /omega could not prove the goal/u);
   assert.match(
     log,
-    /'Generated.positive_witness' does not depend on any axioms/
+    /'Generated.positive_witness' does not depend on any axioms/u
   );
   differential("overselling-semantics", m, [{ expected: "committed" }]);
 });

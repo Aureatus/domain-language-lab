@@ -158,7 +158,7 @@ export async function runLeaveBrowser({
 
     await form(maya).evaluate((f) => {
       if (!(f instanceof HTMLFormElement)) {
-        throw Error("Expected leave form.");
+        throw new TypeError("Expected leave form.");
       }
 
       f.requestSubmit();
@@ -181,7 +181,7 @@ export async function runLeaveBrowser({
         .waitFor();
       assert.match(
         await maya.locator("#evidence").innerText(),
-        /leave.deduct-days/
+        /leave.deduct-days/u
       );
     }
 
@@ -193,7 +193,7 @@ export async function runLeaveBrowser({
     await sam.locator("[data-grant]").waitFor();
     assert.match(
       await sam.locator("#inbox").innerText(),
-      /Maya Chen[\s\S]*2026-11-23[\s\S]*2026-11-25[\s\S]*3/
+      /Maya Chen[\s\S]*2026-11-23[\s\S]*2026-11-25[\s\S]*3/u
     );
     await sam.screenshot({
       path: new URL("derived-time-off-manager.png", artifacts).pathname,
@@ -215,7 +215,7 @@ export async function runLeaveBrowser({
     if (explain) {
       assert.match(
         await maya.locator("#evidence").innerText(),
-        /"status": "pending"/
+        /"status": "pending"/u
       );
       await maya.click("#current-evidence");
       await maya
@@ -264,17 +264,18 @@ export async function runLeaveBrowser({
       await balance(maya, 1);
       assert.match(
         await maya.locator("#evidence").innerText(),
-        /"actor": "leo"/
+        /"actor": "leo"/u
       );
       await maya.selectOption("#actor", "leo");
       await balance(maya, 3);
     }
 
     checks.push(
-      "Leo two days before/after actual threshold 3→2; saved request then grant/resume 5→3" +
-        (explain
+      `Leo two days before/after actual threshold 3→2; saved request then grant/resume 5→3${
+        explain
           ? "; saved evidence preserved across preview/SSE/actor switch"
-          : "")
+          : ""
+      }`
     );
 
     const stale = await post("actions/execute", {
@@ -284,7 +285,7 @@ export async function runLeaveBrowser({
     });
 
     const p = stale.snapshot.pending.find(
-      (p: { status: string }) => p.status === "pending"
+      (pending2: { status: string }) => pending2.status === "pending"
     );
 
     assert.equal(
@@ -320,7 +321,7 @@ export async function runLeaveBrowser({
       .filter({ hasText: "Approval is saved, but completion failed" })
       .waitFor();
 
-    const url = server.url;
+    const { url } = server;
     const port = Number(new URL(url).port);
 
     await server.close();

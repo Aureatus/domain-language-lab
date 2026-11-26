@@ -22,35 +22,47 @@ function placeholder({
   const id = q(`loading:${index}:${strategy}`);
 
   switch (strategy) {
-    case "text":
+    case "text": {
       return `text ${name} role="status" testId=${id}`;
-    case "icon":
+    }
+
+    case "icon": {
       return `progress width=24 height=24 aria-label=${name} testId=${id}`;
-    case "skeleton":
+    }
+
+    case "skeleton": {
       return `column role="status" aria-label=${name} testId=${id} gap=6\n              box width="45%" height=16 border-radius=4 background-color="-exact-fill"\n              box width="75%" height=12 border-radius=4 background-color="-exact-fill"`;
-    case "wait":
+    }
+
+    case "wait": {
       return null;
-    default:
-      throw Error(`Unsupported loading strategy: ${strategy}`);
+    }
+
+    default: {
+      throw new Error(`Unsupported loading strategy: ${strategy}`);
+    }
   }
 }
 
-type Envelope = { contract: ApplicationContract; contractId: string };
+interface Envelope {
+  contract: ApplicationContract;
+  contractId: string;
+}
 
-type Marker = {
+interface Marker {
   semanticId: string;
   marker?: string;
   generated?: { file: string; line: number };
   contractPointer?: string;
-};
+}
 
-type Form = {
+interface Form {
   k: string;
   actor: ApplicationContract["actors"][number];
   a: ApplicationAction;
   fields: ApplicationField[];
   shape: string;
-};
+}
 
 export function generate(
   envelope: Envelope,
@@ -60,15 +72,17 @@ export function generate(
   const [defaultActor] = c.actors;
 
   if (!defaultActor) {
-    throw Error("Missing default actor.");
+    throw new Error("Missing default actor.");
   }
 
   if (c.format !== "derived-application/v1" || !contractId) {
-    throw Error("Unsupported derived contract.");
+    throw new Error("Unsupported derived contract.");
   }
 
-  if (!/^http:\/\/127\.0\.0\.1:\d+$/.test(api)) {
-    throw Error("This experimental adapter requires a loopback HTTP backend.");
+  if (!/^http:\/\/127\.0\.0\.1:\d+$/u.test(api)) {
+    throw new Error(
+      "This experimental adapter requires a loopback HTTP backend."
+    );
   }
 
   for (const v of c.views) {
@@ -76,7 +90,7 @@ export function generate(
       !["summary", "list"].includes(v.kind) ||
       v.columns.some((x) => !["text", "date", undefined].includes(x.format))
     ) {
-      throw Error("Unsupported view.");
+      throw new Error("Unsupported view.");
     }
   }
 
@@ -87,7 +101,7 @@ export function generate(
     if (id) {
       const marker = `// mapping-${maps.length}`;
       maps.push({ semanticId: id, marker });
-      const indent = s.match(/^ */)?.[0] ?? "";
+      const indent = s.match(/^ */u)?.[0] ?? "";
       lines.push(indent + marker);
     }
 
@@ -158,7 +172,8 @@ component App
 
   for (const actor of c.actors) {
     for (const a of Object.values(c.actions)) {
-      const k = `f${n++}`;
+      const k = `f${n}`;
+      n += 1;
       const fields = a.fields.filter((f) => !f.hidden);
 
       for (const f of fields) {
@@ -166,7 +181,7 @@ component App
           !["string", "integer", "boolean"].includes(f.schema.type) ||
           !["text", "date", "number", "checkbox", "select"].includes(f.widget)
         ) {
-          throw Error(`Unsupported field ${a.id}.${f.name}`);
+          throw new Error(`Unsupported field ${a.id}.${f.name}`);
         }
       }
 
@@ -179,7 +194,8 @@ component App
   derive ${k}locked = ${k}phase != "known" and ${k}phase != "editing"
   derive ${k}disabled = busy or ${k}locked
   derive ${k}message = match ${k}submission { case some(r) => r.message, case none => "" }`);
-      fields.forEach((f, i) => {
+
+      for (const [i, f] of fields.entries()) {
         emit(
           `  state ${k}d${i}: option<${f.schema.type === "boolean" ? "bool" : "string"}> = none`
         );
@@ -190,13 +206,14 @@ component App
           `  action ${k}edit${i}(v: ${f.schema.type === "boolean" ? "bool" : "string"})\n    ${k}d${i} = some(v)`,
           `action:${a.id}/input:${f.name}`
         );
-      });
+      }
+
       const args = fields.map((_, i) => `${k}v${i}`).join(", ");
       emit(
-        `  action ${k}preview\n    if not busy\n      noticeOwner = actor\n      send changed = preview${k}(${q(actor.id)}${args ? ", " + args : ""})`
+        `  action ${k}preview\n    if not busy\n      noticeOwner = actor\n      send changed = preview${k}(${q(actor.id)}${args ? `, ${args}` : ""})`
       );
       emit(
-        `  action ${k}save\n    if not ${k}disabled\n      noticeOwner = ${q("submission:" + k)}${fields.map((_, i) => `\n      ${k}d${i} = some(${k}v${i})`).join("")}\n      send ${k}submission = execute${k}(${args})`
+        `  action ${k}save\n    if not ${k}disabled\n      noticeOwner = ${q(`submission:${k}`)}${fields.map((_, i) => `\n      ${k}d${i} = some(${k}v${i})`).join("")}\n      send ${k}submission = execute${k}(${args})`
       );
 
       for (const [op, phase] of [
@@ -204,7 +221,7 @@ component App
         ["retry", "retryable"],
       ]) {
         emit(
-          `  action ${k}${op}\n    if not busy and ${k}phase == "${phase}"\n      noticeOwner = ${q("submission:" + k)}\n      send ${k}submission = ${op}${k}()`
+          `  action ${k}${op}\n    if not busy and ${k}phase == "${phase}"\n      noticeOwner = ${q(`submission:${k}`)}\n      send ${k}submission = ${op}${k}()`
         );
         sources.push(`  ${op}${k}:async ()=>driver${k}.run('${op}'),`);
       }
@@ -247,8 +264,9 @@ component App
 
   if (indicators.length) {
     emit(
-      `          if ${guard("initial")}\n` +
-        indicators.map((line) => `            ${line}`).join("\n")
+      `          if ${guard("initial")}\n${indicators
+        .map((line) => `            ${line}`)
+        .join("\n")}`
     );
   }
 
@@ -271,9 +289,10 @@ component App
               text ${q(a.label)} role="heading" aria-level=2`,
       `action:${a.id}`
     );
-    emit(`              if not busy and noticeOwner == ${q("submission:" + k)} and ${k}message != ""
+    emit(`              if not busy and noticeOwner == ${q(`submission:${k}`)} and ${k}message != ""
                 text ${k}message role="status" testId="notice"`);
-    fields.forEach((f, i) => {
+
+    for (const [i, f] of fields.entries()) {
       emit(`              text ${q(f.label)}`);
 
       if (f.widget === "select") {
@@ -285,7 +304,8 @@ component App
           `              input ${f.widget === "checkbox" ? `type="checkbox" checked=${k}v${i} change=${k}edit${i}` : `value=${k}v${i} input=${k}edit${i} type=${q(f.widget === "number" ? "text" : f.widget)}${f.widget === "number" ? ' inputmode="decimal"' : ""}`} disabled=${k}disabled aria-label=${q(f.label)} testId=${q(`${actor.id}:${a.id}:${f.name}`)}`
         );
       }
-    });
+    }
+
     emit(
       `              button press=${k}preview disabled=${k}disabled testId=${q(`${actor.id}:${a.id}:preview`)}\n                text "Preview"\n              button press=${k}save disabled=${k}disabled buttonStyle="filled" testId=${q(`${actor.id}:${a.id}:execute`)}\n                text ${q(a.label)}`
     );
@@ -321,33 +341,30 @@ component App
       .replace("__RESUME__", "`resume-${p.id}`")
   );
 
-  const contract =
-    forms.map((f) => f.shape).join("\n") +
-    "\n" +
-    lines
-      .join("\n")
-      .replace(
-        "__SUBMISSION_BUSY__",
-        forms.map((f) => ` or pending(${f.k}submission)`).join("")
-      )
-      .replaceAll(
-        "as shape Submission refreshes screen",
-        "as shape Submission refreshes screen" +
-          forms.map((f) => `, ${f.k}`).join("")
-      )
-      .replace(
-        "as shape Reply refreshes screen",
-        "as shape Reply refreshes screen" +
-          forms.map((f) => `, ${f.k}`).join("")
-      )
-      .replace(
-        "  action reload\n    refresh screen",
-        "  action reload\n    refresh screen" +
-          forms.map((f) => `\n    refresh ${f.k}`).join("")
-      ) +
-    "\n";
+  const contract = `${forms.map((f) => f.shape).join("\n")}\n${lines
+    .join("\n")
+    .replace(
+      "__SUBMISSION_BUSY__",
+      forms.map((f) => ` or pending(${f.k}submission)`).join("")
+    )
+    .replaceAll(
+      "as shape Submission refreshes screen",
+      `as shape Submission refreshes screen${forms
+        .map((f) => `, ${f.k}`)
+        .join("")}`
+    )
+    .replace(
+      "as shape Reply refreshes screen",
+      `as shape Reply refreshes screen${forms.map((f) => `, ${f.k}`).join("")}`
+    )
+    .replace(
+      "  action reload\n    refresh screen",
+      `  action reload\n    refresh screen${forms
+        .map((f) => `\n    refresh ${f.k}`)
+        .join("")}`
+    )}\n`;
 
-  maps.forEach((m) => {
+  for (const m of maps) {
     m.generated = {
       file: "app.contract",
       line: contract.split("\n").findIndex((l) => l.trim() === m.marker) + 2,
@@ -360,11 +377,11 @@ component App
     const declaration = id ? c.actions[id] : undefined;
 
     if (!id || !declaration) {
-      throw Error(`Unknown mapped action: ${action}`);
+      throw new Error(`Unknown mapped action: ${action}`);
     }
 
-    m.contractPointer = `/contract/actions/${id.replaceAll("~", "~0").replaceAll("/", "~1")}${input ? "/fields/" + declaration.fields.findIndex((f) => f.name === input) : ""}`;
-  });
+    m.contractPointer = `/contract/actions/${id.replaceAll("~", "~0").replaceAll("/", "~1")}${input ? `/fields/${declaration.fields.findIndex((f) => f.name === input)}` : ""}`;
+  }
 
   const ts = `// Generated typed Exact data seam; no domain policy implementation.
 import type {Answer, Sources} from './app.contract.d.ts';
@@ -431,11 +448,11 @@ export async function writeAdapter(
   ];
 
   for (const { name, src } of modules) {
-    const source = await readFile(new URL(src, import.meta.url), "utf8");
+    const source = await readFile(new URL(src, import.meta.url), "utf-8");
     await writeFile(
       resolve(out, name),
       stripTypeScriptTypes(source).replace(
-        /(["'])\.\/submission\.ts\1/,
+        /(["'])\.\/submission\.ts\1/u,
         '"./submission.mjs"'
       )
     );
@@ -443,7 +460,7 @@ export async function writeAdapter(
 
   await writeFile(
     resolve(out, "client.d.mts"),
-    await readFile(new URL("./client.d.mts", import.meta.url))
+    await readFile(new URL("client.d.mts", import.meta.url))
   );
 
   return r;
@@ -459,7 +476,7 @@ if (
   const response = await fetch(`${url}/api/contract`);
 
   if (!response.ok) {
-    throw Error(`Contract HTTP ${response.status}`);
+    throw new Error(`Contract HTTP ${response.status}`);
   }
 
   await writeAdapter(await response.json(), out, { api: url });

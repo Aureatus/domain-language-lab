@@ -9,7 +9,7 @@ interface Snapshot {
       Record<string, { values: Record<string, unknown> }>
     >;
   };
-  pending: Array<{
+  pending: {
     id: string;
     status: string;
     stale: boolean;
@@ -18,45 +18,52 @@ interface Snapshot {
       action: string;
       args: Record<string, unknown>;
     };
-    requirements: Array<{ policyId: string; approvers: string[] }>;
-    grants: Array<{ policyId: string }>;
-  }>;
+    requirements: { policyId: string; approvers: string[] }[];
+    grants: { policyId: string }[];
+  }[];
 }
 
 interface Screen {
   owner: string;
-  rows: Array<{ id: string; title: string; detail: string }>;
-  inbox: Array<{
+  rows: { id: string; title: string; detail: string }[];
+  inbox: {
     id: string;
     title: string;
     detail: string;
     complete: boolean;
-    grants: Array<{ id: string; label: string; eligible: boolean }>;
-  }>;
+    grants: { id: string; label: string; eligible: boolean }[];
+  }[];
 }
 
-/** @public Imported by the generated Exact app. */
+/**
+ * Imported by the generated Exact app.
+ * @public
+ */
 export function createClient(
   envelope: unknown,
   base: string,
   fetcher?: typeof fetch
 ): {
-  request(path: string, body?: unknown): Promise<unknown>;
-  snapshot(): Promise<Snapshot>;
-  project(snapshot: Snapshot, actor: string): Screen;
-  command(
+  // oxlint-disable-next-line anti-slop/no-unknown-returns -- responses are untrusted JSON, validated by callers.
+  request: (path: string, body?: unknown) => Promise<unknown>;
+  snapshot: () => Promise<Snapshot>;
+  project: (snapshot: Snapshot, actor: string) => Screen;
+  command: (
     path: string,
     body: unknown
-  ): Promise<{ ok: boolean; message: string }>;
+  ) => Promise<{ ok: boolean; message: string }>;
 };
-/** @public Imported by the generated Exact app. */
+/**
+ * Imported by the generated Exact app.
+ * @public
+ */
 export function submissionDriver(
   client: ReturnType<typeof createClient>,
   actor: string,
   action: string
 ): {
-  run(
+  run: (
     type: "submit" | "retry" | "check",
     args?: Record<string, unknown>
-  ): Promise<{ phase: string; message: string }>;
+  ) => Promise<{ phase: string; message: string }>;
 };
