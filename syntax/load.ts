@@ -7,7 +7,7 @@ import { parseSource, SourceError } from "./frontend.ts";
 // A closed, relative, data-only import graph. No JavaScript loader/eval fallback.
 type ModuleKind = "domain" | "data" | "view";
 
-type SourceModule = {
+interface SourceModule {
   filename: string;
   source: string;
   body: string;
@@ -18,7 +18,7 @@ type SourceModule = {
   reachable: Set<string>;
   offset: number;
   line: number;
-};
+}
 
 const isKind = (value: string): value is ModuleKind =>
   value === "domain" || value === "data" || value === "view";
@@ -33,7 +33,7 @@ export function loadSource(path: string | URL) {
     const filename = realpathSync(input);
 
     if (active.has(filename)) {
-      throw Error(`Import cycle at ${filename}`);
+      throw new Error(`Import cycle at ${filename}`);
     }
 
     const prior = done.get(filename);
@@ -44,7 +44,7 @@ export function loadSource(path: string | URL) {
 
     active.add(filename);
 
-    const source = readFileSync(filename, "utf8");
+    const source = readFileSync(filename, "utf-8");
     const imports: string[] = [];
     const uses: string[] = [];
 
@@ -57,9 +57,9 @@ export function loadSource(path: string | URL) {
           throw new SourceError(filename, { line: i + 1, column: 1 }, message);
         }
 
-        if (/^module\b/.test(line)) {
+        if (/^module\b/u.test(line)) {
           const [, id, kind] =
-            /^module "([^"\n]+)" (domain|data|view)\s*$/.exec(line) ?? [];
+            /^module "([^"\n]+)" (domain|data|view)\s*$/u.exec(line) ?? [];
 
           if (!id || !kind || !isKind(kind) || module) {
             fail('Expected one module "ID" domain|data|view header.');
@@ -70,14 +70,17 @@ export function loadSource(path: string | URL) {
           return " ".repeat(line.length);
         }
 
-        if (/^import\b/.test(line)) {
-          const input = /^import "([^"\n]+\.domain)"\s*$/.exec(line)?.[1];
+        if (/^import\b/u.test(line)) {
+          const innerInput = /^import "([^"\n]+\.domain)"\s*$/u.exec(line)?.[1];
 
-          if (!input || (!input.startsWith("./") && !input.startsWith("../"))) {
+          if (
+            !innerInput ||
+            (!innerInput.startsWith("./") && !innerInput.startsWith("../"))
+          ) {
             fail("Imports must be explicit relative .domain paths.");
           }
 
-          const target = realpathSync(resolve(dirname(filename), input));
+          const target = realpathSync(resolve(dirname(filename), innerInput));
 
           if (imports.includes(target)) {
             fail("Duplicate import.");
@@ -88,8 +91,8 @@ export function loadSource(path: string | URL) {
           return " ".repeat(line.length);
         }
 
-        if (/^use\b/.test(line)) {
-          const id = /^use "([^"\n]+)"\s*$/.exec(line)?.[1];
+        if (/^use\b/u.test(line)) {
+          const id = /^use "([^"\n]+)"\s*$/u.exec(line)?.[1];
 
           if (!id || uses.includes(id)) {
             fail("Invalid or duplicate use.");
@@ -105,14 +108,14 @@ export function loadSource(path: string | URL) {
       .join("\n");
 
     if ((imports.length || uses.length) && !module) {
-      throw Error(`${filename}: imports/use require a module header.`);
+      throw new Error(`${filename}: imports/use require a module header.`);
     }
 
     const header = module;
 
     if (header) {
       if (ids.has(header.id)) {
-        throw Error(`Duplicate module ID '${header.id}'.`);
+        throw new Error(`Duplicate module ID '${header.id}'.`);
       }
 
       ids.set(header.id, filename);
@@ -126,18 +129,18 @@ export function loadSource(path: string | URL) {
 
     for (const id of uses) {
       if (!reachable.has(id)) {
-        throw Error(`${filename}: missing imported module '${id}'.`);
+        throw new Error(`${filename}: missing imported module '${id}'.`);
       }
 
       if (!dependencies.some((d) => d.id === id && d.kind === "domain")) {
-        throw Error(
+        throw new Error(
           `${filename}: use '${id}' must name a directly imported domain module.`
         );
       }
     }
 
     if (header && header.kind !== "domain" && !uses.length) {
-      throw Error(
+      throw new Error(
         `${filename}: data/view module must explicitly use its imported domain.`
       );
     }
@@ -170,7 +173,7 @@ export function loadSource(path: string | URL) {
   for (const item of modules) {
     item.offset = combined.length;
     item.line = combined.split("\n").length;
-    combined += item.body + "\n";
+    combined += `${item.body}\n`;
   }
 
   const locate = (line: number, offset?: number) => {
@@ -179,7 +182,7 @@ export function loadSource(path: string | URL) {
     );
 
     if (!item) {
-      throw Error(`Source location outside module graph: ${line}`);
+      throw new Error(`Source location outside module graph: ${line}`);
     }
 
     return item;
@@ -192,20 +195,20 @@ export function loadSource(path: string | URL) {
       filename: entry.filename,
       allowMissingApplication: entry.kind === "domain" || entry.kind === "data",
     });
-  } catch (e) {
-    if (e instanceof SourceError) {
-      const item = locate(e.line);
+  } catch (error) {
+    if (error instanceof SourceError) {
+      const item = locate(error.line);
       throw Object.assign(
         new SourceError(
           item.filename,
-          { line: e.line - item.line + 1, column: e.column },
-          e.message.replace(/^.*?:\d+:\d+: /, "")
+          { line: error.line - item.line + 1, column: error.column },
+          error.message.replace(/^.*?:\d+:\d+: /u, "")
         ),
-        { ruleId: e.ruleId }
+        { ruleId: error.ruleId }
       );
     }
 
-    throw e;
+    throw error;
   }
 
   for (const span of Object.values(parsed.sourceMap)) {
@@ -234,7 +237,7 @@ export function loadSource(path: string | URL) {
       (typeof section.kind !== "string" ||
         !allowed[item.kind].includes(section.kind))
     ) {
-      throw Error(
+      throw new Error(
         `${item.filename}: ${section.kind} is not allowed in a ${item.kind} module.`
       );
     }

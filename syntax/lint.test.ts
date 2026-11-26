@@ -77,7 +77,7 @@ test("input use follows binding keys, host bindings and adapter mappings, not ju
 
 test("lexical, unsupported, core and metadata errors fail rather than advisory pass", () => {
   for (const edited of [
-    source + "unknown\n",
+    `${source}unknown\n`,
     source.replace("days like leave.days", "days decimal"),
     source.replace("      min 0", "      min 9"),
     source.replace('label "Weekdays"', "widget impossible"),
@@ -98,23 +98,23 @@ test("lexical, unsupported, core and metadata errors fail rather than advisory p
 
 test("CLI JSON, exit policies, missing files and invalid arguments", () => {
   const dir = mkdtempSync("/tmp/opencode/lint-");
-  const path = dir + "/test.domain";
+  const path = `${dir}/test.domain`;
 
   const run = (...args: string[]) =>
     spawnSync(process.execPath, ["syntax/lint.ts", ...args], {
-      encoding: "utf8",
+      encoding: "utf-8",
     });
 
-  writeFileSync(path, source + "# trailing  \n");
+  writeFileSync(path, `${source}# trailing  \n`);
   let result = run(path, "--json");
   assert.equal(result.status, 0);
   assert.equal(JSON.parse(result.stdout).warnings, 1);
   assert.equal(run(path, "--strict").status, 1);
-  writeFileSync(path, source + "unsupported\n");
+  writeFileSync(path, `${source}unsupported\n`);
   result = run(path, "--json");
   assert.equal(result.status, 1);
   assert.equal(JSON.parse(result.stdout).errors, 1);
-  result = run(dir + "/missing", "--json");
+  result = run(`${dir}/missing`, "--json");
   assert.equal(result.status, 1);
   assert.equal(
     JSON.parse(result.stdout).diagnostics[0].ruleId,

@@ -38,11 +38,11 @@ const run = Effect.runSync;
 const operationId = () => `application-${randomUUID()}`;
 
 const fail = (message: string, status = 400) =>
-  Object.assign(Error(message), { httpStatus: status });
+  Object.assign(new Error(message), { httpStatus: status });
 
-type Result = {
+interface Result {
   status: "prepared" | "pending" | "committed" | "rejected" | "approved";
-};
+}
 
 const unwrap = (r: Result | { status: "duplicate"; result: Result }): Result =>
   r.status === "duplicate" ? r.result : r;
@@ -55,9 +55,7 @@ const browserFiles = Object.fromEntries(
   }).map(([path, file]) => [path, new URL(file, import.meta.url)])
 );
 
-const applicationBundle = browserBundle(
-  new URL("./browser.ts", import.meta.url)
-);
+const applicationBundle = browserBundle(new URL("browser.ts", import.meta.url));
 
 export function resultMessage(r: { status: string; code?: string }) {
   if (r.status === "committed") {
@@ -132,11 +130,11 @@ export async function createApplicationServer(
 
   try {
     if (
-      !db.prepare("SELECT value FROM durable_meta WHERE key=?").get("format")
+      db.prepare("SELECT value FROM durable_meta WHERE key=?").get("format")
     ) {
-      run(initializeDurableState(runtime, db, derived.initialState));
-    } else {
       run(durableState(runtime, db));
+    } else {
+      run(initializeDurableState(runtime, db, derived.initialState));
     }
 
     // The invocation journal owns the outcome. Keep just the pre-elaboration
@@ -228,13 +226,13 @@ export async function createApplicationServer(
           .get()?.["version"];
 
         if (typeof value !== "number") {
-          throw Error("Missing snapshot version.");
+          throw new TypeError("Missing snapshot version.");
         }
 
         return value;
       };
 
-      for (let attempt = 0; attempt < 4; attempt++) {
+      for (let attempt = 0; attempt < 4; attempt += 1) {
         const snapshotVersion = version();
         const value = readSnapshot(snapshotVersion);
 
@@ -259,13 +257,13 @@ export async function createApplicationServer(
           const id = row["invocation_id"];
 
           if (typeof id !== "string") {
-            throw Error("Invalid pending invocation ID.");
+            throw new TypeError("Invalid pending invocation ID.");
           }
 
           const p = run(durablePending(runtime, db, id));
 
           if (!p) {
-            throw Error("Pending invocation disappeared.");
+            throw new Error("Pending invocation disappeared.");
           }
 
           return {
@@ -334,7 +332,7 @@ export async function createApplicationServer(
       const action = model.actions[invocation.action];
 
       if (!action) {
-        throw Error("Missing evidence action declaration.");
+        throw new Error("Missing evidence action declaration.");
       }
 
       const { policies, preconditions, updates, inserts, deletes } = action;
@@ -371,7 +369,7 @@ export async function createApplicationServer(
       const address = server.address();
 
       if (!address || typeof address === "string") {
-        throw Error("Expected a listening TCP server.");
+        throw new Error("Expected a listening TCP server.");
       }
 
       return address.port;
@@ -455,7 +453,7 @@ export async function createApplicationServer(
           for await (const chunk of req) {
             bytes += chunk.length;
 
-            if (bytes > 16384) {
+            if (bytes > 16_384) {
               throw fail("Request too large.", 413);
             }
 
@@ -484,41 +482,52 @@ export async function createApplicationServer(
 
           try {
             switch (kind) {
-              case "preview":
+              case "preview": {
                 body = decodeStrictJson(ApplicationPreviewRequestSchema, input);
                 break;
-              case "execute":
+              }
+
+              case "execute": {
                 body = decodeStrictJson(ApplicationExecuteRequestSchema, input);
                 break;
-              case "reconcile":
+              }
+
+              case "reconcile": {
                 body = decodeStrictJson(
                   ApplicationReconcileRequestSchema,
                   input
                 );
                 break;
-              case "grant":
+              }
+
+              case "grant": {
                 body = decodeStrictJson(ApplicationGrantRequestSchema, input);
                 break;
-              case "resume":
+              }
+
+              case "resume": {
                 body = decodeStrictJson(ApplicationResumeRequestSchema, input);
                 break;
-              default:
-                throw Error("Unknown operation.");
+              }
+
+              default: {
+                throw new Error("Unknown operation.");
+              }
             }
-          } catch (e) {
-            throw fail(errorMessage(e) || "Invalid JSON.");
+          } catch (error) {
+            throw fail(errorMessage(error) || "Invalid JSON.");
           }
 
           try {
             if (!contract.actors.some((a) => a.id === body.actor)) {
-              throw Error("Choose a known person.");
+              throw new Error("Choose a known person.");
             }
 
             if (body.submissionId !== undefined) {
               key = submissionKey(body.submissionId);
             }
-          } catch (e) {
-            throw fail(errorMessage(e));
+          } catch (error) {
+            throw fail(errorMessage(error));
           }
 
           if (
@@ -550,7 +559,7 @@ export async function createApplicationServer(
             if (!replayed) {
               try {
                 if (body.action === undefined) {
-                  throw Error("Missing action.");
+                  throw new Error("Missing action.");
                 }
 
                 invocation = buildInvocation(contract, {
@@ -560,17 +569,17 @@ export async function createApplicationServer(
                   id: key ?? operationId(),
                   clock: Date.now(),
                 });
-              } catch (e) {
+              } catch (error) {
                 if (key) {
                   return json(400, {
-                    error: errorMessage(e),
+                    error: errorMessage(error),
                     disposition: "not-submitted",
                     contractId,
                     submissionId: body.submissionId,
                   });
                 }
 
-                throw fail(errorMessage(e));
+                throw fail(errorMessage(error));
               }
 
               if (kind === "preview") {
@@ -669,7 +678,7 @@ export async function createApplicationServer(
                 })
               )
             );
-            invocation = pending.request.invocation;
+            ({ invocation } = pending.request);
           }
 
           if (kind !== "preview" && !replayed) {
@@ -677,7 +686,7 @@ export async function createApplicationServer(
           }
 
           if (!result) {
-            throw Error("Missing operation result.");
+            throw new Error("Missing operation result.");
           }
 
           const code =
@@ -755,24 +764,24 @@ export async function createApplicationServer(
           "cache-control": "no-store",
         });
         res.end(data);
-      } catch (e) {
-        const status = httpErrorStatus(e);
+      } catch (error) {
+        const status = httpErrorStatus(error);
 
         if (res.headersSent) {
           res.destroy();
         } else {
           json(status ?? 500, {
             error: status
-              ? errorMessage(e)
+              ? errorMessage(error)
               : "Storage failed. The operation may have been recorded; reconnect before retrying.",
           });
         }
       }
     });
 
-    await new Promise<void>((yes, no) => {
-      server.once("error", no);
-      server.listen(port, "127.0.0.1", yes);
+    await new Promise<void>((resolveDone, rejectDone) => {
+      server.once("error", rejectDone);
+      server.listen(port, "127.0.0.1", resolveDone);
     });
 
     return {
@@ -789,15 +798,15 @@ export async function createApplicationServer(
         }
 
         streams.clear();
-        await new Promise<void>((yes, no) => {
-          server.close((e) => (e ? no(e) : yes()));
+        await new Promise<void>((resolveDone, rejectDone) => {
+          server.close((e) => (e ? rejectDone(e) : resolveDone()));
           server.closeAllConnections();
         });
         run(closeDurableStore(db));
       },
     };
-  } catch (e) {
+  } catch (error) {
     run(closeDurableStore(db));
-    throw e;
+    throw error;
   }
 }

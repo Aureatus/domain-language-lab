@@ -13,7 +13,7 @@ export function viewRecords<R extends { values: Record<string, unknown> }>(
   const collection = snapshot.state.records[view.resource];
 
   if (!collection) {
-    throw Error(`Missing view resource: ${view.resource}`);
+    throw new Error(`Missing view resource: ${view.resource}`);
   }
 
   return Object.entries(collection).filter(

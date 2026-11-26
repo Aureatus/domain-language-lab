@@ -49,13 +49,13 @@ const oracle = (before: State, operations: Operation[]) => {
       };
     } else if (op.kind === "cancel" || op.kind === "expire") {
       const reservation = present(reservations[op.id]);
-      const quantity = reservation.values["quantity"];
+      const { quantity } = reservation.values;
 
       assert.ok(typeof quantity === "number");
       available += quantity;
       reservation.values["status"] =
         op.kind === "cancel" ? "cancelled" : "expired";
-      reservation.version++;
+      reservation.version += 1;
     } else if (op.kind === "delete-terminal") {
       delete reservations[op.id];
     }
@@ -108,7 +108,7 @@ test("actual inserts, stock decrement, approval, cancellation, expiry and termin
     ["action", "change", "create"]
   );
   assert.equal(result.state.records["reservation"]?.["res-small"]?.version, 0);
-  state = result.state;
+  ({ state } = result);
 
   const large = invocation("reserve-large", "reserve", {
     reservationId: "res-large",
@@ -136,14 +136,14 @@ test("actual inserts, stock decrement, approval, cancellation, expiry and termin
     clock: 11,
   });
   assert.equal(result.status, "committed");
-  state = result.state;
+  ({ state } = result);
 
   result = run(rt, state, "cancel-small", "cancel", {
     reservationId: "res-small",
     actor: "alice",
   });
   assert.equal(result.status, "committed");
-  state = result.state;
+  ({ state } = result);
   const beforeExpiry = state;
   result = run(rt, state, "expire-large-early", "expire", {
     reservationId: "res-large",
@@ -159,7 +159,7 @@ test("actual inserts, stock decrement, approval, cancellation, expiry and termin
     clock: 40,
   });
   assert.equal(result.status, "committed");
-  state = result.state;
+  ({ state } = result);
   result = run(rt, state, "delete-small", "delete-terminal", {
     reservationId: "res-small",
     actor: "alice",
@@ -169,13 +169,13 @@ test("actual inserts, stock decrement, approval, cancellation, expiry and termin
     present(result.state.records["reservation"])["res-small"],
     undefined
   );
-  state = result.state;
+  ({ state } = result);
   result = run(rt, state, "delete-large", "delete-terminal", {
     reservationId: "res-large",
     actor: "bob",
   });
   assert.equal(result.status, "committed");
-  state = result.state;
+  ({ state } = result);
   assert.equal(stock(state), expected.available);
   assert.deepEqual(state.records["reservation"], expected.reservations);
 });
@@ -300,7 +300,7 @@ test("multiple named reservations independently obey a capacity oracle", () => {
     });
 
     assert.equal(result.status, "committed");
-    state = result.state;
+    ({ state } = result);
   }
 
   assert.equal(stock(state), 3);

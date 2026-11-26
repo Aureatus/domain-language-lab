@@ -40,7 +40,7 @@ page.on("pageerror", (e) => errors.push(e.message));
 const networkRequests: string[] = [];
 
 page.context().on("request", (r) => {
-  if (/^https?:/.test(r.url())) {
+  if (/^https?:/u.test(r.url())) {
     networkRequests.push(r.url());
   }
 });
@@ -75,7 +75,7 @@ async function audit(name: string) {
       nodes: v.nodes.map((n) => n.target),
     })),
     [],
-    name + " axe"
+    `${name} axe`
   );
 }
 
@@ -108,7 +108,8 @@ async function declarationChecks() {
     expected.cases.length
   );
   const rows = await page.locator("#derived-output tbody tr").allTextContents();
-  expected.cases.forEach((c, i) => {
+
+  for (const [i, c] of expected.cases.entries()) {
     const row = rows[i];
     assert.ok(row);
 
@@ -122,10 +123,11 @@ async function declarationChecks() {
       typeof c.expected === "string" ? c.expected : JSON.stringify(c.expected);
 
     assert.ok(row.includes(value));
-  });
+  }
+
   assert.match(
     await page.locator("#derived-output").innerText(),
-    /\d+ unknown/
+    /\d+ unknown/u
   );
   assert.deepEqual(
     await workspace(),
@@ -180,7 +182,7 @@ try {
     "Focus restored after create"
   );
   let s = await state();
-  const id = present(s.issues.at(-1)).id;
+  const { id } = present(s.issues.at(-1));
   assert.equal(
     present(s.issues.at(-1)).title,
     "Keep keyboard focus after saving"
@@ -212,12 +214,12 @@ try {
   );
   assert.match(
     await page.locator("dialog").innerText(),
-    /not allowed for member/
+    /not allowed for member/u
   );
   await page.locator("dialog details > summary").click();
   assert.match(
     await page.locator("dialog pre").innerText(),
-    /"category": "policy"/
+    /"category": "policy"/u
   );
   await page.keyboard.press("Escape");
   assert.equal(
@@ -231,18 +233,21 @@ try {
     beforeWhy,
     "Availability dialog is a query, not a command"
   );
-  assert.match(await page.locator(".inbox").innerText(), /Keep keyboard focus/);
+  assert.match(
+    await page.locator(".inbox").innerText(),
+    /Keep keyboard focus/u
+  );
   await page.locator(".inbox [data-why]").first().click();
-  assert.match(await page.locator("dialog").innerText(), /i3 → assignee → u2/);
+  assert.match(await page.locator("dialog").innerText(), /i3 → assignee → u2/u);
   await page.locator("dialog details > summary").click();
-  assert.match(await page.locator("#why-data").innerText(), /assignee/);
+  assert.match(await page.locator("#why-data").innerText(), /assignee/u);
   await audit("notification explanation");
   await page.keyboard.press("Escape");
   await page.locator(".lab > summary").click();
   const baselineChecks = await declarationChecks();
   assert.match(
     await page.locator("[data-rule=resolve] .rule-impact").innerText(),
-    /No declaration changes \(no-op\)/
+    /No declaration changes \(no-op\)/u
   );
   const untouched = await workspace();
 
@@ -254,7 +259,7 @@ try {
   await memberToggle.uncheck();
   assert.match(
     await page.locator("[data-rule=resolve] .rule-impact").innerText(),
-    /No declaration changes \(no-op\)/
+    /No declaration changes \(no-op\)/u
   );
   assert.deepEqual(
     await workspace(),
@@ -266,11 +271,11 @@ try {
   await tool("resolve", { issueId: id });
   assert.match(
     await page.locator("#tool-output").innerText(),
-    /not allowed for member/
+    /not allowed for member/u
   );
   assert.match(
     await page.locator("#tool-form .availability").innerText(),
-    /not allowed for member/
+    /not allowed for member/u
   );
   assert.equal((await state()).events.length, before);
   // Let members resolve, but turn off all resolve notification routes.
@@ -284,11 +289,11 @@ try {
   const beforeApply = await workspace();
   assert.match(
     await resolveRule.locator(".rule-impact").innerText(),
-    /Added role: member/
+    /Added role: member/u
   );
   assert.match(
     await resolveRule.locator(".rule-impact").innerText(),
-    /Removed route: opener/
+    /Removed route: opener/u
   );
   assert.equal(
     await page.locator("[data-run=resolve]").isDisabled(),
@@ -299,7 +304,7 @@ try {
   await resolveRule.locator("button").click();
   assert.match(
     await page.locator("#derived-output").innerText(),
-    /Not run/,
+    /Not run/u,
     "Model changes invalidate checks"
   );
   const changedChecks = await declarationChecks();
@@ -326,7 +331,7 @@ try {
   );
   assert.match(
     await page.locator("#tool-form .availability").innerText(),
-    /Available for current inputs/
+    /Available for current inputs/u
   );
   const tools = await page.locator("#tool-descriptors").textContent();
   assert.ok(tools);
@@ -346,7 +351,7 @@ try {
   assert.equal(present(s.events.at(-1)).recipients.length, 0);
   assert.match(
     await page.locator("#derived-output").innerText(),
-    /Not run/,
+    /Not run/u,
     "State changes invalidate checks"
   );
   // Restrict comments and reroute future comments through opener alone.
@@ -362,7 +367,7 @@ try {
   await tool("comment", { issueId: id, body: "This must be denied." });
   assert.match(
     await page.locator("#tool-output").innerText(),
-    /not allowed for member/
+    /not allowed for member/u
   );
   rule = page.locator("[data-rule=comment]");
   await rule.locator("[name=allowedRoles][value=member]").check();
@@ -386,9 +391,9 @@ try {
   );
   await page.locator("#actor").selectOption("u1");
   await page.locator(".inbox [data-why]").first().click();
-  assert.match(await page.locator("dialog").innerText(), /i3 → opener → u1/);
+  assert.match(await page.locator("dialog").innerText(), /i3 → opener → u1/u);
   await page.locator("dialog details > summary").click();
-  assert.match(await page.locator("#why-data").innerText(), /opener/);
+  assert.match(await page.locator("#why-data").innerText(), /opener/u);
   await page.keyboard.press("Escape");
   await page.locator("#run-checks").click();
 
@@ -401,7 +406,7 @@ try {
   const count = (await state()).events.length;
   await page.locator("#tool-args").fill("{ broken");
   await page.locator("#tool-form button").click();
-  assert.match(await page.locator("#tool-output").innerText(), /Invalid JSON/);
+  assert.match(await page.locator("#tool-output").innerText(), /Invalid JSON/u);
   assert.equal((await state()).events.length, count);
   await audit("edited declarations and tools");
   await page.locator("#actor").selectOption("u2");
@@ -441,7 +446,7 @@ try {
   assert.equal(await page.locator("dialog form button").isDisabled(), true);
   assert.match(
     await page.locator("dialog .availability").innerText(),
-    /Assignee is unchanged/
+    /Assignee is unchanged/u
   );
   await page.locator("dialog select[name=assignee]").selectOption("");
   assert.equal(
@@ -460,7 +465,7 @@ try {
   await page.locator(".lab > summary").click();
   assert.match(
     await page.locator("#check-output").innerText(),
-    /Not run/,
+    /Not run/u,
     "State audit invalidated after mutations"
   );
   await declarationChecks();
@@ -470,7 +475,7 @@ try {
   assert.equal((await state()).events.length, 0);
   assert.match(
     await page.locator("#derived-output").innerText(),
-    /Not run/,
+    /Not run/u,
     "Reset invalidates checks"
   );
   await page.setViewportSize({ width: 1440, height: 940 });
@@ -498,20 +503,20 @@ try {
   await page.locator("#tool-args").fill("{ draft JSON");
   assert.match(
     await page.locator("#tool-form .availability").innerText(),
-    /enter valid JSON/
+    /enter valid JSON/u
   );
   const beforeQuery = await workspace();
   await page.locator("#tool-args").fill(JSON.stringify({ issueId: "i1" }));
   assert.match(
     await page.locator("#tool-form .availability").innerText(),
-    /Missing args.body/
+    /Missing args.body/u
   );
   await page
     .locator("#tool-args")
     .fill(JSON.stringify({ issueId: "i1", body: "   " }));
   assert.match(
     await page.locator("#tool-form .availability").innerText(),
-    /must not be blank/
+    /must not be blank/u
   );
   assert.deepEqual(
     await workspace(),
@@ -526,7 +531,7 @@ try {
   await page.locator("#tool-name").selectOption("comment");
   assert.equal(await page.locator("#tool-args").inputValue(), "{ draft JSON");
   // Compact filters preserve search focus and caret; queue supports arrow navigation and Enter.
-  const title = present((await state()).issues[0]).title;
+  const { title } = present((await state()).issues[0]);
   await page.locator("#issue-search").fill("no such issue");
   assert.equal(await page.locator(".issue-row").count(), 0);
   assert.equal(
@@ -558,7 +563,7 @@ try {
   const persisted = await get();
   assert.match(
     await page.locator("#save-status").innerText(),
-    /Saved in this browser/
+    /Saved in this browser/u
   );
   await page.reload();
   assert.deepEqual(
@@ -566,12 +571,12 @@ try {
     persisted,
     "Reload reconstructs saved state and declaration"
   );
-  assert.match(await page.locator("#save-status").innerText(), /Recovered/);
+  assert.match(await page.locator("#save-status").innerText(), /Recovered/u);
   // Export is a live document, not a preview; rejected imports are atomic.
   const downloadPromise = page.waitForEvent("download");
   await page.locator("#export-workspace").click();
   const download = await downloadPromise;
-  const exported = await readFile(await download.path(), "utf8");
+  const exported = await readFile(await download.path(), "utf-8");
 
   const importJSON = async (text: string) =>
     page.locator("#import-workspace").setInputFiles({
@@ -589,7 +594,7 @@ try {
     JSON.stringify(corruptJournal),
   ]) {
     await importJSON(invalid);
-    await page.getByText(/Import rejected; workspace unchanged/).waitFor();
+    await page.getByText(/Import rejected; workspace unchanged/u).waitFor();
     assert.deepEqual(await get(), persisted);
   }
 
@@ -603,7 +608,7 @@ try {
     const handler = button?.onclick;
 
     if (!button || !handler) {
-      throw Error("Missing watch handler");
+      throw new Error("Missing watch handler");
     }
 
     window.staleMutation = () =>
@@ -615,7 +620,7 @@ try {
     const handler = button?.onclick;
 
     if (!button || !handler) {
-      throw Error("Missing reset handler");
+      throw new Error("Missing reset handler");
     }
 
     window.staleReset = () => handler.call(button, new PointerEvent("click"));
@@ -642,7 +647,7 @@ try {
   );
   assert.match(
     await page.locator(".detail").innerText(),
-    /Current availability explanations are disabled here/
+    /Current availability explanations are disabled here/u
   );
   assert.equal(
     await page.locator("[data-unavailable]").count(),
@@ -675,7 +680,7 @@ try {
   await page.getByText("Imported workspace after core validation.").waitFor();
   assert.match(
     await page.locator("#derived-output").innerText(),
-    /Not run/,
+    /Not run/u,
     "Import invalidates checks"
   );
   assert.deepEqual(await get(), persisted, "Export/import round trip");
@@ -686,12 +691,12 @@ try {
   await page.reload();
   assert.match(
     await page.locator("#save-status").innerText(),
-    /Original retained/
+    /Original retained/u
   );
   const originalDownloadPromise = page.waitForEvent("download");
   await page.locator("#export-original").click();
   assert.equal(
-    await readFile(await (await originalDownloadPromise).path(), "utf8"),
+    await readFile(await (await originalDownloadPromise).path(), "utf-8"),
     "{ damaged original"
   );
   await comment().fill("In-memory work during recovery");
@@ -701,7 +706,7 @@ try {
     "{ damaged original"
   );
   await importJSON("{ broken");
-  await page.getByText(/Import rejected/).waitFor();
+  await page.getByText(/Import rejected/u).waitFor();
   assert.equal((await state()).events.length, 1);
   await comment().fill("Recovery remains blocked");
   await page.locator("form[data-action=comment] button").click();
@@ -715,7 +720,7 @@ try {
   // Quota/disabled-storage writes must never be described as saved.
   const failure = await browser.newPage();
   await failure.addInitScript(() => {
-    Storage.prototype.setItem = function () {
+    Storage.prototype.setItem = function setItem() {
       throw new DOMException("Storage quota reached", "QuotaExceededError");
     };
   });
@@ -726,7 +731,7 @@ try {
   await failure.locator("form[data-action=comment] button").click();
   assert.match(
     await failure.locator("#save-status").innerText(),
-    /Not saved:.*Storage quota reached/
+    /Not saved:.*Storage quota reached/u
   );
   assert.equal(
     await failure.evaluate(() => window.liveWorkspace.core.state.events.length),
@@ -737,7 +742,7 @@ try {
   await unavailable.addInitScript(() =>
     Object.defineProperty(window, "localStorage", {
       get() {
-        throw Error("Storage denied");
+        throw new Error("Storage denied");
       },
     })
   );
@@ -746,7 +751,7 @@ try {
   );
   assert.match(
     await unavailable.locator("#save-status").innerText(),
-    /Storage unavailable/
+    /Storage unavailable/u
   );
   await unavailable
     .locator("form[data-action=comment] textarea")
@@ -754,7 +759,7 @@ try {
   await unavailable.locator("form[data-action=comment] button").click();
   assert.match(
     await unavailable.locator("#save-status").innerText(),
-    /Not saved:.*Storage denied/
+    /Not saved:.*Storage denied/u
   );
   await unavailable.close();
   // A real 100-comment workload executes off-thread while controls and frames
@@ -768,6 +773,7 @@ try {
     const NativeWorker = Worker;
     window.Worker = class extends NativeWorker {
       override set onmessage(handler: Worker["onmessage"]) {
+        // oxlint-disable-next-line unicorn/prefer-add-event-listener -- this fake wraps the native on* handler it overrides.
         super.onmessage =
           handler &&
           ((event) => {
@@ -779,7 +785,7 @@ try {
           });
       }
       override terminate() {
-        window.workerTerminations++;
+        window.workerTerminations += 1;
         super.terminate();
       }
     };
@@ -789,7 +795,7 @@ try {
   );
   const history = createApp({ clock: () => 123 });
 
-  for (let index = 0; index < 100; index++) {
+  for (let index = 0; index < 100; index += 1) {
     assert.equal(
       history.dispatch(
         "comment",
@@ -827,7 +833,7 @@ try {
 
     const frame = () => {
       if (document.querySelector("#cancel-derived-checks")) {
-        window.runningFrames++;
+        window.runningFrames += 1;
         requestAnimationFrame(frame);
       }
     };
@@ -837,7 +843,7 @@ try {
     );
 
     if (!start) {
-      throw Error("Missing declaration check control");
+      throw new Error("Missing declaration check control");
     }
 
     start.click();
@@ -855,7 +861,7 @@ try {
   );
   assert.match(
     await workerPage.locator("#derived-output").innerText(),
-    /passed · r1/
+    /passed · r1/u
   );
   const expectedHistory = runDerivedChecks(history.exportWorkspace());
 
@@ -886,7 +892,7 @@ try {
     );
 
     if (!start) {
-      throw Error("Missing declaration check control");
+      throw new Error("Missing declaration check control");
     }
 
     start.click();
@@ -896,18 +902,18 @@ try {
     );
 
     if (!cancel) {
-      throw Error("Missing declaration check cancellation control");
+      throw new Error("Missing declaration check cancellation control");
     }
 
     cancel.click();
   });
   assert.match(
     await workerPage.locator("#derived-output").innerText(),
-    /unknown.*r1/s
+    /unknown.*r1/su
   );
   assert.match(
     await workerPage.locator("#derived-output").innerText(),
-    /Cancelled/
+    /Cancelled/u
   );
   assert.ok((await workerPage.evaluate(() => window.workerTerminations)) >= 2);
 
@@ -921,7 +927,7 @@ try {
       );
 
       if (!start) {
-        throw Error("Missing declaration check control");
+        throw new Error("Missing declaration check control");
       }
 
       start.click();
@@ -929,13 +935,16 @@ try {
     await workerPage.waitForFunction(() => window.heldResults.length === 1);
     assert.match(
       await workerPage.locator("#derived-output").innerText(),
-      /Running/
+      /Running/u
     );
   };
 
   const deliverStale = async () => {
     await workerPage.evaluate(() => {
-      window.heldResults.splice(0).forEach((deliver) => deliver());
+      for (const deliver of window.heldResults.splice(0)) {
+        deliver();
+      }
+
       window.holdWorkerResults = false;
     });
     assert.equal(
@@ -983,7 +992,7 @@ try {
     );
 
     if (!cancel || !oldDelivery) {
-      throw Error("Missing cancellation control or held result");
+      throw new Error("Missing cancellation control or held result");
     }
 
     cancel.click();
@@ -994,7 +1003,7 @@ try {
     );
 
     if (!start) {
-      throw Error("Missing declaration check control");
+      throw new Error("Missing declaration check control");
     }
 
     start.click();
@@ -1002,14 +1011,14 @@ try {
   });
   assert.match(
     await workerPage.locator("#derived-output").innerText(),
-    /Running/
+    /Running/u
   );
   await workerPage.waitForFunction(
     () => document.querySelectorAll("#derived-output tbody tr").length === 280
   );
   const budget = createApp();
 
-  for (let i = 0; i < 500; i++) {
+  for (let i = 0; i < 500; i += 1) {
     assert.equal(budget.setRule("watch", { notify: [] }).ok, true);
   }
 
@@ -1029,7 +1038,7 @@ try {
   );
   assert.match(
     await workerPage.locator("#derived-output").innerText(),
-    /unknown · r501/
+    /unknown · r501/u
   );
   await workerPage.close();
 
@@ -1040,15 +1049,15 @@ try {
     "message-error",
     "time-budget",
   ]) {
-    const failure = await page.context().newPage();
-    await failure.addInitScript((mode) => {
-      if (mode === "unavailable") {
+    const innerFailure = await page.context().newPage();
+    await innerFailure.addInitScript((innerMode) => {
+      if (innerMode === "unavailable") {
         Object.defineProperty(window, "Worker", { value: undefined });
-      } else if (mode === "startup-error") {
+      } else if (innerMode === "startup-error") {
         Object.defineProperty(window, "Worker", {
           value: class {
             constructor() {
-              throw Error("Worker resource allocation denied");
+              throw new Error("Worker resource allocation denied");
             }
           },
         });
@@ -1058,7 +1067,7 @@ try {
             onerror?: (event: ErrorEvent) => void;
             onmessageerror?: (event: MessageEvent) => void;
             postMessage() {
-              if (mode === "runtime-error") {
+              if (innerMode === "runtime-error") {
                 queueMicrotask(() =>
                   this.onerror?.(
                     new ErrorEvent("error", {
@@ -1068,7 +1077,7 @@ try {
                 );
               }
 
-              if (mode === "message-error") {
+              if (innerMode === "message-error") {
                 queueMicrotask(() =>
                   this.onmessageerror?.(new MessageEvent("messageerror"))
                 );
@@ -1078,37 +1087,40 @@ try {
           },
         });
 
-        if (mode === "time-budget") {
+        if (innerMode === "time-budget") {
           const nativeTimeout: Window["setTimeout"] = window.setTimeout;
           Object.defineProperty(window, "setTimeout", {
             value: (callback: TimerHandler, ms?: number, ...args: unknown[]) =>
-              nativeTimeout(callback, ms === 60000 ? 0 : ms, ...args),
+              nativeTimeout(callback, ms === 60_000 ? 0 : ms, ...args),
           });
         }
       }
     }, mode);
-    await failure.goto(
+    await innerFailure.goto(
       pathToFileURL(resolve("artifacts/live-issues.html")).href
     );
-    await failure.locator(".lab > summary").click();
-    await failure.locator("#run-derived-checks").click();
-    await failure.waitForFunction(() =>
+    await innerFailure.locator(".lab > summary").click();
+    await innerFailure.locator("#run-derived-checks").click();
+    await innerFailure.waitForFunction(() =>
       document.querySelector("#derived-output")?.textContent.includes("unknown")
     );
     assert.match(
-      await failure.locator("#derived-output").innerText(),
-      /Worker/
+      await innerFailure.locator("#derived-output").innerText(),
+      /Worker/u
     );
 
     if (mode === "time-budget") {
       assert.match(
-        await failure.locator("#derived-output").innerText(),
-        /time budget exceeded/
+        await innerFailure.locator("#derived-output").innerText(),
+        /time budget exceeded/u
       );
     }
 
-    assert.equal(await failure.locator("#derived-output tbody tr").count(), 1);
-    await failure.close();
+    assert.equal(
+      await innerFailure.locator("#derived-output tbody tr").count(),
+      1
+    );
+    await innerFailure.close();
   }
 
   assert.deepEqual(

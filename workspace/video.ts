@@ -50,10 +50,10 @@ await page.addInitScript(() => {
         { duration: 650 }
       )
     );
-    const caption = document.createElement("div");
-    caption.id = "demo-caption";
-    caption.setAttribute("role", "status");
-    document.body.append(caption);
+    const innerCaption = document.createElement("div");
+    innerCaption.id = "demo-caption";
+    innerCaption.setAttribute("role", "status");
+    document.body.append(innerCaption);
   });
 });
 
@@ -65,12 +65,12 @@ const chapters: { second: number; text: string }[] = [];
 async function caption(text: string) {
   await page
     .locator("#demo-caption")
-    .evaluate((el, text) => (el.textContent = text), text);
+    .evaluate((el, innerText) => (el.textContent = innerText), text);
   chapters.push({ second: Math.round((Date.now() - started) / 1000), text });
 }
 
 async function pace() {
-  scene++;
+  scene += 1;
   const delay = scene * 5900 - (Date.now() - started);
 
   if (delay > 0) {
@@ -84,7 +84,7 @@ async function click(selector: string) {
   const box = await el.boundingBox();
 
   if (!box) {
-    throw Error(`No visible control: ${selector}`);
+    throw new Error(`No visible control: ${selector}`);
   }
 
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2, {
@@ -107,9 +107,11 @@ async function select(selector: string, value: string) {
 
 async function ready(profile: string) {
   await page.waitForFunction(
-    (profile) =>
+    (innerProfile) =>
       document.querySelector<HTMLElement>("#action-form")?.inert === false &&
-      document.querySelector("#revision")?.textContent?.startsWith(profile),
+      document
+        .querySelector("#revision")
+        ?.textContent?.startsWith(innerProfile),
     profile
   );
 }
@@ -334,7 +336,7 @@ try {
   await context.close();
 
   if (!video) {
-    throw Error("Missing video recording");
+    throw new Error("Missing video recording");
   }
 
   const source = await video.path();
@@ -358,11 +360,11 @@ try {
       "+faststart",
       output,
     ],
-    { encoding: "utf8" }
+    { encoding: "utf-8" }
   );
 
   if (conversion.status !== 0) {
-    throw Error(conversion.stderr);
+    throw new Error(conversion.stderr);
   }
 
   const probe = spawnSync(
@@ -376,7 +378,7 @@ try {
       "default=noprint_wrappers=1:nokey=1",
       output,
     ],
-    { encoding: "utf8" }
+    { encoding: "utf-8" }
   );
 
   const duration = Number(probe.stdout.trim());

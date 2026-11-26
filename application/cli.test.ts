@@ -54,7 +54,7 @@ test("spawned CLI advances the same durable HTTP backend; grant/resume, duplicat
       await copyFile(`leave/${name}.domain`, `${sources}/${name}.domain`);
     }
 
-    const domain = await readFile(`${sources}/time-away.domain`, "utf8");
+    const domain = await readFile(`${sources}/time-away.domain`, "utf-8");
     await writeFile(
       `${sources}/time-away.domain`,
       domain.replace("employee.balance - days", "employee.balance + days")
@@ -73,12 +73,12 @@ test("spawned CLI advances the same durable HTTP backend; grant/resume, duplicat
         "--view",
         `${sources}/cli.domain`,
       ]),
-      /domain differs from the backend/
+      /domain differs from the backend/u
     );
     assert.equal((await cli(server.url, "inbox")).length, 0);
     await assert.rejects(
       cli(server.url, "execute", "leave.request", "--args", args),
-      /explicit --actor/
+      /explicit --actor/u
     );
     assert.equal(
       (
@@ -152,7 +152,7 @@ test("spawned CLI advances the same durable HTTP backend; grant/resume, duplicat
       args
     );
     p = (await cli(server.url, "inbox", "--actor", "leo")).find(
-      (p: { status: string }) => p.status === "pending"
+      (pending2: { status: string }) => pending2.status === "pending"
     );
     await cli(
       server.url,
@@ -207,12 +207,15 @@ test("shared client fails closed on contract mismatch", async () => {
   let calls = 0;
 
   const client = createApplicationClient("http://127.0.0.1:1", {
-    fetch: async () =>
-      Response.json({ contractId: ++calls === 1 ? "a" : "b", contract }),
+    fetch: async () => {
+      calls += 1;
+
+      return Response.json({ contractId: calls === 1 ? "a" : "b", contract });
+    },
   });
 
   await client.contract();
-  await assert.rejects(client.snapshot(), /contract changed/);
+  await assert.rejects(client.snapshot(), /contract changed/u);
 });
 
 test("shared client rejects malformed contracts, snapshots and receipts at the transport boundary", async () => {
@@ -227,9 +230,9 @@ test("shared client rejects malformed contracts, snapshots and receipts at the t
     fetch: async () => Response.json(body),
   });
 
-  await assert.rejects(client.contract(), /Invalid application contract/);
+  await assert.rejects(client.contract(), /Invalid application contract/u);
   body = { contract };
-  await assert.rejects(client.contract(), /Invalid application contract/);
+  await assert.rejects(client.contract(), /Invalid application contract/u);
   body = { contractId: "c", contract };
   assert.deepEqual(await client.contract(), body);
   body = {
@@ -240,7 +243,7 @@ test("shared client rejects malformed contracts, snapshots and receipts at the t
     defaults: {},
     availability: {},
   };
-  await assert.rejects(client.snapshot(), /snapshotVersion/);
+  await assert.rejects(client.snapshot(), /snapshotVersion/u);
 
   const preview = {
     actor: "maya",
@@ -249,7 +252,7 @@ test("shared client rejects malformed contracts, snapshots and receipts at the t
   };
 
   body = { contractId: "c" };
-  await assert.rejects(client.preview(preview), /Invalid application receipt/);
+  await assert.rejects(client.preview(preview), /Invalid application receipt/u);
   body = {
     contractId: "c",
     status: "pending",
@@ -257,7 +260,7 @@ test("shared client rejects malformed contracts, snapshots and receipts at the t
       { policyId: "approval", approvers: [7], allowSelfApproval: false },
     ],
   };
-  await assert.rejects(client.preview(preview), /approvers/);
+  await assert.rejects(client.preview(preview), /approvers/u);
 });
 
 test("CLI rejects ambiguous arguments before connecting", async () => {
@@ -272,18 +275,18 @@ test("CLI rejects ambiguous arguments before connecting", async () => {
   assert.ok(output.every((line) => line.startsWith("Usage:")));
 
   for (const [argv, message] of [
-    [["list", "--not-an-option", "value"], /Unknown or missing option/],
-    [["list", "--url"], /Unknown or missing option/],
-    [["list", "--url", "--json"], /Unknown or missing option/],
+    [["list", "--not-an-option", "value"], /Unknown or missing option/u],
+    [["list", "--url"], /Unknown or missing option/u],
+    [["list", "--url", "--json"], /Unknown or missing option/u],
     [
       ["list", "--url", "http://localhost", "--url", "http://localhost"],
-      /Duplicate option/,
+      /Duplicate option/u,
     ],
-    [["list", "employee", "leave"], /Usage:/],
-    [["unknown"], /Usage:/],
-    [["execute", "--actor", "maya"], /requires an ID/],
-    [["inspect", "--submission-id", "one"], /applies only to execute/],
-    [["grant", "one", "--actor", "sam"], /requires --policy/],
+    [["list", "employee", "leave"], /Usage:/u],
+    [["unknown"], /Usage:/u],
+    [["execute", "--actor", "maya"], /requires an ID/u],
+    [["inspect", "--submission-id", "one"], /applies only to execute/u],
+    [["grant", "one", "--actor", "sam"], /requires --policy/u],
   ] satisfies [string[], RegExp][]) {
     await assert.rejects(run(...argv), message);
   }
@@ -306,26 +309,26 @@ test("CLI distinguishes an input rejection from an ambiguous write and reconcile
   await run("list");
   assert.match(
     present(output.pop()),
-    /leave\.request.*\n  arguments: start: string, end: string/
+    /leave\.request.*\n {2}arguments: start: string, end: string/u
   );
   await run("inspect");
   assert.equal(
     JSON.parse(present(output.pop())).format,
     "derived-application/v1"
   );
-  await assert.rejects(run("list", "missing"), /Unknown resource/);
-  await assert.rejects(run("inspect", "missing"), /Unknown action/);
+  await assert.rejects(run("list", "missing"), /Unknown resource/u);
+  await assert.rejects(run("inspect", "missing"), /Unknown action/u);
   await assert.rejects(
     run("list", "--view", "leave/time-away.domain"),
-    /must select a view module/
+    /must select a view module/u
   );
   await assert.rejects(
     run("preview", "missing", "--actor", "maya"),
-    /Use list or inspect/
+    /Use list or inspect/u
   );
   await assert.rejects(
     run("preview", "leave.request", "--actor", "maya", "--args", "[]"),
-    /--args must be a JSON object/
+    /--args must be a JSON object/u
   );
 
   const execute = (args?: object) =>
@@ -340,8 +343,8 @@ test("CLI distinguishes an input rejection from an ambiguous write and reconcile
     );
 
   await assert.rejects(execute(), (error) => {
-    assert.match(String(error), /Choose valid dates/);
-    assert.doesNotMatch(String(error), /with reconcile/);
+    assert.match(String(error), /Choose valid dates/u);
+    assert.doesNotMatch(String(error), /with reconcile/u);
 
     return true;
   });
@@ -350,15 +353,15 @@ test("CLI distinguishes an input rejection from an ambiguous write and reconcile
   await execute({ start: "2026-11-23", end: "2026-11-23" });
   assert.match(
     present(output.pop()),
-    /Status: committed\nSubmission: original\nRevision: 1/
+    /Status: committed\nSubmission: original\nRevision: 1/u
   );
   await assert.rejects(
     execute({ start: "2026-11-24", end: "2026-11-24" }),
-    /Check submission original with reconcile before retrying/
+    /Check submission original with reconcile before retrying/u
   );
   await run("reconcile", "original", "--actor", "maya");
   assert.match(
     present(output.pop()),
-    /Original submission outcome: Saved[\s\S]*Revision: 1/
+    /Original submission outcome: Saved[\s\S]*Revision: 1/u
   );
 });

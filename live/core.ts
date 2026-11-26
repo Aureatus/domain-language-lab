@@ -30,16 +30,20 @@ export interface LiveModel {
   actions: Record<string, Rule>;
 }
 
-type User = { id: string; name: string; role: string };
+interface User {
+  id: string;
+  name: string;
+  role: string;
+}
 
-type IssueComment = {
+interface IssueComment {
   id: string;
   author: string;
   body: string;
   createdAt: number;
-};
+}
 
-type Issue = {
+interface Issue {
   id: string;
   title: string;
   description: string;
@@ -50,20 +54,20 @@ type Issue = {
   watchers: string[];
   comments: IssueComment[];
   version: number;
-};
+}
 
 type IssueRelationships = Pick<
   Issue,
   "id" | "opener" | "assignee" | "watchers"
 >;
 
-type Recipient = {
+interface Recipient {
   recipient: string;
   reasons: string[];
   paths: { from: string; relationship: string; to: string }[];
-};
+}
 
-type LiveEvent = {
+interface LiveEvent {
   id: string;
   action: string;
   actorId: string;
@@ -80,25 +84,28 @@ type LiveEvent = {
     issueId: string;
     version: number;
   };
-};
+}
 
-type Notification = {
+interface Notification {
   id: string;
   eventId: string;
   issueId: string;
   recipient: string;
   action: string;
   reasons: string[];
-};
+}
 
-type LiveState = {
+interface LiveState {
   users: User[];
   issues: Issue[];
   events: LiveEvent[];
   notifications: Notification[];
-};
+}
 
-type Failure = { ok: false; reason: string };
+interface Failure {
+  ok: false;
+  reason: string;
+}
 
 type JournalEntry = { step: number; action: string; revision: number } & (
   | {
@@ -112,35 +119,36 @@ type JournalEntry = { step: number; action: string; revision: number } & (
   | { kind: "setRule"; patch: Record<string, unknown> }
 );
 
-type Workspace = {
+interface Workspace {
   format: string;
   seedVersion: number;
   journal: readonly JournalEntry[];
-};
+}
 
-type Capture = {
+interface Capture {
   state: LiveState;
   model: LiveModel;
   journal: readonly JournalEntry[];
   journalLength: number;
+  // oxlint-disable-next-line anti-slop/no-unknown-returns -- the caller-supplied clock is validated where it is read.
   clock: () => unknown;
   initialVersions: ReadonlyMap<string, number>;
-};
+}
 
 interface LiveRuntime {
   readonly state: LiveState;
   readonly model: LiveModel;
-  dispatch(
+  dispatch: (
     action: unknown,
     args: unknown,
     actorId: unknown
-  ): Failure | { ok: true; event: LiveEvent; value: Issue };
+  ) => Failure | { ok: true; event: LiveEvent; value: Issue };
   invokeTool: LiveRuntime["dispatch"];
-  explainAction(
+  explainAction: (
     action: unknown,
     args: unknown,
     actorId: unknown
-  ): {
+  ) => {
     available: boolean;
     category: string;
     reason: string;
@@ -149,28 +157,31 @@ interface LiveRuntime {
     missingRequirements: string[];
     scope: string;
   };
-  exportWorkspace(): Workspace;
-  restoreWorkspace(document: unknown): Failure | { ok: true };
-  previewWorkspace(
+  exportWorkspace: () => Workspace;
+  restoreWorkspace: (document: unknown) => Failure | { ok: true };
+  previewWorkspace: (
     stepCount: unknown
-  ): Failure | { ok: true; state: LiveState; model: LiveModel };
-  setRule(action: unknown, patch: unknown): Failure | { ok: true };
-  tools(): (Omit<Rule, "inputs"> & {
+  ) => Failure | { ok: true; state: LiveState; model: LiveModel };
+  setRule: (action: unknown, patch: unknown) => Failure | { ok: true };
+  tools: () => (Omit<Rule, "inputs"> & {
     name: string;
     description: string;
     revision: number;
     inputs: Rule["inputs"];
     parameters: Rule["inputs"];
   })[];
-  explain(eventId: unknown): LiveEvent | null;
-  check(): { name: string; ok: boolean }[];
+  explain: (eventId: unknown) => LiveEvent | null;
+  check: () => { name: string; ok: boolean }[];
 }
 
 const copy = <T>(value: T): T => JSON.parse(JSON.stringify(value));
 
 const freeze = <T>(value: T): T => {
   if (value && typeof value === "object") {
-    Object.values(value).forEach(freeze);
+    for (const item of Object.values(value)) {
+      freeze(item);
+    }
+
     Object.freeze(value);
   }
 
@@ -190,11 +201,11 @@ export function forkApp(
   const capture = object(runtime) ? runtimeInternals.get(runtime) : undefined;
 
   if (!capture) {
-    throw Error("Fork requires a trusted runtime");
+    throw new Error("Fork requires a trusted runtime");
   }
 
   if (!object(options) || Object.keys(options).some((key) => key !== "clock")) {
-    throw Error("Unknown fork option");
+    throw new Error("Unknown fork option");
   }
 
   // Default to the parent's clock contract, without sampling it during the fork.
@@ -203,8 +214,8 @@ export function forkApp(
   return createRuntime({ clock: options["clock"] ?? trusted.clock }, trusted);
 }
 
-const own = (object: object, key: PropertyKey) =>
-  Object.prototype.hasOwnProperty.call(object, key);
+const own = <T extends object>(object: T, key: PropertyKey) =>
+  Object.hasOwn(object, key);
 
 const record = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === "object";
@@ -240,8 +251,10 @@ function workspaceDocument(document: unknown): { journal: readonly unknown[] } {
   const ancestors = new Set<object>();
 
   function inspect(value: unknown, depth = 0) {
-    if (++nodes > 100_000 || depth > 20) {
-      throw Error("Workspace data is too complex");
+    nodes += 1;
+
+    if (nodes > 100_000 || depth > 20) {
+      throw new Error("Workspace data is too complex");
     }
 
     if (value === null || typeof value === "boolean") {
@@ -250,7 +263,7 @@ function workspaceDocument(document: unknown): { journal: readonly unknown[] } {
 
     if (typeof value === "string") {
       if (value.length > MAX_DOCUMENT_LENGTH) {
-        throw Error("Workspace document is too large");
+        throw new Error("Workspace document is too large");
       }
 
       return;
@@ -261,11 +274,11 @@ function workspaceDocument(document: unknown): { journal: readonly unknown[] } {
     }
 
     if (typeof value !== "object" || value === null) {
-      throw Error("Workspace must contain only finite JSON data");
+      throw new Error("Workspace must contain only finite JSON data");
     }
 
     if (ancestors.has(value)) {
-      throw Error("Workspace must not contain cycles");
+      throw new Error("Workspace must not contain cycles");
     }
 
     const array = Array.isArray(value);
@@ -274,11 +287,11 @@ function workspaceDocument(document: unknown): { journal: readonly unknown[] } {
       !array &&
       ![Object.prototype, null].includes(Object.getPrototypeOf(value))
     ) {
-      throw Error("Workspace must contain plain JSON objects");
+      throw new Error("Workspace must contain plain JSON objects");
     }
 
     if (array && value.length > MAX_STEPS * 20) {
-      throw Error("Workspace array is too large");
+      throw new Error("Workspace array is too large");
     }
 
     const keys = Reflect.ownKeys(value).filter(
@@ -290,7 +303,7 @@ function workspaceDocument(document: unknown): { journal: readonly unknown[] } {
       (keys.length !== value.length ||
         keys.some((key, index) => key !== String(index)))
     ) {
-      throw Error("Workspace arrays must be dense JSON arrays");
+      throw new Error("Workspace arrays must be dense JSON arrays");
     }
 
     ancestors.add(value);
@@ -303,7 +316,7 @@ function workspaceDocument(document: unknown): { journal: readonly unknown[] } {
         !descriptor?.enumerable ||
         !own(descriptor, "value")
       ) {
-        throw Error("Workspace must contain plain JSON properties");
+        throw new Error("Workspace must contain plain JSON properties");
       }
 
       inspect(descriptor.value, depth + 1);
@@ -315,28 +328,28 @@ function workspaceDocument(document: unknown): { journal: readonly unknown[] } {
   inspect(document);
 
   if (!exactKeys(document, ["format", "seedVersion", "journal"])) {
-    throw Error("Invalid workspace document schema");
+    throw new Error("Invalid workspace document schema");
   }
 
   if (document["format"] !== WORKSPACE_FORMAT) {
-    throw Error("Unsupported workspace format/version");
+    throw new Error("Unsupported workspace format/version");
   }
 
   if (document["seedVersion"] !== SEED_VERSION) {
-    throw Error("Unsupported workspace seed version");
+    throw new Error("Unsupported workspace seed version");
   }
 
   if (
     !Array.isArray(document["journal"]) ||
     document["journal"].length > MAX_STEPS
   ) {
-    throw Error("Invalid workspace journal or history limit exceeded");
+    throw new Error("Invalid workspace journal or history limit exceeded");
   }
 
   const encoded = JSON.stringify(document);
 
   if (encoded.length > MAX_DOCUMENT_LENGTH) {
-    throw Error("Workspace document is too large");
+    throw new Error("Workspace document is too large");
   }
 
   return JSON.parse(encoded);
@@ -461,14 +474,16 @@ function validate(
   value: unknown,
   state: LiveState,
   path?: string
+  // oxlint-disable-next-line anti-slop/no-unknown-returns -- returns the validated value, whose type depends on the schema.
 ): unknown;
 function validate(
   schema: FieldSchema & Partial<Omit<Rule["inputs"], "type">>,
   value: unknown,
   state: LiveState,
   path = "args"
+  // oxlint-disable-next-line anti-slop/no-unknown-returns -- returns the validated value, whose type depends on the schema.
 ): unknown {
-  const supported = [
+  const supported = new Set([
     "type",
     "properties",
     "required",
@@ -478,26 +493,26 @@ function validate(
     "enum",
     "default",
     "reference",
-  ];
+  ]);
 
   if (
     !object(schema) ||
-    Object.keys(schema).some((key) => !supported.includes(key))
+    Object.keys(schema).some((key) => !supported.has(key))
   ) {
-    throw Error(`Unsupported schema at ${path}`);
+    throw new Error(`Unsupported schema at ${path}`);
   }
 
   const types = Array.isArray(schema.type) ? schema.type : [schema.type];
 
   if (types.some((type) => !["object", "string", "null"].includes(type))) {
-    throw Error(`Unsupported schema type at ${path}`);
+    throw new Error(`Unsupported schema type at ${path}`);
   }
 
   const actual =
     value === null ? "null" : object(value) ? "object" : typeof value;
 
   if (!types.includes(actual)) {
-    throw Error(`${path} must be ${types.join(" or ")}`);
+    throw new Error(`${path} must be ${types.join(" or ")}`);
   }
 
   if (object(value)) {
@@ -507,18 +522,18 @@ function validate(
       !Array.isArray(schema.required) ||
       schema.additionalProperties !== false
     ) {
-      throw Error(`Unsupported object schema at ${path}`);
+      throw new Error(`Unsupported object schema at ${path}`);
     }
 
-    const properties = schema.properties;
+    const { properties } = schema;
 
     if (Object.keys(value).some((key) => !own(properties, key))) {
-      throw Error(`Unknown input at ${path}`);
+      throw new Error(`Unknown input at ${path}`);
     }
 
     for (const key of schema.required) {
       if (!own(value, key)) {
-        throw Error(`Missing ${path}.${key}`);
+        throw new Error(`Missing ${path}.${key}`);
       }
     }
 
@@ -537,25 +552,25 @@ function validate(
 
   if (typeof value === "string") {
     if (schema.minLength && value.trim().length < schema.minLength) {
-      throw Error(`${path} must not be blank`);
+      throw new Error(`${path} must not be blank`);
     }
 
     if (schema.maxLength && value.length > schema.maxLength) {
-      throw Error(`${path} is too long`);
+      throw new Error(`${path} is too long`);
     }
   }
 
   if (schema.enum && !schema.enum.some((choice) => choice === value)) {
-    throw Error(`Invalid ${path}`);
+    throw new Error(`Invalid ${path}`);
   }
 
   if (schema.reference && value !== null) {
     if (!["users", "issues"].includes(schema.reference)) {
-      throw Error(`Unsupported reference at ${path}`);
+      throw new Error(`Unsupported reference at ${path}`);
     }
 
     if (!state[schema.reference].some((item) => item.id === value)) {
-      throw Error(`Unknown ${schema.reference} ID: ${value}`);
+      throw new Error(`Unknown ${schema.reference} ID: ${value}`);
     }
   }
 
@@ -595,7 +610,7 @@ function route(issue: IssueRelationships, rule: Rule, actorId: string) {
 
 /**
  * Create an isolated synchronous application with seeded examples.
- * @param {{clock?: () => number, workspace?: object}} [options]
+ * @param {{clock?: () => number, workspace?: object}} [options] Optional clock and saved workspace.
  * @returns {object} Read-only state/model getters and dispatch, invokeTool, setRule,
  * tools, explain, explainAction and check methods. Commands return {ok:false,reason} on domain errors.
  */
@@ -611,15 +626,16 @@ function createRuntime(
     !object(options) ||
     Object.keys(options).some((key) => !["clock", "workspace"].includes(key))
   ) {
-    throw Error("Unknown application option");
+    throw new Error("Unknown application option");
   }
 
   const clockOption = options["clock"] ?? Date.now;
 
   if (typeof clockOption !== "function") {
-    throw Error("clock must be a function");
+    throw new TypeError("clock must be a function");
   }
 
+  // oxlint-disable-next-line anti-slop/no-unknown-returns -- the value is checked as a timestamp by every caller.
   const clock = (): unknown => clockOption();
   let state = trusted?.state ?? snapshot(initialState());
   let model: LiveModel = trusted?.model ?? snapshot(initialModel());
@@ -639,7 +655,7 @@ function createRuntime(
 
   function appendCandidate(entry: JournalEntry) {
     if (journal.length >= MAX_STEPS) {
-      throw Error("Workspace history limit exceeded");
+      throw new Error("Workspace history limit exceeded");
     }
 
     const frozen = snapshot(entry);
@@ -648,7 +664,7 @@ function createRuntime(
       journalLength + JSON.stringify(frozen).length + (journal.length ? 1 : 0);
 
     if (length > MAX_DOCUMENT_LENGTH) {
-      throw Error("Workspace document is too large");
+      throw new Error("Workspace document is too large");
     }
 
     return { journal: Object.freeze([...journal, frozen]), length };
@@ -670,14 +686,14 @@ function createRuntime(
     const capture = runtimeInternals.get(candidate);
 
     if (!capture) {
-      throw Error("Workspace replay runtime is unavailable");
+      throw new Error("Workspace replay runtime is unavailable");
     }
 
-    for (let index = 0; index < limit; index++) {
+    for (let index = 0; index < limit; index += 1) {
       const entry = validated.journal[index];
-      const dispatch = object(entry) && entry["kind"] === "dispatch";
+      const innerDispatch = object(entry) && entry["kind"] === "dispatch";
 
-      const keys = dispatch
+      const keys = innerDispatch
         ? [
             "step",
             "kind",
@@ -694,27 +710,27 @@ function createRuntime(
       if (
         !exactKeys(entry, keys) ||
         entry["step"] !== index + 1 ||
-        !(dispatch || entry["kind"] === "setRule")
+        !(innerDispatch || entry["kind"] === "setRule")
       ) {
-        throw Error(`Invalid journal step ${index + 1}`);
+        throw new Error(`Invalid journal step ${index + 1}`);
       }
 
       if (typeof entry["action"] !== "string") {
-        throw Error(`Invalid action at journal step ${index + 1}`);
+        throw new TypeError(`Invalid action at journal step ${index + 1}`);
       }
 
       recordedTime = entry["createdAt"];
 
-      const result = dispatch
+      const result = innerDispatch
         ? candidate.dispatch(entry["action"], entry["args"], entry["actorId"])
         : candidate.setRule(entry["action"], entry["patch"]);
 
       if (!result.ok) {
-        throw Error(`Journal step ${index + 1}: ${result.reason}`);
+        throw new Error(`Journal step ${index + 1}: ${result.reason}`);
       }
 
       if (!sameJSON(entry, capture().journal[index])) {
-        throw Error(`Inconsistent journal step ${index + 1}`);
+        throw new Error(`Inconsistent journal step ${index + 1}`);
       }
     }
 
@@ -727,10 +743,10 @@ function createRuntime(
     try {
       const restored = reconstruct(document);
       // All validation/replay/copying finishes before publishing any live replacement.
-      state = restored.state;
-      model = restored.model;
-      journal = restored.journal;
-      journalLength = restored.journalLength;
+      ({ state } = restored);
+      ({ model } = restored);
+      ({ journal } = restored);
+      ({ journalLength } = restored);
 
       return { ok: true as const };
     } catch (error) {
@@ -751,7 +767,7 @@ function createRuntime(
         stepCount < 0 ||
         stepCount > journal.length
       ) {
-        throw Error("Invalid workspace step count");
+        throw new Error("Invalid workspace step count");
       }
 
       const candidate = reconstruct(exportWorkspace(), stepCount);
@@ -781,20 +797,20 @@ function createRuntime(
           : undefined;
 
       if (!rule) {
-        throw Error(`Unknown action: ${action}`);
+        throw new Error(`Unknown action: ${action}`);
       }
 
       category = "actor";
       const actor = state.users.find((user) => user.id === actorId);
 
       if (!actor) {
-        throw Error(`Unknown actor: ${actorId}`);
+        throw new Error(`Unknown actor: ${actorId}`);
       }
 
       category = "policy";
 
       if (!rule.allowedRoles.includes(actor.role)) {
-        throw Error(`${rule.label} is not allowed for ${actor.role}`);
+        throw new Error(`${rule.label} is not allowed for ${actor.role}`);
       }
 
       category = "schema";
@@ -815,19 +831,19 @@ function createRuntime(
       category = "precondition";
 
       if (action !== "create" && !before) {
-        throw Error("Missing issue");
+        throw new Error("Missing issue");
       }
 
       if (action === "resolve" && before?.status !== "open") {
-        throw Error("Issue is already resolved");
+        throw new Error("Issue is already resolved");
       }
 
       if (action === "reopen" && before?.status !== "resolved") {
-        throw Error("Issue is already open");
+        throw new Error("Issue is already open");
       }
 
       if (action === "assign" && before?.assignee === values["assignee"]) {
-        throw Error("Assignee is unchanged");
+        throw new Error("Assignee is unchanged");
       }
 
       return { ok: true as const, rule, actor, values, before };
@@ -875,18 +891,18 @@ function createRuntime(
       const prepared = prepareAction(action, args, actorId);
 
       if (!prepared.ok) {
-        throw Error(prepared.reason);
+        throw new Error(prepared.reason);
       }
 
       const { rule, actor, values, before } = prepared;
       let issue = before ? copy(before) : null;
 
       if (typeof action !== "string") {
-        throw Error("Invalid action");
+        throw new TypeError("Invalid action");
       }
 
       if (action !== "create" && !issue) {
-        throw Error("Missing issue");
+        throw new Error("Missing issue");
       }
 
       const createdAt = clock();
@@ -896,7 +912,9 @@ function createRuntime(
         !Number.isFinite(createdAt) ||
         !Number.isFinite(new Date(createdAt).getTime())
       ) {
-        throw Error("clock must return a finite number within the Date range");
+        throw new TypeError(
+          "clock must return a finite number within the Date range"
+        );
       }
 
       const eventId = `e${state.events.length + 1}`;
@@ -912,7 +930,7 @@ function createRuntime(
             typeof description !== "string" ||
             typeof priority !== "string"
           ) {
-            throw Error("Invalid issue inputs");
+            throw new TypeError("Invalid issue inputs");
           }
 
           issue = {
@@ -931,10 +949,10 @@ function createRuntime(
         }
 
         case "assign": {
-          const assignee = values["assignee"];
+          const { assignee } = values;
 
           if (!issue || !(assignee === null || typeof assignee === "string")) {
-            throw Error("Invalid assignment");
+            throw new Error("Invalid assignment");
           }
 
           issue.assignee = assignee;
@@ -942,10 +960,10 @@ function createRuntime(
         }
 
         case "comment": {
-          const body = values["body"];
+          const { body } = values;
 
           if (!issue || typeof body !== "string") {
-            throw Error("Invalid comment");
+            throw new Error("Invalid comment");
           }
 
           issue.comments.push({
@@ -957,19 +975,23 @@ function createRuntime(
           break;
         }
 
-        case "resolve":
+        case "resolve": {
           if (issue) {
             issue.status = "resolved";
           }
 
           break;
-        case "reopen":
+        }
+
+        case "reopen": {
           if (issue) {
             issue.status = "open";
           }
 
           break;
-        case "watch":
+        }
+
+        case "watch": {
           if (issue) {
             issue.watchers = issue.watchers.includes(actor.id)
               ? issue.watchers.filter((id) => id !== actor.id)
@@ -977,12 +999,15 @@ function createRuntime(
           }
 
           break;
-        default:
-          throw Error(`Unsupported action implementation: ${action}`);
+        }
+
+        default: {
+          throw new Error(`Unsupported action implementation: ${action}`);
+        }
       }
 
       if (!issue) {
-        throw Error("Missing issue");
+        throw new Error("Missing issue");
       }
 
       const updated = issue;
@@ -1051,7 +1076,7 @@ function createRuntime(
       });
 
       if (encoded.length > MAX_STATE_LENGTH) {
-        throw Error("Workspace materialized state is too large");
+        throw new Error("Workspace materialized state is too large");
       }
 
       const next = freeze<LiveState>(JSON.parse(encoded));
@@ -1060,7 +1085,7 @@ function createRuntime(
       const storedIssue = next.issues.find((item) => item.id === updated.id);
 
       if (!storedEvent || !storedIssue) {
-        throw Error("Missing committed issue or event");
+        throw new Error("Missing committed issue or event");
       }
 
       const appended = appendCandidate({
@@ -1076,7 +1101,7 @@ function createRuntime(
       });
 
       state = next;
-      journal = appended.journal;
+      ({ journal } = appended);
       journalLength = appended.length;
 
       return { ok: true, event: storedEvent, value: storedIssue };
@@ -1092,7 +1117,7 @@ function createRuntime(
     const result = restoreWorkspace(options["workspace"]);
 
     if (!result.ok) {
-      throw Error(result.reason);
+      throw new Error(result.reason);
     }
   }
 
@@ -1137,7 +1162,7 @@ function createRuntime(
 
         if (
           !Array.isArray(values) ||
-          Array.from(values).some((value) => !allowed.includes(value)) ||
+          [...values].some((value) => !allowed.includes(value)) ||
           new Set(values).size !== values.length
         ) {
           return { ok: false as const, reason: `Invalid ${key}` };
@@ -1160,7 +1185,7 @@ function createRuntime(
         });
 
         model = next;
-        journal = appended.journal;
+        ({ journal } = appended);
         journalLength = appended.length;
 
         return { ok: true as const };

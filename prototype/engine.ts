@@ -17,7 +17,7 @@ function canonical(value: unknown): string {
 
   if (value !== null && typeof value === "object") {
     return `{${Object.entries(value)
-      .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+      .toSorted(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
       .map(([key, item]) => `${JSON.stringify(key)}:${canonical(item)}`)
       .join(",")}}`;
   }
@@ -28,26 +28,26 @@ function canonical(value: unknown): string {
 export const hash = (value: unknown): string =>
   createHash("sha256").update(canonical(value)).digest("hex");
 
-type Invocation = {
+interface Invocation {
   id: string;
   actor: Actor;
   summary: string;
   state: "pending" | "ready" | "completed";
   approval?: string;
-};
+}
 
-export type Event = {
+export interface Event {
   id: string;
   kind: string;
   source: string;
   parents: string[];
   details: Record<string, unknown>;
-};
+}
 
-export type Result = {
+export interface Result {
   status: "pending" | "ready" | "completed" | "rejected";
   reason?: string;
-};
+}
 
 export class Runtime {
   model: Model;
@@ -260,7 +260,7 @@ export class Runtime {
       })
     );
 
-    for (const recipient of [...recipients].sort()) {
+    for (const recipient of [...recipients].toSorted()) {
       const key = `${eventId}:${recipient}:${this.model.resolve.activity.channel}`;
 
       if (!this.deliveries.some((item) => item.key === key)) {

@@ -67,7 +67,7 @@ test("interaction-check CLI rejects an explicitly empty mutant name", () => {
       "--mutant",
       "",
     ],
-    { encoding: "utf8" }
+    { encoding: "utf-8" }
   );
 
   assert.equal(result.status, 1);
@@ -87,7 +87,7 @@ test("interaction-check CLI resolves defaults and writes a standalone counterexa
     spawnSync(
       process.execPath,
       ["application/check-interactions.ts", ...args],
-      { encoding: "utf8" }
+      { encoding: "utf-8" }
     );
 
   const missing = run(entry);
@@ -116,7 +116,7 @@ test("interaction-check CLI resolves defaults and writes a standalone counterexa
   assert.equal(failed.status, 1, failed.stderr);
 
   const summary = JSON.parse(failed.stdout);
-  const replay = JSON.parse(await readFile(trace, "utf8"));
+  const replay = JSON.parse(await readFile(trace, "utf-8"));
 
   assert.equal(summary.rule, "submission.no-fresh-submit-before-receipt");
   assert.equal(summary.trace, trace);
@@ -149,17 +149,17 @@ test("inspector reproduces the saved counterexample and rejects incompatible or 
       "--out",
       trace,
     ],
-    { encoding: "utf8" }
+    { encoding: "utf-8" }
   );
 
   assert.equal(checked.status, 1, checked.stderr);
-  const original = JSON.parse(await readFile(trace, "utf8"));
+  const original = JSON.parse(await readFile(trace, "utf-8"));
 
   const inspect = (...args: string[]) =>
     spawnSync(
       process.execPath,
       ["application/inspect-action.ts", entry, action, ...args],
-      { encoding: "utf8" }
+      { encoding: "utf-8" }
     );
 
   const replay = inspect("--replay", trace);

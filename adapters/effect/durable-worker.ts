@@ -17,7 +17,7 @@ import {
 const [path, mode, id = "worker"] = process.argv.slice(2);
 
 if (!path) {
-  throw Error("Missing durable worker database path");
+  throw new Error("Missing durable worker database path");
 }
 
 const runtime = makeDurableRuntime(issueModel);
@@ -41,7 +41,7 @@ try {
         action: "issue.resolve",
         args: { issueId: "i1" },
         actor: "maya",
-        clock: 1730000000000,
+        clock: 1_730_000_000_000,
       })
     );
   } else if (mode === "crash-before") {
@@ -58,7 +58,7 @@ try {
         action: "issue.resolve",
         args: { issueId: "i1" },
         actor: "maya",
-        clock: 1730000000000,
+        clock: 1_730_000_000_000,
       })
     );
     process.exit(0);

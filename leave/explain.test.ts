@@ -16,8 +16,8 @@ import { requestInvocation } from "./test-support.ts";
 
 test("multiline excerpts are exact contiguous authored source with complete declaration boundaries", () => {
   const lines = readFileSync(
-    new URL("./time-away.domain", import.meta.url),
-    "utf8"
+    new URL("time-away.domain", import.meta.url),
+    "utf-8"
   ).split("\n");
 
   const inv = requestInvocation({
@@ -45,7 +45,7 @@ test("multiline excerpts are exact contiguous authored source with complete decl
 
     if (d.id === "leave.create") {
       assert.ok(d.excerpt.split("\n").length >= 5);
-      assert.match(d.excerpt, /^\s*end$/m);
+      assert.match(d.excerpt, /^\s*end$/mu);
     }
   }
 });
@@ -73,9 +73,9 @@ test("diagnostic guards use interpreter semantics; evidence preserves actual out
     assert.deepEqual(e.outcome.events, observedEvents(result) ?? []);
     assert.deepEqual(
       e.checks.map((c) => c.value),
-      [false, days < 3, 3 <= days, days <= 5]
+      [false, days < 3, days >= 3, days <= 5]
     );
-    assert.match(e.method, /not a live/);
+    assert.match(e.method, /not a live/u);
     assert.equal(JSON.stringify(initialState), before);
 
     for (const c of e.checks) {
@@ -180,7 +180,7 @@ test("generic evidence HTTP is nonmutating on preview, local-only and matches re
     let r = await (await post("actions/preview", body)).json();
     assert.equal(r.evidence.outcome.status, "pending");
     assert.equal(r.evidence.outcome.events.length, 0);
-    let snapshot = await (await fetch(`${server.url}/api/snapshot`)).json();
+    const snapshot = await (await fetch(`${server.url}/api/snapshot`)).json();
     assert.equal(snapshot.pending.length, 0);
     r = await (await post("actions/execute", body)).json();
     assert.equal(r.status, "pending");

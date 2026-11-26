@@ -88,7 +88,7 @@ let derivedJob: {
 let derivedGeneration = 0;
 
 function stopDerived() {
-  derivedGeneration++;
+  derivedGeneration += 1;
 
   if (derivedJob) {
     derivedJob.worker.terminate();
@@ -133,15 +133,15 @@ function startDerived() {
   labOpen = true;
   const id = derivedGeneration;
 
-  const state = core.state;
-  const model = core.model;
+  const { state } = core;
+  const { model } = core;
 
   let worker: Worker | undefined;
   let url: string | undefined;
 
   try {
     if (typeof Worker !== "function") {
-      throw Error(
+      throw new TypeError(
         "Web Worker unavailable; checks were not run. No synchronous fallback."
       );
     }
@@ -183,9 +183,10 @@ function startDerived() {
               "Worker time budget exceeded (60 seconds); result unknown."
             )
           ),
-        60000
+        60_000
       ),
     };
+    // oxlint-disable-next-line unicorn/prefer-add-event-listener -- the browser test intercepts onmessage to hold worker results.
     worker.onmessage = ({ data }) => {
       if (data.id === id) {
         finish(
@@ -195,6 +196,7 @@ function startDerived() {
       }
     };
 
+    // oxlint-disable-next-line unicorn/prefer-add-event-listener -- browser-test Worker fakes implement only on* handlers.
     worker.onerror = (e) => {
       e.preventDefault();
       finish(
@@ -204,6 +206,7 @@ function startDerived() {
       );
     };
 
+    // oxlint-disable-next-line unicorn/prefer-add-event-listener -- browser-test Worker fakes implement only on* handlers.
     worker.onmessageerror = () =>
       finish(derivedUnknown("Worker result could not be decoded."));
     worker.postMessage({ id, workspace: core.exportWorkspace() });
@@ -229,7 +232,7 @@ function requiredElement<T extends Element>(
   const element = parent.querySelector(selector);
 
   if (!(element instanceof kind)) {
-    throw new Error(`Missing ${selector}`);
+    throw new TypeError(`Missing ${selector}`);
   }
 
   return element;
@@ -247,7 +250,7 @@ const escapes: Record<string, string> = {
 };
 
 const esc = (value: unknown) =>
-  String(value ?? "").replace(/[&<>"']/g, (c) => escapes[c] ?? c);
+  String(value ?? "").replaceAll(/[&<>"']/gu, (c) => escapes[c] ?? c);
 
 const user = (id: string | null | undefined) =>
   view.state.users.find((u) => u.id === id);
@@ -325,7 +328,7 @@ function fields(
   const schema = view.model.actions[action]?.inputs;
 
   if (!schema) {
-    throw Error(`Unknown action: ${action}`);
+    throw new Error(`Unknown action: ${action}`);
   }
 
   return Object.entries(schema.properties)
@@ -356,7 +359,7 @@ function fields(
         input = `<input name="${key}" value="${esc(values[key] || "")}" ${required} ${def.maxLength ? `maxlength="${def.maxLength}"` : ""}>`;
       }
 
-      return `<label>${esc(title)}${!required ? " <small>Optional</small>" : ""}${input}</label>`;
+      return `<label>${esc(title)}${required ? "" : " <small>Optional</small>"}${input}</label>`;
     })
     .join("");
 }
@@ -378,12 +381,11 @@ function renderDetail() {
 
   const events = view.state.events
     .filter((e) => e.issueId === i.id)
-    .slice()
-    .reverse();
+    .toReversed();
 
-  return `<div class="issue-top"><span class="mono muted">${esc(i.id)}</span><span class="badge">${esc(i.status)}</span><span class="end"></span>${["watch", i.status === "resolved" ? "reopen" : "resolve"].map((a) => `<span><button data-run="${a}" ${allowed(a) ? "" : "disabled"}>${a === "watch" && i.watchers.includes(actorId) ? "Unwatch" : esc(label(a))}</button>${!allowed(a) ? unavailableButton(a) : ""}</span>`).join("")}</div>
+  return `<div class="issue-top"><span class="mono muted">${esc(i.id)}</span><span class="badge">${esc(i.status)}</span><span class="end"></span>${["watch", i.status === "resolved" ? "reopen" : "resolve"].map((a) => `<span><button data-run="${a}" ${allowed(a) ? "" : "disabled"}>${a === "watch" && i.watchers.includes(actorId) ? "Unwatch" : esc(label(a))}</button>${allowed(a) ? "" : unavailableButton(a)}</span>`).join("")}</div>
     <h1>${esc(i.title)}</h1><p class="description">${esc(i.description || "No description yet.")}</p>
-    <div class="facts"><div class="fact"><small>Assignee</small><button data-editor="assign" ${allowed("assign") ? "" : "disabled"}>${esc(name(i.assignee))} ↗</button>${!allowed("assign") ? unavailableButton("assign") : ""}</div><div class="fact"><small>Opened by</small><span>${esc(name(i.opener))}</span></div><div class="fact"><small>Priority</small><span>${esc(i.priority)}</span></div><div class="fact"><small>Watching</small><span>${i.watchers.map(name).map(esc).join(", ") || "Nobody yet"}</span></div></div>
+    <div class="facts"><div class="fact"><small>Assignee</small><button data-editor="assign" ${allowed("assign") ? "" : "disabled"}>${esc(name(i.assignee))} ↗</button>${allowed("assign") ? "" : unavailableButton("assign")}</div><div class="fact"><small>Opened by</small><span>${esc(name(i.opener))}</span></div><div class="fact"><small>Priority</small><span>${esc(i.priority)}</span></div><div class="fact"><small>Watching</small><span>${i.watchers.map(name).map(esc).join(", ") || "Nobody yet"}</span></div></div>
     <div class="section-title"><h2>Conversation</h2><small>${i.comments.length} comments</small></div>
     ${i.comments.length ? i.comments.map((c) => `<article class="comment"><div class="comment-head"><strong>${esc(name(c.author))}</strong><small>${esc(c.id)}</small></div><p>${esc(c.body)}</p></article>`).join("") : '<p class="empty">Add context, a reproduction, or the next step.</p>'}
     ${previewStep === null ? actionForm("comment", { body: commentDrafts.get(draftKey()) || "" }, ["issueId"]) : '<p class="scope">Read-only history. Current availability explanations are disabled here. Return to live to act or continue your draft.</p>'}
@@ -504,16 +506,15 @@ function render() {
 
   const notices = view.state.notifications
     .filter((n) => n.recipient === actorId)
-    .slice()
-    .reverse();
+    .toReversed();
 
   root.innerHTML = `<header><strong>Relay<span style="color:#83a9e7"> /</span></strong><span class="divider"></span><small>Product engineering</small><label>Working as<select id="actor" aria-label="Working as">${view.state.users.map((u) => option(u.id, `${u.name} · ${u.role}`, actorId)).join("")}</select></label></header>
-    <main><div class="toolbar"><h1>Issues</h1><small>${view.state.issues.filter((i) => i.status === "open").length} open</small><span class="spacer"></span><button id="new-issue" class="primary" ${allowed("create") ? "" : "disabled"}>${esc(label("create"))}</button><button id="reset" ${previewStep !== null ? "disabled" : ""}>Reset</button></div>
+    <main><div class="toolbar"><h1>Issues</h1><small>${view.state.issues.filter((i) => i.status === "open").length} open</small><span class="spacer"></span><button id="new-issue" class="primary" ${allowed("create") ? "" : "disabled"}>${esc(label("create"))}</button><button id="reset" ${previewStep === null ? "" : "disabled"}>Reset</button></div>
     <p class="scope actor-note">Local-only actor simulation · not login, authentication, or shared access.</p>
     <div class="feedback ${failed ? "error" : ""}" role="status">${esc(feedback)}</div>
     <div class="workspace"><nav class="queue" aria-label="Issue queue"></nav><section class="detail" aria-label="Issue detail">${renderDetail()}</section>
-    <aside class="inbox" aria-label="Recipient inbox"><h2>${previewStep !== null ? "Historical inbox" : "Inbox"} <small>${notices.length}</small></h2><small>For ${esc(name(actorId))} · ${previewStep !== null ? "captured" : "live"} related updates</small><div class="notices">${notices.map((n) => `<article class="notice"><strong>${esc(view.state.issues.find((i) => i.id === n.issueId)?.title || n.issueId)}</strong><span>${esc(n.action)} · ${esc(n.issueId)}</span><br><small>Related through ${n.reasons.map(esc).join(" + ")}</small><br>${whyButton(n.eventId)}</article>`).join("") || '<p class="empty">Nothing for you yet.<br>Assignment, watching, and action rules determine what arrives here.</p>'}</div></aside></div>
-    ${previewStep !== null ? '<p class="scope lab">Development tools are unavailable in read-only preview.</p>' : renderLab()}</main>`;
+    <aside class="inbox" aria-label="Recipient inbox"><h2>${previewStep === null ? "Inbox" : "Historical inbox"} <small>${notices.length}</small></h2><small>For ${esc(name(actorId))} · ${previewStep === null ? "live" : "captured"} related updates</small><div class="notices">${notices.map((n) => `<article class="notice"><strong>${esc(view.state.issues.find((i) => i.id === n.issueId)?.title || n.issueId)}</strong><span>${esc(n.action)} · ${esc(n.issueId)}</span><br><small>Related through ${n.reasons.map(esc).join(" + ")}</small><br>${whyButton(n.eventId)}</article>`).join("") || '<p class="empty">Nothing for you yet.<br>Assignment, watching, and action rules determine what arrives here.</p>'}</div></aside></div>
+    ${previewStep === null ? renderLab() : '<p class="scope lab">Development tools are unavailable in read-only preview.</p>'}</main>`;
 
   if (previewStep === null) {
     requiredElement(".lab", HTMLDetailsElement, root).insertAdjacentHTML(
@@ -524,7 +525,7 @@ function render() {
 
   requiredElement(".toolbar", HTMLElement, root).insertAdjacentHTML(
     "afterend",
-    `<div class="local-controls"><p id="save-status" role="status">${esc(saveStatus)}</p><div class="workspace-actions"><button id="export-workspace">Export JSON</button><label class="import-label">Import JSON<input id="import-workspace" type="file" accept="application/json,.json" ${previewStep !== null ? "disabled" : ""}></label>${storageBlocked ? '<button id="export-original">Export unreadable saved document</button>' : ""}</div><details id="history" ${historyOpen ? "open" : ""}><summary>Workspace history · ${core.exportWorkspace().journal.length} steps</summary><div class="history-controls"><label>Preview step<input id="history-step" type="number" min="0" max="${core.exportWorkspace().journal.length}" value="${previewStep ?? core.exportWorkspace().journal.length}"></label><button id="preview">View read-only</button><button id="return-live" ${previewStep === null ? "disabled" : ""}>Return to live</button></div><p class="scope">Local command reconstruction, not external delivery evidence.</p></details>${previewStep !== null ? `<p class="preview-banner" role="status">Read-only preview · step ${previewStep}. Live changes and drafts are untouched.</p>` : ""}</div>`
+    `<div class="local-controls"><p id="save-status" role="status">${esc(saveStatus)}</p><div class="workspace-actions"><button id="export-workspace">Export JSON</button><label class="import-label">Import JSON<input id="import-workspace" type="file" accept="application/json,.json" ${previewStep === null ? "" : "disabled"}></label>${storageBlocked ? '<button id="export-original">Export unreadable saved document</button>' : ""}</div><details id="history" ${historyOpen ? "open" : ""}><summary>Workspace history · ${core.exportWorkspace().journal.length} steps</summary><div class="history-controls"><label>Preview step<input id="history-step" type="number" min="0" max="${core.exportWorkspace().journal.length}" value="${previewStep ?? core.exportWorkspace().journal.length}"></label><button id="preview">View read-only</button><button id="return-live" ${previewStep === null ? "disabled" : ""}>Return to live</button></div><p class="scope">Local command reconstruction, not external delivery evidence.</p></details>${previewStep === null ? "" : `<p class="preview-banner" role="status">Read-only preview · step ${previewStep}. Live changes and drafts are untouched.</p>`}</div>`
   );
   const queue = requiredElement(".queue", HTMLElement, root);
 
@@ -546,9 +547,12 @@ function render() {
   }
 
   bind();
-  root
-    .querySelectorAll<HTMLFormElement>("form[data-action]")
-    .forEach(updateFormAvailability);
+
+  for (const item of root.querySelectorAll<HTMLFormElement>(
+    "form[data-action]"
+  )) {
+    updateFormAvailability(item);
+  }
 
   if (previewStep === null) {
     updateToolAvailability();
@@ -561,11 +565,13 @@ function render() {
     );
   }
 
-  root
-    .querySelectorAll<HTMLButtonElement>("[data-unavailable]")
-    .forEach(
-      (b) => (b.onclick = () => showUnavailable(b.dataset["unavailable"]))
+  for (const b of root.querySelectorAll<HTMLButtonElement>(
+    "[data-unavailable]"
+  )) {
+    b.addEventListener("click", () =>
+      showUnavailable(b.dataset["unavailable"])
     );
+  }
 
   const target =
     (focusId && root.querySelector<HTMLElement>(`#${focusId}`)) ||
@@ -632,13 +638,15 @@ function showEditor(action: string | undefined) {
   }
 
   modal.innerHTML = `<div class="dialog-head"><h2 id="modal-title">${esc(label(action))}</h2><button data-close aria-label="Close dialog">×</button></div>${actionForm(action, action === "assign" ? { assignee: issue()?.assignee } : {}, action === "create" ? [] : ["issueId"])}`;
-  requiredElement("[data-close]", HTMLButtonElement, modal).onclick = () =>
-    modal.close();
+  requiredElement("[data-close]", HTMLButtonElement, modal).addEventListener(
+    "click",
+    () => modal.close()
+  );
   const form = requiredElement("form", HTMLFormElement, modal);
-  form.oninput = () => updateFormAvailability(form);
-  form.onchange = () => updateFormAvailability(form);
+  form.addEventListener("input", () => updateFormAvailability(form));
+  form.addEventListener("change", () => updateFormAvailability(form));
   updateFormAvailability(form);
-  form.onsubmit = (e) => {
+  form.addEventListener("submit", (e) => {
     e.preventDefault();
     const result = commit(action, formArgs(form));
 
@@ -657,17 +665,19 @@ function showEditor(action: string | undefined) {
     }
 
     render();
-  };
+  });
 
   modal.showModal();
 }
 
 function showWhy(eventId: string | undefined) {
-  const e = view.state.events.find((e) => e.id === eventId);
+  const e = view.state.events.find((event) => event.id === eventId);
   const data = previewStep === null ? core.explain(eventId) : e;
   modal.innerHTML = `<div class="dialog-head"><h2 id="modal-title">Why this update?</h2><button data-close aria-label="Close dialog">×</button></div><div class="why-flow"><p><strong>${esc(name(e?.actorId))}</strong> invoked <strong>${esc(e?.action)}</strong> on ${esc(e?.issueId)}.</p><p>Captured declaration <strong>r${esc(e?.revision)}</strong> — not today's rule.</p><p>The captured policy allowed <strong>${esc(e?.actor?.role)}</strong>. Changed: ${e?.changes?.map((c) => esc(c.field)).join(", ") || "none"}.</p></div><h3>Who received it, and through which relationship?</h3>${e?.recipients?.length ? e.recipients.map((r) => `<div class="notice"><strong>${esc(name(r.recipient))}</strong><span class="mono">${esc(e.issueId)} → ${r.reasons.map(esc).join(" + ")} → ${esc(r.recipient)}</span></div>`).join("") : '<p class="empty">No recipients matched the captured routing rule.</p>'}<p class="scope">The actor is excluded; overlapping paths produce one inbox item per recipient. These are event-time relationships, not a recalculation using today’s rule.</p><details><summary>Stored event JSON</summary><pre id="why-data">${esc(JSON.stringify(data, null, 2))}</pre></details><p class="scope">Historical local execution record. No external delivery or authentication is asserted.</p>`;
-  requiredElement("[data-close]", HTMLButtonElement, modal).onclick = () =>
-    modal.close();
+  requiredElement("[data-close]", HTMLButtonElement, modal).addEventListener(
+    "click",
+    () => modal.close()
+  );
   modal.showModal();
 }
 
@@ -682,8 +692,10 @@ function showUnavailable(action: string | undefined) {
   );
 
   modal.innerHTML = `<div class="dialog-head"><h2 id="modal-title">Why unavailable · ${esc(label(action))}</h2><button data-close aria-label="Close dialog">×</button></div>${availabilityDetails(e)}<p class="scope">Current pre-execution query · not a historical event or an execution guarantee.</p>`;
-  requiredElement("[data-close]", HTMLButtonElement, modal).onclick = () =>
-    modal.close();
+  requiredElement("[data-close]", HTMLButtonElement, modal).addEventListener(
+    "click",
+    () => modal.close()
+  );
   modal.showModal();
 }
 
@@ -714,63 +726,77 @@ function updateToolAvailability() {
 
 function bind() {
   const actor = requiredElement("#actor", HTMLSelectElement, root);
-  actor.onchange = () => {
+  actor.addEventListener("change", () => {
     actorId = actor.value;
     feedback = `Working as ${name(actorId)}. Actions and inbox updated.`;
     failed = false;
     render();
-  };
+  });
 
-  requiredElement("#new-issue", HTMLButtonElement, root).onclick = () =>
-    showEditor("create");
-  requiredElement("#reset", HTMLButtonElement, root).onclick = () => {
-    if (previewStep !== null) {
-      return;
+  requiredElement("#new-issue", HTMLButtonElement, root).addEventListener(
+    "click",
+    () => showEditor("create")
+  );
+  requiredElement("#reset", HTMLButtonElement, root).addEventListener(
+    "click",
+    () => {
+      if (previewStep !== null) {
+        return;
+      }
+
+      modal.innerHTML =
+        '<div class="dialog-head"><h2 id="modal-title">Reset local workspace?</h2><button data-close aria-label="Close dialog">×</button></div><p class="scope">Replace the saved document and current workspace with the two seeded issues. Export first to keep a copy. Unsent drafts will also be cleared.</p><button id="confirm-reset">Clear persisted workspace and reset</button>';
+      requiredElement(
+        "[data-close]",
+        HTMLButtonElement,
+        modal
+      ).addEventListener("click", () => modal.close());
+      // oxlint-disable-next-line unicorn/prefer-add-event-listener -- the browser test captures this handler to replay a stale reset.
+      requiredElement("#confirm-reset", HTMLButtonElement, modal).onclick =
+        () => {
+          if (previewStep !== null) {
+            return;
+          }
+
+          const result = core.restoreWorkspace(createApp().exportWorkspace());
+
+          if (!result.ok) {
+            return;
+          }
+
+          storageBlocked = false;
+          savedRaw = null;
+          commentDrafts.clear();
+          toolDrafts.clear();
+          ruleDrafts.clear();
+          invalidateChecks();
+          selected = core.state.issues[0]?.id;
+          search = "";
+          unresolved = false;
+          assigned = false;
+          checkOutput = null;
+          toolOutput = "";
+          persist();
+          feedback = "Workspace explicitly reset to seed.";
+          failed = false;
+          modal.close();
+          render();
+        };
+
+      modal.showModal();
     }
+  );
 
-    modal.innerHTML =
-      '<div class="dialog-head"><h2 id="modal-title">Reset local workspace?</h2><button data-close aria-label="Close dialog">×</button></div><p class="scope">Replace the saved document and current workspace with the two seeded issues. Export first to keep a copy. Unsent drafts will also be cleared.</p><button id="confirm-reset">Clear persisted workspace and reset</button>';
-    requiredElement("[data-close]", HTMLButtonElement, modal).onclick = () =>
-      modal.close();
-    requiredElement("#confirm-reset", HTMLButtonElement, modal).onclick =
-      () => {
-        if (previewStep !== null) {
-          return;
-        }
-
-        const result = core.restoreWorkspace(createApp().exportWorkspace());
-
-        if (!result.ok) {
-          return;
-        }
-
-        storageBlocked = false;
-        savedRaw = null;
-        commentDrafts.clear();
-        toolDrafts.clear();
-        ruleDrafts.clear();
-        invalidateChecks();
-        selected = core.state.issues[0]?.id;
-        search = "";
-        unresolved = false;
-        assigned = false;
-        checkOutput = null;
-        toolOutput = "";
-        persist();
-        feedback = "Workspace explicitly reset to seed.";
-        failed = false;
-        modal.close();
-        render();
-      };
-
-    modal.showModal();
-  };
-
-  requiredElement("#export-workspace", HTMLButtonElement, root).onclick = () =>
+  requiredElement(
+    "#export-workspace",
+    HTMLButtonElement,
+    root
+  ).addEventListener("click", () =>
     download(
       encodeJsonPretty(core.exportWorkspace(), LiveWorkspaceDocumentSchema),
       "relay-workspace.json"
-    );
+    )
+  );
   root.querySelector("#export-original")?.addEventListener("click", () => {
     if (savedRaw !== null) {
       download(savedRaw, "relay-unreadable-workspace.json");
@@ -783,7 +809,7 @@ function bind() {
     root
   );
 
-  importInput.onchange = async () => {
+  importInput.addEventListener("change", async () => {
     const file = importInput.files?.[0];
 
     if (previewStep !== null || !file) {
@@ -820,59 +846,66 @@ function bind() {
     }
 
     render();
-  };
+  });
 
   const history = requiredElement("#history", HTMLDetailsElement, root);
-  history.ontoggle = () => {
+  history.addEventListener("toggle", () => {
     historyOpen = history.open;
-  };
+  });
 
-  requiredElement("#preview", HTMLButtonElement, root).onclick = () => {
-    const n = Number(
-      requiredElement("#history-step", HTMLInputElement, root).value
-    );
+  requiredElement("#preview", HTMLButtonElement, root).addEventListener(
+    "click",
+    () => {
+      const n = Number(
+        requiredElement("#history-step", HTMLInputElement, root).value
+      );
 
-    const result = core.previewWorkspace(n);
+      const result = core.previewWorkspace(n);
 
-    if (!result.ok) {
-      feedback = result.reason;
-      failed = true;
+      if (!result.ok) {
+        feedback = result.reason;
+        failed = true;
+        render();
+
+        return;
+      }
+
+      if (previewStep === null) {
+        liveSelected = selected;
+      }
+
+      view = result;
+      previewStep = n;
+      historyOpen = true;
+      invalidateChecks();
+
+      if (!issue()) {
+        selected = view.state.issues[0]?.id;
+      }
+
+      feedback =
+        "History preview is read-only. Return to live to make changes.";
+      failed = false;
       render();
-
-      return;
     }
+  );
 
-    if (previewStep === null) {
-      liveSelected = selected;
+  requiredElement("#return-live", HTMLButtonElement, root).addEventListener(
+    "click",
+    () => {
+      view = core;
+      previewStep = null;
+      selected = liveSelected;
+      feedback = "Returned to live workspace.";
+      render();
     }
-
-    view = result;
-    previewStep = n;
-    historyOpen = true;
-    invalidateChecks();
-
-    if (!issue()) {
-      selected = view.state.issues[0]?.id;
-    }
-
-    feedback = "History preview is read-only. Return to live to make changes.";
-    failed = false;
-    render();
-  };
-
-  requiredElement("#return-live", HTMLButtonElement, root).onclick = () => {
-    view = core;
-    previewStep = null;
-    selected = liveSelected;
-    feedback = "Returned to live workspace.";
-    render();
-  };
+  );
 
   const searchInput = requiredElement("#issue-search", HTMLInputElement, root);
-  searchInput.oninput = () => {
+  searchInput.addEventListener("input", () => {
     search = searchInput.value;
     render();
-  };
+  });
 
   const unresolvedInput = requiredElement(
     "#unresolved",
@@ -880,74 +913,84 @@ function bind() {
     root
   );
 
-  unresolvedInput.onchange = () => {
+  unresolvedInput.addEventListener("change", () => {
     unresolved = unresolvedInput.checked;
     render();
-  };
+  });
 
   const assignedInput = requiredElement("#assigned", HTMLInputElement, root);
-  assignedInput.onchange = () => {
+  assignedInput.addEventListener("change", () => {
     assigned = assignedInput.checked;
     render();
-  };
+  });
 
-  requiredElement(".queue", HTMLElement, root).onkeydown = (e) => {
-    if (
-      !(e.target instanceof HTMLButtonElement) ||
-      !e.target.matches("[data-issue]") ||
-      !["ArrowDown", "ArrowUp", "Home", "End"].includes(e.key)
-    ) {
-      return;
+  requiredElement(".queue", HTMLElement, root).addEventListener(
+    "keydown",
+    (e) => {
+      if (
+        !(e.target instanceof HTMLButtonElement) ||
+        !e.target.matches("[data-issue]") ||
+        !["ArrowDown", "ArrowUp", "Home", "End"].includes(e.key)
+      ) {
+        return;
+      }
+
+      e.preventDefault();
+
+      const rows = [
+        ...root.querySelectorAll<HTMLButtonElement>("[data-issue]"),
+      ];
+
+      const index = rows.indexOf(e.target);
+
+      const next =
+        e.key === "Home"
+          ? 0
+          : e.key === "End"
+            ? rows.length - 1
+            : Math.max(
+                0,
+                Math.min(
+                  rows.length - 1,
+                  index + (e.key === "ArrowDown" ? 1 : -1)
+                )
+              );
+
+      rows[next]?.focus();
     }
-
-    e.preventDefault();
-    const rows = [...root.querySelectorAll<HTMLButtonElement>("[data-issue]")];
-    const index = rows.indexOf(e.target);
-
-    const next =
-      e.key === "Home"
-        ? 0
-        : e.key === "End"
-          ? rows.length - 1
-          : Math.max(
-              0,
-              Math.min(
-                rows.length - 1,
-                index + (e.key === "ArrowDown" ? 1 : -1)
-              )
-            );
-
-    rows[next]?.focus();
-  };
-
-  root.querySelectorAll<HTMLButtonElement>("[data-issue]").forEach(
-    (b) =>
-      (b.onclick = () => {
-        selected = b.dataset["issue"];
-        render();
-      })
   );
-  root
-    .querySelectorAll<HTMLButtonElement>("[data-editor]")
-    .forEach((b) => (b.onclick = () => showEditor(b.dataset["editor"])));
-  root.querySelectorAll<HTMLButtonElement>("[data-run]").forEach(
-    (b) =>
-      (b.onclick = () => {
-        commit(b.dataset["run"], { issueId: selected });
-        render();
-      })
-  );
-  root
-    .querySelectorAll<HTMLButtonElement>("[data-why]")
-    .forEach((b) => (b.onclick = () => showWhy(b.dataset["why"])));
-  root.querySelectorAll<HTMLFormElement>("form[data-action]").forEach((f) => {
+
+  for (const b of root.querySelectorAll<HTMLButtonElement>("[data-issue]")) {
+    b.addEventListener("click", () => {
+      selected = b.dataset["issue"];
+      render();
+    });
+  }
+
+  for (const b of root.querySelectorAll<HTMLButtonElement>("[data-editor]")) {
+    b.addEventListener("click", () => showEditor(b.dataset["editor"]));
+  }
+
+  for (const b of root.querySelectorAll<HTMLButtonElement>("[data-run]")) {
+    // oxlint-disable-next-line unicorn/prefer-add-event-listener -- the browser test captures this handler to replay a stale click.
+    b.onclick = () => {
+      commit(b.dataset["run"], { issueId: selected });
+      render();
+    };
+  }
+
+  for (const b of root.querySelectorAll<HTMLButtonElement>("[data-why]")) {
+    b.addEventListener("click", () => showWhy(b.dataset["why"]));
+  }
+
+  for (const f of root.querySelectorAll<HTMLFormElement>("form[data-action]")) {
     f.addEventListener("input", () => updateFormAvailability(f));
     f.addEventListener("change", () => updateFormAvailability(f));
     const body = f.querySelector<HTMLTextAreaElement>("textarea[name=body]");
     body?.addEventListener("input", () =>
       commentDrafts.set(draftKey(), body.value)
     );
-    f.onsubmit = (e) => {
+    f.addEventListener("submit", (e) => {
       e.preventDefault();
 
       const result = commit(f.dataset["action"], {
@@ -960,19 +1003,19 @@ function bind() {
       }
 
       render();
-    };
-  });
+    });
+  }
 
   if (previewStep !== null) {
     return;
   }
 
   const lab = requiredElement(".lab", HTMLDetailsElement, root);
-  lab.ontoggle = () => {
+  lab.addEventListener("toggle", () => {
     labOpen = lab.open;
-  };
+  });
 
-  root.querySelectorAll<HTMLFormElement>("[data-rule]").forEach((f) => {
+  for (const f of root.querySelectorAll<HTMLFormElement>("[data-rule]")) {
     const patch = () => {
       const data = new FormData(f);
 
@@ -982,15 +1025,15 @@ function bind() {
       };
     };
 
-    f.onchange = () => {
+    f.addEventListener("change", () => {
       ruleDrafts.set(f.dataset["rule"], patch());
       requiredElement(".rule-impact", HTMLElement, f).innerHTML = ruleImpact(
         f.dataset["rule"],
         patch()
       );
-    };
+    });
 
-    f.onsubmit = (e) => {
+    f.addEventListener("submit", (e) => {
       e.preventDefault();
 
       if (previewStep !== null) {
@@ -1011,52 +1054,62 @@ function bind() {
         : result.reason;
       labOpen = true;
       render();
-    };
-  });
+    });
+  }
+
   const toolArgs = requiredElement("#tool-args", HTMLTextAreaElement, root);
   const toolSelect = requiredElement("#tool-name", HTMLSelectElement, root);
-  toolArgs.oninput = () => {
+  toolArgs.addEventListener("input", () => {
     toolDrafts.set(toolName, toolArgs.value);
     updateToolAvailability();
-  };
+  });
 
-  toolSelect.onchange = () => {
+  toolSelect.addEventListener("change", () => {
     toolName = toolSelect.value;
     toolArgs.value =
       toolDrafts.get(toolName) ??
       JSON.stringify(defaultArgs(toolName), null, 2);
     updateToolAvailability();
-  };
+  });
 
-  requiredElement("#tool-form", HTMLFormElement, root).onsubmit = (e) => {
-    e.preventDefault();
+  requiredElement("#tool-form", HTMLFormElement, root).addEventListener(
+    "submit",
+    (e) => {
+      e.preventDefault();
 
-    try {
-      const args = decodeJsonValue(
-        requiredElement("#tool-args", HTMLTextAreaElement, root).value
-      );
+      try {
+        const args = decodeJsonValue(
+          requiredElement("#tool-args", HTMLTextAreaElement, root).value
+        );
 
-      toolOutput = JSON.stringify(commit(toolName, args), null, 2);
-    } catch (error) {
-      failed = true;
-      feedback = "Invalid JSON: " + errorMessage(error);
-      toolOutput = feedback;
+        toolOutput = JSON.stringify(commit(toolName, args), null, 2);
+      } catch (error) {
+        failed = true;
+        feedback = `Invalid JSON: ${errorMessage(error)}`;
+        toolOutput = feedback;
+      }
+
+      labOpen = true;
+      render();
     }
+  );
 
-    labOpen = true;
-    render();
-  };
-
-  requiredElement("#run-checks", HTMLButtonElement, root).onclick = () => {
-    checkOutput = core.check();
-    labOpen = true;
-    render();
-  };
+  requiredElement("#run-checks", HTMLButtonElement, root).addEventListener(
+    "click",
+    () => {
+      checkOutput = core.check();
+      labOpen = true;
+      render();
+    }
+  );
 
   requiredElement("#run-derived-checks", HTMLButtonElement, root).disabled =
     !!derivedJob;
-  requiredElement("#run-derived-checks", HTMLButtonElement, root).onclick =
-    startDerived;
+  requiredElement(
+    "#run-derived-checks",
+    HTMLButtonElement,
+    root
+  ).addEventListener("click", startDerived);
 
   if (derivedJob) {
     requiredElement(
@@ -1067,12 +1120,15 @@ function bind() {
       "afterend",
       '<button id="cancel-derived-checks">Cancel declaration checks</button>'
     );
-    requiredElement("#cancel-derived-checks", HTMLButtonElement, root).onclick =
-      () => {
-        stopDerived();
-        derivedOutput = derivedUnknown("Cancelled; no completed result.");
-        render();
-      };
+    requiredElement(
+      "#cancel-derived-checks",
+      HTMLButtonElement,
+      root
+    ).addEventListener("click", () => {
+      stopDerived();
+      derivedOutput = derivedUnknown("Cancelled; no completed result.");
+      render();
+    });
   }
 }
 
@@ -1091,11 +1147,11 @@ function download(text: string, filename: string) {
 render();
 
 // Inspectable for browser assertions, never an alternative execution path.
-type LiveWorkspace = {
+interface LiveWorkspace {
   core: typeof core;
   readonly selected: string | undefined;
   showWhy: typeof showWhy;
-};
+}
 
 declare global {
   interface Window {

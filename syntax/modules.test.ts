@@ -15,7 +15,7 @@ const flattened = loaded.modules
   .map((m) =>
     m.source
       .split("\n")
-      .filter((l) => !/^(module|import|use)\b/.test(l))
+      .filter((l) => !/^(module|import|use)\b/u.test(l))
       .join("\n")
   )
   .join("\n");
@@ -56,11 +56,11 @@ test("loading declarations preserve explicit scope and reject invalid or duplica
   for (const insert of [global, (row: string) => view(flattened, row)]) {
     assert.throws(
       () => parse(insert("loading spinner")),
-      /Expected loading mode/
+      /Expected loading mode/u
     );
     assert.throws(
       () => parse(insert("loading wait\n    loading icon")),
-      /Duplicate declaration 'loading'/
+      /Duplicate declaration 'loading'/u
     );
   }
 
@@ -74,7 +74,7 @@ test("loading declarations preserve explicit scope and reject invalid or duplica
         "loading",
         invalid
       );
-      assert.throws(() => deriveApplication(d), /Expected loading mode/);
+      assert.throws(() => deriveApplication(d), /Expected loading mode/u);
     }
   }
 });
@@ -104,7 +104,7 @@ test("three explicit views share the exact legacy domain/state; browser preserve
   );
 
   for (const span of Object.values(loaded.sourceMap)) {
-    const source = readFileSync(span.filename, "utf8");
+    const source = readFileSync(span.filename, "utf-8");
     assert.ok(span.start.offset >= 0 && span.end.offset <= source.length);
     assert.equal(
       source.slice(0, span.start.offset).split("\n").length,
@@ -113,7 +113,7 @@ test("three explicit views share the exact legacy domain/state; browser preserve
   }
 
   const html = moduleSourcePage("leave/browser.domain");
-  assert.equal((html.match(/<iframe /g) ?? []).length, 3);
+  assert.equal((html.match(/<iframe /gu) ?? []).length, 3);
 
   for (const m of loaded.modules) {
     assert.ok(html.includes(m.filename));
@@ -129,7 +129,7 @@ test("references lower lazily, fail closed, retain policy authorization and reco
           "employeeId string"
         )
       ),
-    /Unknown reference 'employee'/
+    /Unknown reference 'employee'/u
   );
   assert.throws(
     () =>
@@ -139,7 +139,7 @@ test("references lower lazily, fail closed, retain policy authorization and reco
           "employeeId reference missing as employee"
         )
       ),
-    /Unknown resource/
+    /Unknown resource/u
   );
   assert.throws(
     () =>
@@ -149,7 +149,7 @@ test("references lower lazily, fail closed, retain policy authorization and reco
           "leaveId reference employee as employee"
         )
       ),
-    /Ambiguous reference/
+    /Ambiguous reference/u
   );
   assert.throws(
     () =>
@@ -159,7 +159,7 @@ test("references lower lazily, fail closed, retain policy authorization and reco
           "  bind employee from employee key employeeId\n  preconditions"
         )
       ),
-    /Duplicate binding alias/
+    /Duplicate binding alias/u
   );
   assert.throws(
     () =>
@@ -169,7 +169,7 @@ test("references lower lazily, fail closed, retain policy authorization and reco
           "employeeId reference employee as settings"
         )
       ),
-    /Ambiguous reference 'settings'/
+    /Ambiguous reference 'settings'/u
   );
   assert.throws(
     () =>
@@ -179,7 +179,7 @@ test("references lower lazily, fail closed, retain policy authorization and reco
           "employeeId reference employee as employee\n    another reference employee as settings"
         )
       ),
-    /Ambiguous reference 'settings'/
+    /Ambiguous reference 'settings'/u
   );
   const d = deriveApplication(loaded.declaration);
 
@@ -277,33 +277,36 @@ test("real relative graph resolution rejects cycles, duplicate IDs/imports, miss
 
   put("a", 'module "a" view\nimport "./b.domain"\nuse "b"\n');
   put("b", 'module "b" domain\nimport "./a.domain"\ndomain "b"\n');
-  assert.throws(() => loadSource(`${dir}/a.domain`), /cycle/);
+  assert.throws(() => loadSource(`${dir}/a.domain`), /cycle/u);
   put("b", 'module "a" domain\ndomain "b"\n');
-  assert.throws(() => loadSource(`${dir}/a.domain`), /Duplicate module ID/);
+  assert.throws(() => loadSource(`${dir}/a.domain`), /Duplicate module ID/u);
   put("b", 'module "b" domain\ndomain "b"\n');
   put(
     "a",
     'module "a" view\nimport "./b.domain"\nimport "./b.domain"\nuse "b"\n'
   );
-  assert.throws(() => loadSource(`${dir}/a.domain`), /Duplicate import/);
+  assert.throws(() => loadSource(`${dir}/a.domain`), /Duplicate import/u);
   put("a", 'module "a" view\nimport "./b.domain"\nuse "missing"\n');
-  assert.throws(() => loadSource(`${dir}/a.domain`), /missing imported module/);
+  assert.throws(
+    () => loadSource(`${dir}/a.domain`),
+    /missing imported module/u
+  );
   put("data", 'module "data" data\nimport "./b.domain"\nuse "b"\n');
   put("a", 'module "a" view\nimport "./data.domain"\nuse "data"\n');
   assert.throws(
     () => loadSource(`${dir}/a.domain`),
-    /directly imported domain/
+    /directly imported domain/u
   );
   put("a", 'module "a" view\nimport "./absent.domain"\nuse "b"\n');
-  assert.throws(() => loadSource(`${dir}/a.domain`), /ENOENT/);
+  assert.throws(() => loadSource(`${dir}/a.domain`), /ENOENT/u);
   put("a", 'module "a" view\nimport "node:fs"\nuse "b"\n');
-  assert.throws(() => loadSource(`${dir}/a.domain`), /relative/);
+  assert.throws(() => loadSource(`${dir}/a.domain`), /relative/u);
   put(
     "a",
     'module "a" view\nimport "./b.domain"\nuse "b"\nresource injected\n field name string\nend\napplication\n title "Bad"\n actor a label "A"\nend\n'
   );
   assert.throws(
     () => loadSource(`${dir}/a.domain`),
-    /not allowed in a view module/
+    /not allowed in a view module/u
   );
 });

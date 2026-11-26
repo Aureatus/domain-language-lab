@@ -28,13 +28,15 @@ type SubmissionPhase =
   | "retryable"
   | "known";
 
-export type SubmissionState<R extends SubmissionReceipt = SubmissionReceipt> = {
+export interface SubmissionState<
+  R extends SubmissionReceipt = SubmissionReceipt,
+> {
   phase: SubmissionPhase;
   id?: string;
   body?: SubmissionBody;
   result?: R;
   message?: string;
-};
+}
 
 export type SubmissionEvent<R extends SubmissionReceipt = SubmissionReceipt> =
   | { type: "submit"; id: string; body: SubmissionBody }
@@ -43,21 +45,26 @@ export type SubmissionEvent<R extends SubmissionReceipt = SubmissionReceipt> =
   | { type: "lost" | "check" | "missing" | "retry" };
 
 export function submissionWireBody(
+  // oxlint-disable-next-line anti-slop/no-object-parameters -- any JSON request body is serialized as-is.
   body: object,
   contractId: string | undefined,
+  // oxlint-disable-next-line anti-slop/no-object-parameters -- the encoder receives the same opaque JSON body.
   encode: (value: object) => string = JSON.stringify
 ) {
   const json = encode({ ...body, expectedContractId: contractId });
   let bytes = 0;
 
   for (const c of json) {
+    // oxlint-disable-next-line unicorn/prefer-code-point -- for-of yields whole code points; length 2 marks an astral one.
     const n = c.charCodeAt(0);
     bytes += c.length === 2 ? 4 : n < 128 ? 1 : n < 2048 ? 2 : 3;
   }
 
-  if (bytes > 16384) {
+  if (bytes > 16_384) {
     throw Object.assign(
-      Error("Submission is too large. Shorten the inputs before submitting."),
+      new Error(
+        "Submission is too large. Shorten the inputs before submitting."
+      ),
       { notSubmitted: true }
     );
   }
@@ -90,20 +97,20 @@ export function submissionStep<R extends SubmissionReceipt>(
     !Object.hasOwn(allowed, state.phase) ||
     !allowed[state.phase].includes(event.type)
   ) {
-    throw Error(
+    throw new Error(
       `Invalid submission transition: ${state.phase} → ${event.type}`
     );
   }
 
   switch (event.type) {
-    case "submit":
+    case "submit": {
       if (
         !event.id ||
         !event.body?.actor ||
         !event.body.action ||
         !event.body.args
       ) {
-        throw Error("Missing submission identity or command.");
+        throw new Error("Missing submission identity or command.");
       }
 
       return {
@@ -111,23 +118,37 @@ export function submissionStep<R extends SubmissionReceipt>(
         id: event.id,
         body: JSON.parse(JSON.stringify(event.body)),
       };
-    case "lost":
+    }
+
+    case "lost": {
       return { ...state, phase: "unknown" };
-    case "invalid":
+    }
+
+    case "invalid": {
       return { phase: "editing", message: event.message };
-    case "check":
+    }
+
+    case "check": {
       return { ...state, phase: "checking" };
-    case "missing":
+    }
+
+    case "missing": {
       return { ...state, phase: "retryable" };
-    case "retry":
+    }
+
+    case "retry": {
       return { ...state, phase: "submitting" };
-    case "found":
+    }
+
+    case "found": {
       if (
         !["pending", "committed", "rejected"].includes(event.result?.status)
       ) {
-        throw Error("Invalid execution receipt.");
+        throw new Error("Invalid execution receipt.");
       }
 
       return { ...state, phase: "known", result: event.result };
+    }
+    // no default: the cases cover every event.type variant.
   }
 }

@@ -45,7 +45,7 @@ try {
       const dialog = document.querySelector("dialog");
 
       if (!dialog) {
-        throw Error("Recording dialog is missing");
+        throw new Error("Recording dialog is missing");
       }
 
       new MutationObserver(() => {
@@ -63,8 +63,8 @@ try {
           (pointer.style.transform = `translate(${e.clientX}px,${e.clientY}px)`)
       );
       document.addEventListener("pointerdown", (e) => {
-        pulse.style.left = e.clientX + "px";
-        pulse.style.top = e.clientY + "px";
+        pulse.style.left = `${e.clientX}px`;
+        pulse.style.top = `${e.clientY}px`;
         pulse.classList.remove("active");
         void pulse.offsetWidth;
         pulse.classList.add("active");
@@ -75,12 +75,13 @@ try {
   started = Date.now();
   let cursor = { x: 1050, y: 100 };
   await page.mouse.move(cursor.x, cursor.y);
-  const wait = (ms: number) => page.waitForTimeout(ms); // Deliberate editorial pacing within continuous recording.
+  // Deliberate editorial pacing within continuous recording.
+  const wait = (ms: number) => page.waitForTimeout(ms);
 
   const caption = (text: string) =>
     page
       .locator("#demo-caption")
-      .evaluate((el, text) => (el.textContent = text), text);
+      .evaluate((el, innerText) => (el.textContent = innerText), text);
 
   async function click(selector: string, text: string, hold = 900) {
     await caption(text);
@@ -89,12 +90,12 @@ try {
     const box = await target.boundingBox();
 
     if (!box) {
-      throw Error("Invisible " + selector);
+      throw new Error(`Invisible ${selector}`);
     }
 
     const end = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
 
-    for (let i = 1; i <= 22; i++) {
+    for (let i = 1; i <= 22; i += 1) {
       const t = i / 22;
       await page.mouse.move(
         cursor.x + (end.x - cursor.x) * t,
@@ -241,7 +242,7 @@ try {
   await page
     .locator("#derived-output tbody tr")
     .first()
-    .waitFor({ timeout: 60000 });
+    .waitFor({ timeout: 60_000 });
   assert.ok((await page.locator("#derived-output tbody tr").count()) > 0);
   await page.locator("#derived-output").scrollIntoViewIfNeeded();
   await wait(1800);
@@ -269,7 +270,7 @@ try {
   await page.reload();
   await page.locator("#save-status").waitFor();
   await installOverlays();
-  assert.match(await page.locator("#save-status").innerText(), /Recovered/);
+  assert.match(await page.locator("#save-status").innerText(), /Recovered/u);
   assert.equal(
     await page.evaluate(() =>
       JSON.stringify({
@@ -308,7 +309,7 @@ try {
     "Return to the saved live workspace; history never rewrote it.",
     1500
   );
-  const remaining = 64000 - (Date.now() - started);
+  const remaining = 64_000 - (Date.now() - started);
 
   if (remaining > 0) {
     await caption(
@@ -337,7 +338,7 @@ try {
 }
 
 if (!video) {
-  throw Error("Browser video was not recorded");
+  throw new Error("Browser video was not recorded");
 }
 
 const source = await video.path();
@@ -361,11 +362,11 @@ const result = spawnSync(
     "+faststart",
     output,
   ],
-  { encoding: "utf8" }
+  { encoding: "utf-8" }
 );
 
 if (result.status !== 0) {
-  throw Error(result.stderr);
+  throw new Error(result.stderr);
 }
 
 console.log(`Created ${output} from ${source}`);

@@ -71,7 +71,7 @@ export const encodeCanonicalJson = (value: unknown): string => {
 
   if (value && typeof value === "object") {
     return `{${Object.entries(value)
-      .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+      .toSorted(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
       .map(([k, v]) => `${encodeStringJsonSync(k)}:${encodeCanonicalJson(v)}`)
       .join(",")}}`;
   }
@@ -88,7 +88,7 @@ const BoundedIdentity = Schema.String.pipe(
 export const SimulationIdentity = Schema.String.pipe(
   Schema.check(
     Schema.isMaxLength(1000),
-    Schema.isPattern(/^[A-Za-z][A-Za-z0-9_.:-]*$/),
+    Schema.isPattern(/^[A-Za-z][A-Za-z0-9_.:-]*$/u),
     Schema.makeFilter((v) => !["constructor", "prototype"].includes(v), {
       message: "Forbidden simulation identity.",
     })
@@ -641,4 +641,5 @@ export const InventoryReplaySchema = openObject({
   final: Schema.JsonObject,
 });
 
-export { Schema };
+// oxlint-disable-next-line oxc/no-barrel-file -- callers share this adapter's Effect Schema instance.
+export * as Schema from "effect/Schema";

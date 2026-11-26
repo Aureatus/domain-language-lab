@@ -10,8 +10,8 @@ import { Worker } from "node:worker_threads";
 import { fixture } from "./fixture.ts";
 import { createApplicationServer } from "./server.ts";
 
-const actor = "nora";
 const action = "supply.take";
+const actor = "nora";
 
 const args = {
   cabinetKey: "tools",
@@ -61,7 +61,7 @@ async function setup(t: TestContext) {
 test("HTTP command validation cannot publish an update or change the durable snapshot", async (t) => {
   await assert.rejects(
     createApplicationServer(fixture),
-    /storage directory required/
+    /storage directory required/u
   );
 
   const {
@@ -69,33 +69,33 @@ test("HTTP command validation cannot publish an update or change the durable sna
   } = await setup(t);
 
   const snapshot = async () =>
-    await (await fetch(url + "/api/snapshot")).json();
+    await (await fetch(`${url}/api/snapshot`)).json();
 
   const before = await snapshot();
 
   for (const [init, status, message] of [
-    [{ method: "POST", body: "{}" }, 415, /Expected JSON/],
+    [{ method: "POST", body: "{}" }, 415, /Expected JSON/u],
     [
       {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: "x".repeat(17000),
+        body: "x".repeat(17_000),
       },
       413,
-      /Request too large/,
+      /Request too large/u,
     ],
     [
       { method: "POST", headers: { origin: "http://localhost:2" } },
       403,
-      /Cross-origin/,
+      /Cross-origin/u,
     ],
     [
       { method: "POST", headers: { "sec-fetch-site": "cross-site" } },
       403,
-      /Cross-site/,
+      /Cross-site/u,
     ],
   ] satisfies [RequestInit, number, RegExp][]) {
-    const response = await fetch(url + "/api/actions/execute", init);
+    const response = await fetch(`${url}/api/actions/execute`, init);
     assert.equal(response.status, status);
     assert.match((await response.json()).error, message);
   }
@@ -107,7 +107,7 @@ test("HTTP command validation cannot publish an update or change the durable sna
     400
   );
 
-  assert.match(invalid.error, /Unsupported or missing configuration members/);
+  assert.match(invalid.error, /Unsupported or missing configuration members/u);
 
   const absent = await post(
     url,
@@ -116,7 +116,7 @@ test("HTTP command validation cannot publish an update or change the durable sna
     404
   );
 
-  assert.match(absent.error, /Request not found/);
+  assert.match(absent.error, /Request not found/u);
   assert.deepEqual(await snapshot(), before);
 });
 
@@ -135,23 +135,26 @@ test("application serves the built assets and ends its event stream on idempoten
     assert.ok((await response.text()).length > 0);
   }
 
-  const response = await fetch(server.url + "/api/events");
+  const response = await fetch(`${server.url}/api/events`);
   assert.equal(response.status, 200);
   assert.match(
     response.headers.get("content-type") ?? "",
-    /^text\/event-stream/
+    /^text\/event-stream/u
   );
   const reader = response.body?.getReader();
   assert.ok(reader);
   const first = await reader.read();
-  assert.match(new TextDecoder().decode(first.value), /^event: update\ndata: /);
+  assert.match(
+    new TextDecoder().decode(first.value),
+    /^event: update\ndata: /u
+  );
   await server.close();
   await server.close();
 
-  const ended = await reader.read().then(
-    (result) => result.done,
-    () => true
-  );
+  const ended = await reader
+    .read()
+    .then((result) => result.done)
+    .catch(() => true);
 
   assert.equal(ended, true);
 });
@@ -304,8 +307,8 @@ test("independent SQLite connections race a stable submission; only one invocati
   // Separate event loops so the synchronous SQLite writers can actually contend.
   const code = `
     import {parentPort,workerData} from 'node:worker_threads';
-    import {createApplicationServer} from ${JSON.stringify(new URL("./server.ts", import.meta.url).href)};
-    import {fixture} from ${JSON.stringify(new URL("./fixture.ts", import.meta.url).href)};
+    import {createApplicationServer} from ${JSON.stringify(new URL("server.ts", import.meta.url).href)};
+    import {fixture} from ${JSON.stringify(new URL("fixture.ts", import.meta.url).href)};
     const server=await createApplicationServer(fixture,{directory:workerData});
     parentPort.postMessage(server.url);
     parentPort.once('message',async()=>{await server.close();parentPort.close();});

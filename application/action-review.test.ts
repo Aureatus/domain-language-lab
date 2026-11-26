@@ -16,8 +16,8 @@ import { buildInvocation, deriveApplication } from "./derive.ts";
 import { fixture } from "./fixture.ts";
 
 test("new inbox evidence cannot unlock a captured submission; original receipt remains historical after completion", async () => {
-  const actor = "nora";
   const action = "supply.take";
+  const actor = "nora";
 
   const fold = actionReview(deriveApplication(fixture).contract, actor, action);
   const steps: ReturnType<typeof fold>[] = [];
@@ -71,7 +71,7 @@ test("inspector records and replays a durable rejection when a reference has no 
 
   const source = await readFile(
     new URL("../syntax/fixtures/schema-groups.domain", import.meta.url),
-    "utf8"
+    "utf-8"
   );
 
   await writeFile(
@@ -79,7 +79,7 @@ test("inspector records and replays a durable rejection when a reference has no 
     source
       .replace("key string", "key reference supply as item")
       .replace("  bindings\n    item from supply key input.key\n  end\n", "")
-      .replace(/    record depot version 0\n[\s\S]*?    end\n/, "")
+      .replace(/ {4}record depot version 0\n[\s\S]*? {4}end\n/u, "")
   );
 
   const inspect = (...args: string[]) =>
@@ -93,7 +93,7 @@ test("inspector records and replays a durable rejection when a reference has no 
         "sam",
         ...args,
       ],
-      { encoding: "utf8" }
+      { encoding: "utf-8" }
     );
 
   const live = inspect("--record", record);
@@ -101,7 +101,7 @@ test("inspector records and replays a durable rejection when a reference has no 
 
   const trace = decodeJson(
     ActionEventsTraceSchema,
-    await readFile(record, "utf8")
+    await readFile(record, "utf-8")
   );
 
   assert.deepEqual(trace.args, { balance: 0, status: "ready" });
@@ -128,7 +128,7 @@ test("inspector records and replays a durable rejection when a reference has no 
   assert.equal(receipt["code"], "invalid");
   const replay = inspect("--replay", record);
   assert.equal(replay.status, 0, replay.stderr);
-  assert.match(replay.stdout, /rejected/);
+  assert.match(replay.stdout, /rejected/u);
 });
 
 test("approval examples are derived from visible inputs without changing the initial state", () => {
@@ -138,8 +138,8 @@ test("approval examples are derived from visible inputs without changing the ini
 
   const before = structuredClone(derived.initialState);
   const example = exampleArgs(derived, action, actor);
-  assert.match(example.selection, /found approval-required inputs/);
-  assert.deepEqual(Object.keys(example.args).sort(), ["end", "start"]);
+  assert.match(example.selection, /found approval-required inputs/u);
+  assert.deepEqual(Object.keys(example.args).toSorted(), ["end", "start"]);
 
   const invocation = buildInvocation(derived.contract, {
     action,
@@ -174,7 +174,7 @@ test("bounded search can find an approval controlled by a checkbox or enum", () 
       right: { op: "literal", value },
     };
     const selected = exampleArgs(deriveApplication(model), action, actor);
-    assert.match(selected.selection, /found approval-required inputs/);
+    assert.match(selected.selection, /found approval-required inputs/u);
     assert.deepEqual(selected.args, {
       cabinetKey: "tools",
       quantity: 1,
@@ -199,7 +199,7 @@ test("no candidate found is reported as a bounded search, not as unreachable app
     "nora"
   );
 
-  assert.match(selection, /bounded preview did not find an approval example/);
+  assert.match(selection, /bounded preview did not find an approval example/u);
   assert.deepEqual(args, {
     cabinetKey: "tools",
     quantity: 1,
@@ -234,7 +234,7 @@ test("walkthrough unlocks an invalid draft without creating an execution receipt
   const last = steps.at(-1);
 
   assert.ok(first && last?.message);
-  assert.match(last.message, /at least one weekday/);
+  assert.match(last.message, /at least one weekday/u);
   assert.equal(last.submission, "editing");
   assert.equal(last.controls.submit, true);
   assert.equal(last.receipt, null);
@@ -267,7 +267,7 @@ test("walkthrough stops at the original pending receipt when no approver is sele
   const last = steps.at(-1);
   assert.ok(last?.message && last.receipt);
   assert.equal(last.event, "blocked");
-  assert.match(last.message, /No selectable approver for supply\.review/);
+  assert.match(last.message, /No selectable approver for supply\.review/u);
   assert.equal(last.receipt.status, "pending");
 
   const pending = last.inbox[0];

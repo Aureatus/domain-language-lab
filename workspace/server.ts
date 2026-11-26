@@ -1,9 +1,8 @@
 import { mkdir, readFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import type { IncomingMessage, Server, ServerResponse } from "node:http";
-import { resolve, dirname } from "node:path";
+import { resolve } from "node:path";
 import type { DatabaseSync } from "node:sqlite";
-import { fileURLToPath } from "node:url";
 
 import {
   makeDurableRuntime,
@@ -44,8 +43,8 @@ import { deriveTools, deriveChange } from "./derive.ts";
 import type { WorkspaceChange } from "./derive.ts";
 
 const run = Effect.runSync;
-const here = dirname(fileURLToPath(import.meta.url));
-const workspaceBundle = browserBundle(new URL("./app.ts", import.meta.url));
+const here = import.meta.dirname;
+const workspaceBundle = browserBundle(new URL("app.ts", import.meta.url));
 
 const decodeWith = <S extends Schema.ConstraintDecoder<unknown>>(
   schema: S,
@@ -89,7 +88,7 @@ async function body<S extends Schema.ConstraintDecoder<unknown>>(
   for await (const chunk of req) {
     size += chunk.length;
 
-    if (size > 262144) {
+    if (size > 262_144) {
       throw failure(413, "JSON body exceeds 262144 bytes.");
     }
 
@@ -98,7 +97,7 @@ async function body<S extends Schema.ConstraintDecoder<unknown>>(
 
   try {
     return jsonSnapshot(
-      decodeStrictJson(schema, Buffer.concat(chunks).toString("utf8"))
+      decodeStrictJson(schema, Buffer.concat(chunks).toString("utf-8"))
     );
   } catch {
     throw failure(400, "Malformed or unbounded JSON.");
@@ -113,7 +112,7 @@ const sequence = (db: DatabaseSync) => {
     .get()?.["n"];
 
   if (typeof n !== "number") {
-    throw Error("Missing workspace sequence.");
+    throw new TypeError("Missing workspace sequence.");
   }
 
   return n;
@@ -121,18 +120,22 @@ const sequence = (db: DatabaseSync) => {
 
 type Profile = typeof WorkspaceExecuteRequestSchema.Type.profile;
 
-type Binding = {
+interface Binding {
   db: DatabaseSync;
   runtime: ReturnType<typeof makeDurableRuntime>;
-};
+}
 
-type Client = { profile: Profile; actor: string; res: ServerResponse };
+interface Client {
+  profile: Profile;
+  actor: string;
+  res: ServerResponse;
+}
 
 function portOf(server: Server) {
   const address = server.address();
 
   if (!address || typeof address === "string") {
-    throw Error("Expected TCP address for workspace.");
+    throw new Error("Expected TCP address for workspace.");
   }
 
   return address.port;
@@ -269,7 +272,9 @@ function snapshot(binding: Binding, profile: Profile) {
   } catch (error) {
     try {
       db.exec("ROLLBACK");
-    } catch {}
+    } catch {
+      // The original error is rethrown below; a failed rollback adds nothing.
+    }
 
     throw error;
   }
@@ -279,7 +284,7 @@ export async function createWorkspaceServer({
   directory = resolve("artifacts/workspace-data"),
   port = 0,
 } = {}) {
-  if (!Number.isInteger(port) || port < 0 || port > 65535) {
+  if (!Number.isInteger(port) || port < 0 || port > 65_535) {
     throw new TypeError("Invalid port.");
   }
 
@@ -303,8 +308,8 @@ export async function createWorkspaceServer({
     const listening = server;
 
     if (listening?.listening) {
-      await new Promise<void>((accept, reject) => {
-        listening.close((error) => (error ? reject(error) : accept()));
+      await new Promise<void>((resolveDone, reject) => {
+        listening.close((error) => (error ? reject(error) : resolveDone()));
         listening.closeIdleConnections();
         listening.closeAllConnections();
       });
@@ -315,8 +320,8 @@ export async function createWorkspaceServer({
     for (const { db } of bindings.values()) {
       try {
         run(closeDurableStore(db));
-      } catch (e) {
-        errors.push(e);
+      } catch (error) {
+        errors.push(error);
       }
     }
 
@@ -348,12 +353,13 @@ export async function createWorkspaceServer({
       bindings.set(profile, { runtime, db });
 
       if (
-        !db.prepare("SELECT value FROM durable_meta WHERE key=?").get("format")
+        db.prepare("SELECT value FROM durable_meta WHERE key=?").get("format")
       ) {
-        run(initializeDurableState(runtime, db, initial));
-      } else {
         run(durableState(runtime, db));
-      } // Fail startup on changed model/corrupt state; never reset it.
+      } else {
+        run(initializeDurableState(runtime, db, initial));
+        // Fail startup on changed model/corrupt state; never reset it.
+      }
     }
 
     const send = (client: Client, change: WorkspaceChange) => {
@@ -367,6 +373,7 @@ export async function createWorkspaceServer({
       }
     };
 
+    // oxlint-disable-next-line no-multi-assign -- the shared handle and this local alias name the same listener.
     const http = (server = createServer(async (req, res) => {
       const json = (status: number, value: unknown) => {
         res.writeHead(status, {
@@ -583,12 +590,16 @@ export async function createWorkspaceServer({
 
         try {
           content = await readFile(resolve(here, file[0]));
-        } catch (e) {
-          if (e instanceof Error && "code" in e && e.code === "ENOENT") {
+        } catch (error) {
+          if (
+            error instanceof Error &&
+            "code" in error &&
+            error.code === "ENOENT"
+          ) {
             throw failure(404, "Frontend file not available.");
           }
 
-          throw e;
+          throw error;
         }
 
         res.writeHead(200, {
@@ -608,9 +619,9 @@ export async function createWorkspaceServer({
       }
     }));
 
-    server.requestTimeout = 10000;
-    server.headersTimeout = 10000;
-    await new Promise<void>((accept, reject) => {
+    server.requestTimeout = 10_000;
+    server.headersTimeout = 10_000;
+    await new Promise<void>((resolveDone, reject) => {
       const onError = (error: Error) => {
         http.off("listening", onListen);
         reject(error);
@@ -618,7 +629,7 @@ export async function createWorkspaceServer({
 
       const onListen = () => {
         http.off("error", onError);
-        accept();
+        resolveDone();
       };
 
       http.once("error", onError);
@@ -638,10 +649,7 @@ export async function createWorkspaceServer({
   }
 }
 
-if (
-  process.argv[1] &&
-  resolve(process.argv[1]) === fileURLToPath(import.meta.url)
-) {
+if (process.argv[1] && resolve(process.argv[1]) === import.meta.filename) {
   const instance = await createWorkspaceServer({
     directory:
       process.env["WORKSPACE_DIR"] ?? resolve("artifacts/workspace-data"),

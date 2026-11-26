@@ -141,7 +141,7 @@ try {
       .click({ noWaitAfter: true });
     await page.locator('[data-loading="skeleton"]').waitFor();
     await page.locator('[data-loading="icon"]').waitFor();
-    assert.equal(await page.locator("#lists").innerText(), "");
+    assert.equal(await page.locator("#lists").textContent(), "");
     assert.equal(await page.locator("[data-record]").count(), 0);
     release();
     await page.locator('[data-record="maya"]').first().waitFor();

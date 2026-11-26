@@ -1,5 +1,4 @@
 import { resolve } from "node:path";
-import { fileURLToPath } from "node:url";
 
 import { encodeJsonPretty } from "../adapters/effect/json.ts";
 import { errorMessage } from "../errors.ts";
@@ -7,14 +6,14 @@ import { parseSource, SourceError } from "./frontend.ts";
 import { loadSource } from "./load.ts";
 
 // Advisories are deliberately narrower than validation. No safety/proof claims.
-type Diagnostic = {
+interface Diagnostic {
   filename: string;
   line: number;
   column: number;
   severity: "error" | "warning";
   ruleId: string;
   message: string;
-};
+}
 
 type Parsed = ReturnType<typeof parseSource>;
 
@@ -61,8 +60,8 @@ export function lintSource(
     return diagnostics;
   }
 
-  source.split("\n").forEach((line, i) => {
-    const trailing = /[\t ]+(?=\r?$)/.exec(line);
+  for (const [i, line] of source.split("\n").entries()) {
+    const trailing = /[\t ]+(?=\r?$)/u.exec(line);
 
     if (trailing) {
       report(
@@ -74,7 +73,7 @@ export function lintSource(
       );
     }
 
-    const indent = /^[ \t]*\t/.exec(line);
+    const indent = /^[ \t]*\t/u.exec(line);
 
     if (indent) {
       report(
@@ -85,7 +84,7 @@ export function lintSource(
         "Use spaces for indentation; tab display widths vary."
       );
     }
-  });
+  }
 
   for (const [id, action] of Object.entries(
     parsed.declaration.domain.actions
@@ -93,7 +92,7 @@ export function lintSource(
     const span = parsed.sourceMap[id];
 
     if (!span) {
-      throw Error(`Missing source span for '${id}'.`);
+      throw new Error(`Missing source span for '${id}'.`);
     }
 
     if (provided && span.filename !== filename) {
@@ -152,7 +151,7 @@ export function lintSource(
     }
   }
 
-  return diagnostics.sort(
+  return diagnostics.toSorted(
     (a, b) =>
       a.line - b.line || a.column - b.column || a.ruleId.localeCompare(b.ruleId)
   );
@@ -221,9 +220,6 @@ export function lintCLI(args: string[]) {
   return errors || (strict && warnings) ? 1 : 0;
 }
 
-if (
-  process.argv[1] &&
-  resolve(process.argv[1]) === fileURLToPath(import.meta.url)
-) {
+if (process.argv[1] && resolve(process.argv[1]) === import.meta.filename) {
   process.exitCode = lintCLI(process.argv.slice(2));
 }

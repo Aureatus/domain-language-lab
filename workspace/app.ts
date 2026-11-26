@@ -11,10 +11,11 @@ import { errorMessage } from "../errors.ts";
 import type { RecordSnapshot, Value } from "../semantic/v2/types.ts";
 
 function $(id: string) {
+  // oxlint-disable-next-line unicorn/prefer-query-selector -- ids are looked up verbatim, not as CSS selectors.
   const element = document.getElementById(id);
 
   if (!element) {
-    throw Error(`Missing workspace element: ${id}`);
+    throw new Error(`Missing workspace element: ${id}`);
   }
 
   return element;
@@ -24,7 +25,7 @@ function control<T extends HTMLElement>(id: string, kind: new () => T): T {
   const element = $(id);
 
   if (!(element instanceof kind)) {
-    throw Error(`Unexpected workspace control: ${id}`);
+    throw new TypeError(`Unexpected workspace control: ${id}`);
   }
 
   return element;
@@ -54,7 +55,7 @@ const entities: Record<string, string> = {
 };
 
 const esc = (value: unknown) =>
-  String(value ?? "").replace(/[&<>"']/g, (c) => entities[c] ?? c);
+  String(value ?? "").replaceAll(/[&<>"']/gu, (c) => entities[c] ?? c);
 
 const json = (value: unknown) => JSON.stringify(value, null, 2);
 
@@ -206,10 +207,10 @@ function preserve(container: HTMLElement, html: string) {
   }
 }
 
-function render(snapshot: Snapshot) {
-  const { state, profile, pending = [], events = [] } = snapshot;
+function render(innerSnapshot: Snapshot) {
+  const { state, profile, pending = [], events = [] } = innerSnapshot;
   $("revision").textContent =
-    `${profile} · revision ${state.revision} · sequence ${snapshot.sequence}`;
+    `${profile} · revision ${state.revision} · sequence ${innerSnapshot.sequence}`;
   $("profile-note").textContent =
     profile === "v1"
       ? "v1 updates preallocated owner-bound slots. Terminal slots are not new records and cannot be deleted."
@@ -240,7 +241,9 @@ function render(snapshot: Snapshot) {
   }
 
   $("scope").textContent =
-    typeof snapshot.scope === "string" ? snapshot.scope : json(snapshot.scope);
+    typeof innerSnapshot.scope === "string"
+      ? innerSnapshot.scope
+      : json(innerSnapshot.scope);
   const actor = actorInput.value;
 
   const inbox = pending.filter(
@@ -281,7 +284,7 @@ function render(snapshot: Snapshot) {
     $("history"),
     events.length
       ? [...events]
-          .reverse()
+          .toReversed()
           .map(
             (e) =>
               `<details data-detail="${esc(e.eventId)}"><summary>#${esc(e.sequence)} · ${esc(e.event.type ?? e.event.kind ?? e.eventId)}</summary><pre>${esc(json(e.event))}</pre></details>`
@@ -292,7 +295,8 @@ function render(snapshot: Snapshot) {
 }
 
 async function refresh(gen = generation) {
-  const serial = ++requestSerial;
+  requestSerial += 1;
+  const serial = requestSerial;
   const { profile, actor } = context();
 
   try {
@@ -303,7 +307,7 @@ async function refresh(gen = generation) {
     const value = decodeJsonObject(await response.text());
 
     if (!response.ok) {
-      throw Error(
+      throw new Error(
         typeof value["error"] === "string"
           ? value["error"]
           : `HTTP ${response.status}`
@@ -345,24 +349,25 @@ async function refresh(gen = generation) {
 
 function connect() {
   stream?.close();
-  const gen = ++generation;
+  generation += 1;
+  const gen = generation;
   snapshot = undefined;
   $("connection").textContent = "Connecting / resynchronizing…";
   $("action-form").inert = true;
   executeJSON.disabled = true;
   refresh(gen);
   stream = new EventSource(`/api/events?${new URLSearchParams(context())}`);
-  stream.onopen = () => {
+  stream.addEventListener("open", () => {
     if (gen === generation) {
       $("connection").textContent = "Connected · snapshot resync";
     }
-  };
+  });
 
-  stream.onerror = () => {
+  stream.addEventListener("error", () => {
     if (gen === generation) {
       $("connection").textContent = "Reconnecting · waiting for server";
     }
-  };
+  });
 
   stream.addEventListener("change", (event) => {
     if (gen !== generation) {
@@ -395,6 +400,7 @@ const help: Record<string, string> = {
 
 async function command(
   endpoint: "execute" | "approve" | "resume",
+  // oxlint-disable-next-line anti-slop/no-object-parameters -- command bodies are opaque JSON for the server to validate.
   body: object
 ) {
   if (busy) {
@@ -414,7 +420,7 @@ async function command(
     const value = decodeJsonObject(await response.text());
 
     if (!response.ok) {
-      throw Error(
+      throw new Error(
         typeof value["error"] === "string"
           ? value["error"]
           : `HTTP ${response.status}`
@@ -433,7 +439,7 @@ async function command(
       !("status" in outcome) ||
       typeof outcome["status"] !== "string"
     ) {
-      throw Error("Invalid workspace command result.");
+      throw new Error("Invalid workspace command result.");
     }
 
     const code =

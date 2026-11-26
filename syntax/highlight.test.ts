@@ -7,27 +7,27 @@ import { parseSource } from "./frontend.ts";
 import { highlight, sourcePage, sourceExcerptPage } from "./highlight.ts";
 
 test("highlighting preserves source and escapes HTML without interpreting string comments", () => {
-  const source =
+  const innerSource =
     'field end string\n# <comment>\nrequire days <= 3 id "a#<b>\\\""\n';
 
-  const rendered = highlight(source);
+  const rendered = highlight(innerSource);
   assert.ok(rendered.includes('class="comment"># &lt;comment&gt;'));
   assert.ok(rendered.includes('class="string">&quot;a#&lt;b&gt;'));
   assert.ok(!rendered.includes('class="keyword">end'));
 
   const decoded = rendered
-    .replace(/<[^>]*>/g, "")
-    .replace(
-      /&(amp|lt|gt|quot|#39);/g,
+    .replaceAll(/<[^>]*>/gu, "")
+    .replaceAll(
+      /&(amp|lt|gt|quot|#39);/gu,
       (_, v: string) =>
         new Map(
           Object.entries({ amp: "&", lt: "<", gt: ">", quot: '"', "#39": "'" })
         ).get(v) ?? v
     );
 
-  assert.equal(decoded, source);
+  assert.equal(decoded, innerSource);
   assert.ok(
-    sourcePage(source, "<file>").includes("<title>&lt;file&gt;</title>")
+    sourcePage(innerSource, "<file>").includes("<title>&lt;file&gt;</title>")
   );
 });
 
@@ -44,21 +44,21 @@ test("reader uses parser sections and excerpts retain actual line positions", ()
     source.split("\n").indexOf("application") + 1
   );
   const page = sourcePage(source, "<file>");
-  assert.match(page, /Whole file/);
-  assert.doesNotMatch(page, /<details|id="ids"|id="compact"/);
+  assert.match(page, /Whole file/u);
+  assert.doesNotMatch(page, /<details|id="ids"|id="compact"/u);
   assert.equal(
-    (page.match(/class="line"/g) ?? []).length,
+    (page.match(/class="line"/gu) ?? []).length,
     source.trimEnd().split("\n").length
   );
   const excerpt = sourceExcerptPage(source);
-  assert.match(excerpt, /settings.set-threshold/);
+  assert.match(excerpt, /settings.set-threshold/u);
   assert.throws(
     () => sourceExcerptPage(source, { ids: ["unknown"] }),
-    /Unknown excerpt/
+    /Unknown excerpt/u
   );
   const invalid = sourcePage('domain "x"\nunknown <tag>', "<title>");
-  assert.match(invalid, /class="diagnostic"/);
-  assert.match(invalid, /&lt;tag&gt;/);
+  assert.match(invalid, /class="diagnostic"/u);
+  assert.match(invalid, /&lt;tag&gt;/u);
   assert.ok(!invalid.includes("<tag>"));
 });
 
@@ -68,31 +68,31 @@ test("quiet ID display distinguishes annotation from an input named id or ID-lik
     { quietIds: true }
   );
 
-  assert.equal((html.match(/class="quiet-id"/g) ?? []).length, 2);
+  assert.equal((html.match(/class="quiet-id"/gu) ?? []).length, 2);
   assert.match(
     html,
-    /class="quiet-id"><span class="keyword">id<\/span> <span class="string">&quot;clause/
+    /class="quiet-id"><span class="keyword">id<\/span> <span class="string">&quot;clause/u
   );
   assert.match(
     html,
-    /class="quiet-id"><span class="keyword">id<\/span> unquoted<\/span>/
+    /class="quiet-id"><span class="keyword">id<\/span> unquoted<\/span>/u
   );
 });
 
 test("local editor manifest and TextMate regex grammar remain valid JSON and regex", () => {
-  const root = new URL("./editor/", import.meta.url);
+  const root = new URL("editor/", import.meta.url);
 
   const manifest = JSON.parse(
-    readFileSync(new URL("package.json", root), "utf8")
+    readFileSync(new URL("package.json", root), "utf-8")
   );
 
   assert.deepEqual(manifest.contributes.languages[0].extensions, [".domain"]);
   JSON.parse(
-    readFileSync(new URL("language-configuration.json", root), "utf8")
+    readFileSync(new URL("language-configuration.json", root), "utf-8")
   );
 
   const grammar = JSON.parse(
-    readFileSync(new URL("domain.tmLanguage.json", root), "utf8")
+    readFileSync(new URL("domain.tmLanguage.json", root), "utf-8")
   );
 
   const visit = (node: unknown) => {

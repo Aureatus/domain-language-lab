@@ -14,9 +14,9 @@ export async function start({ port = 0, model = declaration } = {}) {
       directory,
       port,
       staticFiles: {
-        "/": new URL("./index.html", import.meta.url),
-        "/app.js": new URL("./dist/app.js", import.meta.url),
-        "/style.css": new URL("./style.css", import.meta.url),
+        "/": new URL("index.html", import.meta.url),
+        "/app.js": new URL("dist/app.js", import.meta.url),
+        "/style.css": new URL("style.css", import.meta.url),
       },
     });
 

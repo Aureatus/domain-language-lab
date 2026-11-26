@@ -14,9 +14,9 @@ import { runtime, initialState, invocation } from "./model.ts";
 const run = Effect.runPromise;
 
 const stock = (state: State) => {
-  const available = present(present(state.records["stock"])["camera"]).values[
-    "available"
-  ];
+  const { available } = present(
+    present(state.records["stock"])["camera"]
+  ).values;
 
   assert.ok(typeof available === "number");
 
@@ -42,7 +42,7 @@ test("actual inventory reserve/cancel/expire match interpreter state and routed 
     assert.deepEqual(actual, expected);
 
     if (actual.status === "committed") {
-      state = actual.state;
+      ({ state } = actual);
       events.push(...actual.events);
     }
 
@@ -86,6 +86,7 @@ test("competing reservation fibers satisfy independent capacity oracle in either
     }
 
     const outcomes = await run(
+      // oxlint-disable-next-line unicorn/no-array-for-each -- Effect.forEach sequences effects; it is not Array#forEach.
       Effect.forEach(calls, (call) => execute(runtime, store, call), {
         concurrency: "unbounded",
       })
@@ -171,7 +172,7 @@ test("inventory publication failure rolls back state, events and invocation ledg
     run(
       execute(runtime, store, call, {
         beforePublish: () => {
-          throw Error("publication failure");
+          throw new Error("publication failure");
         },
       })
     )

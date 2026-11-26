@@ -6,13 +6,13 @@ const artifacts = new URL("../artifacts/", import.meta.url);
 const video = new URL("time-off-code-companion.mp4", artifacts).pathname;
 
 function run(command: string, args: string[]) {
-  const r = spawnSync(command, args, { encoding: "utf8" });
+  const r = spawnSync(command, args, { encoding: "utf-8" });
   assert.equal(r.status, 0, r.stderr);
 
   return r.stdout;
 }
 
-type Probe = {
+interface Probe {
   streams: {
     codec_type: string;
     width?: number;
@@ -21,7 +21,7 @@ type Probe = {
     r_frame_rate: string;
   }[];
   format: { duration: string };
-};
+}
 
 const probe: Probe = JSON.parse(
   run("ffprobe", [

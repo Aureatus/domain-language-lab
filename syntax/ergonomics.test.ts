@@ -11,8 +11,8 @@ import { lintSource } from "./lint.ts";
 import { loadSource } from "./load.ts";
 
 const text = readFileSync(
-  new URL("./fixtures/schema-groups.domain", import.meta.url),
-  "utf8"
+  new URL("fixtures/schema-groups.domain", import.meta.url),
+  "utf-8"
 );
 
 const parse = (s: string) => parseSource(s, { filename: "groups.domain" });
@@ -86,7 +86,7 @@ test("inline and expanded schemas are exact sugar; legacy singular forms remain 
 
   assert.deepEqual(parse(inline).declaration, parse(text).declaration);
 
-  const legacy = inline
+  const legacyText = inline
     .replace("  fields\n", "")
     .replace("    title string", "  field title string")
     .replace(
@@ -122,7 +122,7 @@ test("inline and expanded schemas are exact sugar; legacy singular forms remain 
       '  observe item through "supply.supervisor"'
     );
 
-  assert.deepEqual(parse(legacy).declaration, parse(text).declaration);
+  assert.deepEqual(parse(legacyText).declaration, parse(text).declaration);
 });
 
 for (const [label, from, to, pattern] of [
@@ -130,69 +130,69 @@ for (const [label, from, to, pattern] of [
     "unknown reuse",
     "like supply.balance",
     "like missing.balance",
-    /Unknown schema source/,
+    /Unknown schema source/u,
   ],
-  ["missing type", "      type integer\n", "", /requires type/],
+  ["missing type", "      type integer\n", "", /requires type/u],
   [
     "unsupported expanded type",
     "      type integer",
     "      type ids",
-    /Unsupported schema/,
+    /Unsupported schema/u,
   ],
   [
     "duplicate bound",
     "      min 0",
     "      min 0\n      min 1",
-    /Duplicate declaration/,
+    /Duplicate declaration/u,
   ],
-  ["inverted bounds", "      max 30", "      max 0\n", /Inverted bounds/],
+  ["inverted bounds", "      max 30", "      max 0\n", /Inverted bounds/u],
   [
     "wrong update type",
     "item.balance = balance",
     "item.balance = status",
-    /Update type mismatch/,
+    /Update type mismatch/u,
   ],
   [
     "unknown target",
     "item.balance = balance",
     "item.missing = balance",
-    /Unknown update target/,
+    /Unknown update target/u,
   ],
   [
     "business rule in policies",
     'allow when actor == item.manager id "supply.manager-only"',
     'require true id "not-a-policy"',
-    /Expected allow/,
+    /Expected allow/u,
   ],
   [
     "policy in changes",
     "    update",
     '    allow when true id "oops"',
-    /Expected update/,
+    /Expected update/u,
   ],
   [
     "input inside preconditions",
     '    require balance <= 30 id "supply.capacity"',
     "    input hidden string",
-    /Unknown expression/,
+    /Unknown expression/u,
   ],
   [
     "binding inside observations",
     '    item through "supply.supervisor"',
     '    bind other from supply key "depot" id "other"',
-    /Expected 'through'/,
+    /Expected 'through'/u,
   ],
   [
     "inherited schema source",
     "like supply.balance",
     "like supply.constructor",
-    /Unknown schema source/,
+    /Unknown schema source/u,
   ],
   [
     "derived binding collision",
     'id "supply.capacity"',
     'id "supply.adjust.item"',
-    /Duplicate semantic ID/,
+    /Duplicate semantic ID/u,
   ],
 ] satisfies [string, string, string, RegExp][]) {
   test(`group validation rejects ${label}`, () => {
@@ -227,9 +227,9 @@ test("grouped input lint locations and keyword-looking identifiers are contextua
     "fields\n  name string\n  end like supply.title\nend\n"
   );
 
-  assert.match(html, />fields<\/span>/);
-  assert.doesNotMatch(html, /class="keyword">name/);
-  assert.doesNotMatch(html, /class="keyword">end<\/span> like/);
+  assert.match(html, />fields<\/span>/u);
+  assert.doesNotMatch(html, /class="keyword">name/u);
+  assert.doesNotMatch(html, /class="keyword">end<\/span> like/u);
 });
 
 test("quoted end supports an expanded field without ambiguity with block termination", () => {
@@ -248,16 +248,16 @@ test("quoted end supports an expanded field without ambiguity with block termina
 test("every documented domain example is an exact excerpt of a fully parsed fixture", () => {
   const leave = readFileSync(
     new URL("../leave/time-away.domain", import.meta.url),
-    "utf8"
+    "utf-8"
   );
 
   for (const path of ["standalone-syntax.md", "syntax-ergonomics.md"]) {
     const doc = readFileSync(
       new URL(`../docs/${path}`, import.meta.url),
-      "utf8"
+      "utf-8"
     );
 
-    for (const [, example] of doc.matchAll(/```domain\n([\s\S]*?)```/g)) {
+    for (const [, example] of doc.matchAll(/```domain\n([\s\S]*?)```/gu)) {
       const owner = [leave, text, legacy].find((source) =>
         source.includes(present(example).trimEnd())
       );

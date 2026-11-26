@@ -7,8 +7,12 @@ import type { Browser } from "playwright";
 
 const url = process.argv[2];
 
-if (!url || !/^http:\/\/127\.0\.0\.1:\d+$/.test(url) || url.endsWith(":4186")) {
-  throw Error("Supply an isolated adapter URL.");
+if (
+  !url ||
+  !/^http:\/\/127\.0\.0\.1:\d+$/u.test(url) ||
+  url.endsWith(":4186")
+) {
+  throw new Error("Supply an isolated adapter URL.");
 }
 
 const require = createRequire(
@@ -68,7 +72,7 @@ try {
       "Loading Record group 0…"
     );
     assert.equal(
-      await by("loading:1:text").innerText(),
+      await by("loading:1:text").textContent(),
       "Loading Record group 1…"
     );
     assert.equal(

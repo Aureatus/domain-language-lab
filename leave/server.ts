@@ -1,6 +1,5 @@
 // Compatibility launcher only; no domain routes, templates, or handlers.
 import { resolve } from "node:path";
-import { fileURLToPath } from "node:url";
 
 import { createApplicationServer } from "../application/server.ts";
 import declaration from "./model.ts";
@@ -15,10 +14,7 @@ export const createLeaveServer = ({
     database: "leave.sqlite",
   });
 
-if (
-  process.argv[1] &&
-  resolve(process.argv[1]) === fileURLToPath(import.meta.url)
-) {
+if (process.argv[1] && resolve(process.argv[1]) === import.meta.filename) {
   const server = await createLeaveServer({
     directory: process.env["LEAVE_DIR"],
     port: Number(process.env["PORT"] ?? 4174),

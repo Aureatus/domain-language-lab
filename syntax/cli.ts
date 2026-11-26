@@ -5,7 +5,7 @@ import { loadSource } from "./load.ts";
 const [command, path] = process.argv.slice(2);
 
 if ((command !== "check" && command !== "serve") || !path) {
-  throw Error("Usage: node syntax/cli.ts check|serve SOURCE.domain");
+  throw new Error("Usage: node syntax/cli.ts check|serve SOURCE.domain");
 }
 
 const { declaration, sourceMap } = loadSource(resolve(path));
@@ -16,7 +16,7 @@ if (command === "check") {
   );
 } else {
   if (!declaration.application) {
-    throw Error("Missing application block.");
+    throw new Error("Missing application block.");
   }
 
   const { createApplicationServer } = await import("../application/server.ts");

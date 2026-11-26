@@ -57,7 +57,7 @@ test("a declared default reads the selected actor record, never another actor’
   });
 
   assert.throws(() => deriveApplication(model), /Default\/schema mismatch/);
-  const tools = fixture.initialState.records.cabinet.tools;
+  const { tools } = fixture.initialState.records.cabinet;
 
   const initialState = {
     revision: 0,

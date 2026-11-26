@@ -170,10 +170,10 @@ export type Event = EventBase &
 
 declare const opaque: unique symbol;
 
-export type Prepared = {
+export interface Prepared {
   readonly kind: "semantic-prepared/v2";
   readonly [opaque]: true;
-};
+}
 
 type Failure = Readonly<{ status: "rejected"; code: string; reason: string }>;
 
@@ -205,25 +205,25 @@ export type ApprovalResult =
 
 export interface Interpreter {
   readonly model: Model;
-  prepare(state: State, invocation: InvocationInput): Preparation;
-  commit(state: State, token: Prepared): Committed | Rejected;
-  execute(
+  prepare: (state: State, invocation: InvocationInput) => Preparation;
+  commit: (state: State, token: Prepared) => Committed | Rejected;
+  execute: (
     state: State,
     invocation: InvocationInput
-  ): Committed | Pending | Rejected;
-  approve(request: ApprovalRequest, grant: Grant): ApprovalResult;
-  prepareResume(
+  ) => Committed | Pending | Rejected;
+  approve: (request: ApprovalRequest, grant: Grant) => ApprovalResult;
+  prepareResume: (
     state: State,
     invocation: InvocationInput,
     request: ApprovalRequest,
     receipts: readonly ApprovalReceipt[],
     options: { readonly clock: number }
-  ): PreparedResult | Rejected;
-  resume(
+  ) => PreparedResult | Rejected;
+  resume: (
     state: State,
     invocation: InvocationInput,
     request: ApprovalRequest,
     receipts: readonly ApprovalReceipt[],
     options: { readonly clock: number }
-  ): Committed | Rejected;
+  ) => Committed | Rejected;
 }

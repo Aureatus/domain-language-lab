@@ -35,7 +35,7 @@ function required<T extends HTMLElement>(
   const element = parent.querySelector(selector);
 
   if (!(element instanceof kind)) {
-    throw Error(`Missing application control: ${selector}`);
+    throw new TypeError(`Missing application control: ${selector}`);
   }
 
   return element;
@@ -54,7 +54,7 @@ const { contract, contractId } = await client.contract().catch((error) => {
   $("notice").hidden = false;
   const retry = document.createElement("button");
   retry.textContent = "Retry";
-  retry.onclick = () => location.reload();
+  retry.addEventListener("click", () => location.reload());
   $("notice").append(retry);
   throw error;
 });
@@ -62,7 +62,7 @@ const { contract, contractId } = await client.contract().catch((error) => {
 const [defaultActor] = contract.actors;
 
 if (!defaultActor) {
-  throw Error("Application has no actors.");
+  throw new Error("Application has no actors.");
 }
 
 let actor =
@@ -117,7 +117,7 @@ function track(k: string, state: SubmissionState) {
     const { id, body } = state;
 
     if (!id || !body) {
-      throw Error("Missing saved submission.");
+      throw new Error("Missing saved submission.");
     }
 
     submissions.set(k, { ...state, id, body });
@@ -140,10 +140,10 @@ const escapes: Record<string, string> = {
 };
 
 const esc = (s: unknown) =>
-  String(s ?? "").replace(/[&<>"']/g, (c) => escapes[c] ?? c);
+  String(s ?? "").replaceAll(/[&<>"']/gu, (c) => escapes[c] ?? c);
 
 const person = (id: Value | undefined) => {
-  const a = contract.actors.find((a) => a.id === id);
+  const a = contract.actors.find((item) => item.id === id);
 
   return a?.name ?? a?.label ?? id;
 };
@@ -189,15 +189,15 @@ function showEvidence() {
     : "Choose an action to see its declaration and result.";
 }
 
-$("current-evidence").onclick = () => {
+$("current-evidence").addEventListener("click", () => {
   showSaved = false;
   showEvidence();
-};
+});
 
-$("saved-evidence").onclick = () => {
+$("saved-evidence").addEventListener("click", () => {
   showSaved = true;
   showEvidence();
-};
+});
 
 function notice(message: string | undefined, error = false) {
   $("notice").hidden = false;
@@ -206,10 +206,10 @@ function notice(message: string | undefined, error = false) {
 }
 
 const actionFor = (form: HTMLFormElement) => {
-  const action = form.dataset["action"];
+  const { action } = form.dataset;
 
   if (!action) {
-    throw Error("Missing action for form");
+    throw new Error("Missing action for form");
   }
 
   return action;
@@ -248,17 +248,17 @@ function inputHTML(
   const collection = reference ? records[reference.resource] : undefined;
 
   if (reference && !collection) {
-    throw Error(`Missing reference resource: ${reference.resource}`);
+    throw new Error(`Missing reference resource: ${reference.resource}`);
   }
 
   const options =
     reference && collection
-      ? Object.entries(collection).map(([id, r]) => [
-          id,
-          reference.labelField ? r.values[reference.labelField] : id,
+      ? Object.entries(collection).map(([key2, r]) => [
+          key2,
+          reference.labelField ? r.values[reference.labelField] : key2,
         ])
       : schema.type === "string"
-        ? schema.enum?.map((v) => [v, v])
+        ? schema.enum?.map((option2) => [option2, option2])
         : undefined;
 
   const control = options
@@ -282,19 +282,19 @@ function renderForms(current: ApplicationSnapshot) {
     const a = contract.actions[action];
 
     if (!a) {
-      throw Error(`Unknown form action: ${action}`);
+      throw new Error(`Unknown form action: ${action}`);
     }
 
     form.addEventListener("input", () => {
       const args = getDraft(a.id);
 
-      for (const f of a.fields.filter((f) => !f.hidden)) {
+      for (const f of a.fields.filter((field2) => !field2.hidden)) {
         const el = form.elements.namedItem(f.name);
 
         if (
           !(el instanceof HTMLInputElement || el instanceof HTMLSelectElement)
         ) {
-          throw Error(`Missing input: ${f.name}`);
+          throw new TypeError(`Missing input: ${f.name}`);
         }
 
         args[f.name] =
@@ -345,7 +345,7 @@ function renderViews(current: ApplicationSnapshot) {
     if (
       c.format === "date" &&
       typeof x === "string" &&
-      /^\d{4}-\d{2}-\d{2}$/.test(x)
+      /^\d{4}-\d{2}-\d{2}$/u.test(x)
     ) {
       const date = new Date(`${x}T00:00:00Z`);
 
@@ -385,7 +385,7 @@ function renderViews(current: ApplicationSnapshot) {
           const a = contract.actions[p.invocation.action];
 
           if (!a) {
-            throw Error(`Unknown pending action: ${p.invocation.action}`);
+            throw new Error(`Unknown pending action: ${p.invocation.action}`);
           }
 
           const covered = p.requirements.every((r) =>
@@ -435,7 +435,7 @@ function showInitialViews() {
     const view = contract.views[index];
 
     if (!view) {
-      throw Error(`Missing loading view: ${index}`);
+      throw new Error(`Missing loading view: ${index}`);
     }
 
     placeholders[view.kind].push(
@@ -488,7 +488,7 @@ function updateLocks() {
           const b = document.createElement("button");
           b.textContent = label;
           b.disabled = busy;
-          b.onclick = () => sendSubmission(k, s, { type });
+          b.addEventListener("click", () => sendSubmission(k, s, { type }));
           p.append(" ", b);
         }
       }
@@ -499,7 +499,8 @@ function updateLocks() {
 }
 
 async function preview(action: string) {
-  const token = ++sequence;
+  sequence += 1;
+  const token = sequence;
   const k = key(action);
 
   previews.set(k, token);
@@ -519,7 +520,10 @@ async function preview(action: string) {
       return;
     }
 
-    const names = r.requirements?.flatMap((r) => r.approvers).map(person);
+    const names = r.requirements
+      ?.flatMap((requirement) => requirement.approvers)
+      .map(person);
+
     required(form, "[data-preview]", HTMLElement).textContent =
       r.status === "pending"
         ? `Needs ${[...new Set(names)].join(", ")}’s approval. No changes yet.`
@@ -532,10 +536,10 @@ async function preview(action: string) {
     if (!showSaved) {
       showEvidence();
     }
-  } catch (e) {
+  } catch (error) {
     if (previews.get(k) === token && key(action) === k) {
       required(form, "[data-preview]", HTMLElement).textContent =
-        errorMessage(e);
+        errorMessage(error);
       required(form, "button[type=submit]", HTMLButtonElement).disabled = true;
     }
   }
@@ -570,8 +574,8 @@ async function command(requestId: string, policyId?: string) {
         : r.message,
       r.status === "rejected"
     );
-  } catch (e) {
-    notice(errorMessage(e), true);
+  } catch (error) {
+    notice(errorMessage(error), true);
   } finally {
     busy = false;
     updateLocks();
@@ -599,7 +603,7 @@ async function sendSubmission(
     const { id, body } = s;
 
     if (!id || !body) {
-      throw Error("Missing saved submission.");
+      throw new Error("Missing saved submission.");
     }
 
     const r =
@@ -626,20 +630,20 @@ async function sendSubmission(
     }
 
     notice(r.message, r.status === "rejected");
-  } catch (e) {
+  } catch (error) {
     if (submissions.has(k)) {
       track(
         k,
         submissionStep(
           s,
-          isNotSubmittedError(e)
-            ? { type: "invalid", message: e.message }
+          isNotSubmittedError(error)
+            ? { type: "invalid", message: error.message }
             : { type: "lost" }
         )
       );
     }
 
-    notice(errorMessage(e), true);
+    notice(errorMessage(error), true);
   } finally {
     busy = false;
     updateLocks();
@@ -726,11 +730,11 @@ showInitialViews();
 
 try {
   accept(await client.snapshot());
-} catch (e) {
+} catch (error) {
   initialLoadError = true;
   $("summaries").replaceChildren();
   $("lists").replaceChildren();
-  notice(`Could not load records. ${errorMessage(e)}`, true);
+  notice(`Could not load records. ${errorMessage(error)}`, true);
 }
 
 const stream = new EventSource("/api/events");

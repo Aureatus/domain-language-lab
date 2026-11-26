@@ -1,6 +1,5 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { fileURLToPath } from "node:url";
 
 import { errorMessage } from "../../errors.ts";
 import { inventoryModel } from "../../inventory/model.ts";
@@ -63,7 +62,7 @@ function ids(source: Model) {
         ["bindings", "policies", "preconditions", "updates"] as const
       ).flatMap((k) => a[k].map((x) => x.id)),
     ]),
-  ].sort();
+  ].toSorted();
 }
 
 export function projectInventory(source: Model = inventoryModel) {
@@ -101,8 +100,8 @@ export function projectInventory(source: Model = inventoryModel) {
     fail("Inventory structural drift: versioned projection review required");
   }
 
-  const stock = source.resources["stock"];
-  const quantity = original.inputs["quantity"];
+  const { stock } = source.resources;
+  const { quantity } = original.inputs;
 
   if (!stock || !quantity) {
     fail("Missing stock resource or quantity input");
@@ -114,36 +113,46 @@ export function projectInventory(source: Model = inventoryModel) {
 
   function dependency(e: Expr): void {
     switch (e.op) {
-      case "literal":
+      case "literal": {
         if (typeof e.value === "number" || typeof e.value === "boolean") {
           return;
         }
 
         break;
-      case "input":
+      }
+
+      case "input": {
         if (e.name === "quantity") {
           return;
         }
 
         break;
-      case "field":
+      }
+
+      case "field": {
         if (e.binding === `${ACTION}.stock` && Object.hasOwn(fields, e.field)) {
           return;
         }
 
         break;
-      case "not":
+      }
+
+      case "not": {
         return dependency(e.value);
+      }
+
       case "add":
       case "sub":
       case "lt":
       case "le":
       case "eq":
       case "and":
-      case "or":
+      case "or": {
         dependency(e.left);
 
         return dependency(e.right);
+      }
+      // no default: the cases cover every e.op variant.
     }
 
     fail(`Unexpected retained dependency: ${encodeJson(e)}`);
@@ -183,7 +192,7 @@ export function projectInventory(source: Model = inventoryModel) {
     binding.id,
     GUARD,
     UPDATE,
-  ].sort();
+  ].toSorted();
 
   const metadata = {
     format: PROJECTION,
@@ -256,24 +265,19 @@ export function checkInventory(
   const report = {
     ...check(model, law, directory),
     inventory: metadata,
-    inventory_adapter_sha256: hash(
-      readFileSync(fileURLToPath(import.meta.url), "utf8")
-    ),
+    inventory_adapter_sha256: hash(readFileSync(import.meta.filename, "utf-8")),
   };
 
   writeFileSync(
     resolve(directory, "inventory-projection.json"),
-    encodeJsonPretty(metadata) + "\n"
+    `${encodeJsonPretty(metadata)}\n`
   );
   writeReport(directory, report);
 
   return report;
 }
 
-if (
-  process.argv[1] &&
-  resolve(process.argv[1]) === fileURLToPath(import.meta.url)
-) {
+if (process.argv[1] && resolve(process.argv[1]) === import.meta.filename) {
   const report = checkInventory(
     resolve(process.argv[2] || "/tmp/opencode/inventory-evidence/positive")
   );

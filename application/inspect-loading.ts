@@ -6,7 +6,7 @@ import { loadingPlan, loadingPresentation } from "./loading.ts";
 const entry = process.argv[2];
 
 if (!entry) {
-  throw Error("Usage: node application/inspect-loading.ts VIEW.domain");
+  throw new Error("Usage: node application/inspect-loading.ts VIEW.domain");
 }
 
 const { contract } = deriveApplication(loadSource(entry).declaration);

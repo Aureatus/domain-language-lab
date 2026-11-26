@@ -70,19 +70,19 @@ test("action declarations and facts route views, independently of actor-excluded
   for (const { model, invocation, result } of cases) {
     assert.equal(result.status, "committed");
     const change = deriveChange(model, result.events, { sequence: 1 });
-    assert(change.invalidations.some((x) => x.resource === "reservation"));
-    assert(
+    assert.ok(change.invalidations.some((x) => x.resource === "reservation"));
+    assert.ok(
       change.invalidations.some((x) => x.relationship === "reservation.owner")
     );
-    assert(!change.recipients.some((x) => x.recipient === "alice"));
-    assert(change.recipients.some((x) => x.recipient === "bob"));
+    assert.ok(!change.recipients.some((x) => x.recipient === "alice"));
+    assert.ok(change.recipients.some((x) => x.recipient === "bob"));
     const dependencies = deriveDependencies(model);
 
     const dependency = dependencies.find(
       (x) => x.actionId === invocation.action
     );
 
-    assert(dependency && dependency.writes.length > 0);
+    assert.ok(dependency && dependency.writes.length > 0);
   }
 });
 
@@ -106,7 +106,7 @@ test("routing is generic across renamed actions and other domains; pending is ex
   });
 
   assert.equal(result.status, "committed");
-  assert(
+  assert.ok(
     deriveChange(model, result.events).invalidations.some(
       (x) => x.resource === "issues"
     )

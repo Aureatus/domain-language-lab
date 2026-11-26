@@ -89,8 +89,8 @@ function crossCheck(
   writeFileSync(file, lean);
 
   const run = spawnSync(PINNED_LEAN, [file], {
-    encoding: "utf8",
-    timeout: 120000,
+    encoding: "utf-8",
+    timeout: 120_000,
   });
 
   writeFileSync(
@@ -155,8 +155,8 @@ test("extracts actual numeric schemas and ASTs with complete original content bi
   }
 
   assert.deepEqual(
-    [...metadata.retained_ids, ...metadata.excluded_ids].sort(),
-    all.sort()
+    [...metadata.retained_ids, ...metadata.excluded_ids].toSorted(),
+    all.toSorted()
   );
   assert.ok(metadata.excluded_ids.includes("reservation.reserve.ownership"));
   assert.ok(metadata.excluded_ids.includes("reservation.reserve.futureExpiry"));
@@ -281,11 +281,11 @@ test("changed original reserve update changes projection; unchanged law rejects 
   assert.deepEqual(law.ensures, obligation.ensures);
   const report = checkInventory(resolve(out, "overselling"), mutant, law);
   assert.equal(report.status, "not_checked");
-  const log = readFileSync(resolve(out, "overselling/check.log"), "utf8");
-  assert.match(log, /omega could not prove the goal/);
+  const log = readFileSync(resolve(out, "overselling/check.log"), "utf-8");
+  assert.match(log, /omega could not prove the goal/u);
   assert.match(
     log,
-    /'Generated.positive_witness' does not depend on any axioms/
+    /'Generated.positive_witness' does not depend on any axioms/u
   );
   crossCheck("actual-mutant", mutant, [{ expected: "committed", post: 1 }]);
 });

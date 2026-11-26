@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
 
 import {
   makeDurableRuntime,
@@ -20,7 +19,7 @@ import { Effect } from "../../adapters/effect/index.ts";
 import { encodeJsonPretty } from "../../adapters/effect/json.ts";
 import { inventoryV2Model, initialState, invocation } from "./model.ts";
 
-const here = dirname(fileURLToPath(import.meta.url));
+const here = import.meta.dirname;
 
 // Effect is intentionally installed in the adapter package, not at repository root.
 const adapterRequire = createRequire(
@@ -76,14 +75,14 @@ export async function runDurablePhase(
 
     const before = await snapshot();
 
-    const results: Array<
+    const results: (
       | Awaited<ReturnType<typeof execute>>
       | Awaited<ReturnType<typeof approve>>
       | Awaited<ReturnType<typeof resumeRequest>>
-    > = [];
+    )[] = [];
 
-    const execute = (invocation: Parameters<typeof durableExecute>[2]) =>
-      run(durableExecute(runtime, db, invocation));
+    const execute = (innerInvocation: Parameters<typeof durableExecute>[2]) =>
+      run(durableExecute(runtime, db, innerInvocation));
 
     const approve = () =>
       run(
@@ -121,9 +120,11 @@ export async function runDurablePhase(
     } else if (phase === "resume") {
       results.push(await resumeRequest(resume));
     } else if (phase === "retry") {
-      results.push(await resumeRequest(resume));
-      results.push(await execute(command));
-      results.push(await resumeRequest({ ...resume, id: "resume-again" }));
+      results.push(
+        await resumeRequest(resume),
+        await execute(command),
+        await resumeRequest({ ...resume, id: "resume-again" })
+      );
     } else if (phase === "finish") {
       results.push(
         await execute(
@@ -131,9 +132,7 @@ export async function runDurablePhase(
             reservationId: "durable-reservation",
             clock: 102,
           })
-        )
-      );
-      results.push(
+        ),
         await execute(
           invocation("delete-1", "delete-terminal", {
             reservationId: "durable-reservation",
@@ -279,10 +278,7 @@ export async function runDurableDemo() {
   };
 }
 
-if (
-  process.argv[1] &&
-  resolve(process.argv[1]) === fileURLToPath(import.meta.url)
-) {
+if (process.argv[1] && resolve(process.argv[1]) === import.meta.filename) {
   const report = await runDurableDemo();
 
   const target = resolve(

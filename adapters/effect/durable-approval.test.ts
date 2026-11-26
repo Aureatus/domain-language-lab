@@ -253,7 +253,7 @@ test("denied/self grants, fabricated receipts and premature resume confer no aut
   });
 
   assert.equal(approval.status, "approved");
-  const receipt = approval.receipt;
+  const { receipt } = approval;
   await assert.rejects(
     run(
       durableResume(f.rt, f.db, {
@@ -418,7 +418,7 @@ test("beforeCommit failures roll back every request/grant/operation/state/outbox
 
   const fail = {
     beforeCommit() {
-      throw Error("injected");
+      throw new Error("injected");
     },
   };
 
@@ -529,7 +529,7 @@ test("invalid approval commands and corrupt pending rows cannot acquire or spend
     .get(f.inv.id)?.["request_json"];
 
   assert.ok(typeof row === "string");
-  const pending = JSON.parse(row);
+  const innerPending = JSON.parse(row);
 
   const update = f.db.prepare(
     "UPDATE durable_pending SET request_json=? WHERE invocation_id=?"
@@ -537,8 +537,8 @@ test("invalid approval commands and corrupt pending rows cannot acquire or spend
 
   update.run(
     JSON.stringify({
-      ...pending,
-      invocation: { ...pending.invocation, args: { reviewers: [42] } },
+      ...innerPending,
+      invocation: { ...innerPending.invocation, args: { reviewers: [42] } },
     }),
     f.inv.id
   );
@@ -548,8 +548,8 @@ test("invalid approval commands and corrupt pending rows cannot acquire or spend
   );
   update.run(
     JSON.stringify({
-      ...pending,
-      invocation: { ...pending.invocation, actor: "other" },
+      ...innerPending,
+      invocation: { ...innerPending.invocation, actor: "other" },
     }),
     f.inv.id
   );

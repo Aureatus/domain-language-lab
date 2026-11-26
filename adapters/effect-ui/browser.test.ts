@@ -12,7 +12,7 @@ const reconcile = "**/api/actions/reconcile";
 
 test(
   "Effect UI keeps Submit locked until the original receipt is recovered",
-  { timeout: 30000 },
+  { timeout: 30_000 },
   async (t) => {
     const model = structuredClone(declaration);
     const presentation = present(model.application.actions["leave.request"]);
@@ -178,7 +178,7 @@ test(
 
 test(
   "when the request never arrived, the only retry reuses the exact submission",
-  { timeout: 30000 },
+  { timeout: 30_000 },
   async (t) => {
     const app = await start();
     t.after(() => app.close());
@@ -224,7 +224,7 @@ test(
       .waitFor();
     assert.equal(await submit.isEnabled(), true);
     assert.equal(
-      (await (await fetch(app.url + "/api/snapshot")).json()).snapshotVersion,
+      (await (await fetch(`${app.url}/api/snapshot`)).json()).snapshotVersion,
       1
     );
   }

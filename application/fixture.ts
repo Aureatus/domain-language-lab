@@ -128,6 +128,7 @@ export function renamedFixture() {
     "supply.spend": "kit.spend",
   };
 
+  // oxlint-disable-next-line anti-slop/no-unknown-returns -- rewrites arbitrary JSON fixture data; validateModel parses the result.
   function rename(x: unknown): unknown {
     if (Array.isArray(x)) {
       return x.map(rename);
@@ -142,11 +143,11 @@ export function renamedFixture() {
     return typeof x === "string" ? (ownValue(names, x) ?? x) : x;
   }
 
-  const domain = validateModel(rename(fixture.domain));
+  const innerDomain = validateModel(rename(fixture.domain));
 
   return {
-    domain,
-    initialState: validateState(domain, rename(fixture.initialState)),
+    domain: innerDomain,
+    initialState: validateState(innerDomain, rename(fixture.initialState)),
     application: rename(fixture.application),
   };
 }
@@ -157,14 +158,14 @@ export function extendedFixture() {
   const take = x.domain.actions["supply.take"];
 
   if (!take) {
-    throw Error("Expected supply.take fixture action");
+    throw new Error("Expected supply.take fixture action");
   }
 
   take.inputs["memo"] = { type: "string" };
   const review = take.policies[1];
 
   if (review?.effect !== "approval-required") {
-    throw Error("Expected review policy");
+    throw new Error("Expected review policy");
   }
 
   review.approvers = { op: "literal", value: "rory" };

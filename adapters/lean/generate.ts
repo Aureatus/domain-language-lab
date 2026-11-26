@@ -7,14 +7,14 @@ import { render } from "./template.ts";
 
 export const ADAPTER = "shared-ir-lean-numeric/1";
 export const PROJECTION = "single-static-record-numeric-kernel/1";
-export const MAX = 9007199254740991;
+export const MAX = 9_007_199_254_740_991;
 
 export const canonical = (x: unknown): string =>
   Array.isArray(x)
     ? `[${x.map(canonical).join(",")}]`
     : x && typeof x === "object"
       ? `{${Object.entries(x)
-          .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+          .toSorted(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
           .map(([k, v]) => `${JSON.stringify(k)}:${canonical(v)}`)
           .join(",")}}`
       : JSON.stringify(x);
@@ -35,7 +35,7 @@ const object = (value: unknown): value is Record<string, unknown> =>
 
 const ident = (s: unknown) =>
   typeof s === "string" &&
-  /^[a-z][A-Za-z0-9_]*$/.test(s) &&
+  /^[a-z][A-Za-z0-9_]*$/u.test(s) &&
   ![
     "version",
     "revision",
@@ -64,8 +64,8 @@ export function generate(rawSource: unknown, law: unknown) {
 
   try {
     source = validateModel(rawSource);
-  } catch (e) {
-    fail(`Invalid shared IR: ${errorMessage(e)}`);
+  } catch (error) {
+    fail(`Invalid shared IR: ${errorMessage(error)}`);
   }
 
   if (!object(law) || law["format"] !== "numeric-law/v1") {
@@ -115,8 +115,13 @@ export function generate(rawSource: unknown, law: unknown) {
     ]);
   };
 
-  Object.keys(fields).forEach(ident);
-  Object.keys(action.inputs).forEach(ident);
+  for (const item of Object.keys(fields)) {
+    ident(item);
+  }
+
+  for (const item of Object.keys(action.inputs)) {
+    ident(item);
+  }
 
   const boolean = (e: unknown) =>
     object(e) &&
@@ -143,21 +148,27 @@ export function generate(rawSource: unknown, law: unknown) {
     const { op, value, name, field } = e;
 
     switch (op) {
-      case "literal":
+      case "literal": {
         return typeof value === "boolean"
           ? value
             ? "True"
             : "False"
           : integer(value);
-      case "input":
+      }
+
+      case "input": {
         if (typeof name !== "string" || !Object.hasOwn(action.inputs, name)) {
           fail("Unknown input");
         }
 
         return `i.${ident(name)}`;
-      case "clock":
+      }
+
+      case "clock": {
         return "i.clock";
-      case "field":
+      }
+
+      case "field": {
         if (
           typeof field !== "string" ||
           e["binding"] !== binding.id ||
@@ -167,8 +178,10 @@ export function generate(rawSource: unknown, law: unknown) {
         }
 
         return `s.${ident(field)}`;
+      }
+
       case "pre":
-      case "post":
+      case "post": {
         if (
           typeof field !== "string" ||
           mode !== "law" ||
@@ -178,8 +191,12 @@ export function generate(rawSource: unknown, law: unknown) {
         }
 
         return `${op === "pre" ? "s" : "t"}.${ident(field)}`;
-      case "not":
+      }
+
+      case "not": {
         return `(¬ ${expr(value, checks, mode)})`;
+      }
+
       case "add":
       case "sub":
       case "le":
@@ -187,7 +204,7 @@ export function generate(rawSource: unknown, law: unknown) {
       case "eq":
       case "and":
       case "or": {
-        const left = e["left"];
+        const { left } = e;
         const a = expr(left, checks, mode);
         const b = expr(e["right"], checks, mode);
 
@@ -213,12 +230,13 @@ export function generate(rawSource: unknown, law: unknown) {
         return text;
       }
 
-      default:
+      default: {
         return fail(`Unsupported expression: ${op}`);
+      }
     }
   };
 
-  if (typeof lawId !== "string" || !/^[A-Za-z][A-Za-z0-9_.:-]*$/.test(lawId)) {
+  if (typeof lawId !== "string" || !/^[A-Za-z][A-Za-z0-9_.:-]*$/u.test(lawId)) {
     fail("Unsupported law ID");
   }
 
@@ -256,7 +274,7 @@ export function generate(rawSource: unknown, law: unknown) {
 
   const candidate = `{ ${[...Object.keys(fields).map((k) => `${k} := ${updates[k] ?? `s.${k}`}`), "revision := s.revision + 1", `version := s.version + ${action.updates.length ? 1 : 0}`].join(", ")} }`;
   const ensures = expr(law["ensures"], [], "law");
-  const witness = law["witness"];
+  const { witness } = law;
 
   if (!object(witness)) {
     fail("Invalid law witness");
@@ -313,23 +331,23 @@ export function generate(rawSource: unknown, law: unknown) {
   // Ordered preconditions precede grouped updates. Each guard's operands are eager.
   let body = `if ${overflow} then .committed ${candidate}\nelse .overflow`;
 
-  for (const update of [...updateNodes].reverse()) {
+  for (const update of [...updateNodes].toReversed()) {
     body = `if ${and(update.checks)} then\n  if ${schema(fields[update.field], update.expression)} then\n${body
       .split("\n")
-      .map((l) => "    " + l)
+      .map((l) => `    ${l}`)
       .join("\n")}\n  else .schema\nelse .overflow`;
   }
 
-  for (const guard of [...guards].reverse()) {
+  for (const guard of [...guards].toReversed()) {
     body = `if ${and(guard.checks)} then\n  if ${guard.value} then\n${body
       .split("\n")
-      .map((l) => "    " + l)
+      .map((l) => `    ${l}`)
       .join("\n")}\n  else .precondition\nelse .overflow`;
   }
 
   body = `if ${valid} then\n${body
     .split("\n")
-    .map((l) => "  " + l)
+    .map((l) => `  ${l}`)
     .join("\n")}\nelse .invalid`;
 
   const code = render({

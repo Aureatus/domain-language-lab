@@ -1,7 +1,8 @@
 import type { Invocation, InvocationInput } from "./types.ts";
 import type { Expr, FieldSchema, Scalar } from "./v2/types.ts";
 
-export const own = (o: object, k: PropertyKey) => Object.hasOwn(o, k);
+export const own = <T extends object>(o: T, k: PropertyKey) =>
+  Object.hasOwn(o, k);
 
 export function ownValue<T>(
   table: Readonly<Record<string, T>> | undefined,
@@ -33,7 +34,7 @@ export function assert(
 
 export const safeKey = (k: unknown): k is string =>
   typeof k === "string" &&
-  /^[A-Za-z][A-Za-z0-9_.:-]*$/.test(k) &&
+  /^[A-Za-z][A-Za-z0-9_.:-]*$/u.test(k) &&
   !["__proto__", "constructor", "prototype"].includes(k);
 
 export function keys(
@@ -55,16 +56,16 @@ export const canonical = (x: unknown): string =>
     ? `[${x.map(canonical).join(",")}]`
     : obj(x)
       ? `{${Object.keys(x)
-          .sort()
+          .toSorted()
           .map((k) => `${JSON.stringify(k)}:${canonical(x[k])}`)
           .join(",")}}`
       : JSON.stringify(x);
 
-const types = ["integer", "string", "boolean", "ids"];
+const types = new Set(["integer", "string", "boolean", "ids"]);
 
 function schema(s: unknown) {
   assert(
-    obj(s) && typeof s["type"] === "string" && types.includes(s["type"]),
+    obj(s) && typeof s["type"] === "string" && types.has(s["type"]),
     "Unsupported schema"
   );
 
@@ -80,8 +81,8 @@ function schema(s: unknown) {
     "Unknown schema member"
   );
 
-  const min = s["min"];
-  const max = s["max"];
+  const { min } = s;
+  const { max } = s;
   const choices = s["enum"];
 
   if (own(s, "min")) {
@@ -136,7 +137,10 @@ export function value(
 
 export function fields(o: unknown) {
   assert(obj(o), "Expected field map");
-  Object.values(o).forEach(schema);
+
+  for (const item of Object.values(o)) {
+    schema(item);
+  }
 }
 
 function checkArgs(
@@ -184,13 +188,13 @@ export const binary: Readonly<Record<string, readonly [Kind, Kind]>> = {
   or: ["boolean", "boolean"],
 };
 
-type EvalContext<V> = {
+interface EvalContext<V> {
   inv: { args: Readonly<Record<string, V>>; actor: string; clock: number };
   bound: ReadonlyMap<
     string,
     { record: { values: Readonly<Record<string, V>> } }
   >;
-};
+}
 
 export function evaluate<V extends Scalar | readonly string[]>(
   e: Expr,
@@ -240,7 +244,7 @@ export function evaluate<V extends Scalar | readonly string[]>(
       );
       const n = e.op === "add" ? BigInt(l) + BigInt(r) : BigInt(l) - BigInt(r);
       assert(
-        n >= -9007199254740991n && n <= 9007199254740991n,
+        n >= -9_007_199_254_740_991n && n <= 9_007_199_254_740_991n,
         "Integer overflow",
         "overflow"
       );
@@ -248,22 +252,31 @@ export function evaluate<V extends Scalar | readonly string[]>(
       return Number(n);
     }
 
-    case "eq":
+    case "eq": {
       return l === r;
+    }
+
     case "lt":
-    case "le":
+    case "le": {
       assert(
         typeof l === "number" && typeof r === "number",
         "Expected integer operands"
       );
 
       return e.op === "lt" ? l < r : l <= r;
-    case "and":
+    }
+
+    case "and": {
       return l && r;
-    case "or":
+    }
+
+    case "or": {
       return l || r;
-    default:
+    }
+
+    default: {
       fail("unsupported", "Unknown expression");
+    }
   }
 }
 
@@ -275,7 +288,7 @@ export const increment = (x: number) => {
 
 export function checkRecords(
   records: Readonly<Record<string, unknown>>,
-  fields: Readonly<Record<string, FieldSchema>>
+  innerFields: Readonly<Record<string, FieldSchema>>
 ) {
   for (const record of Object.values(records)) {
     const { version, values } = keys(record, ["version", "values"]);
@@ -285,17 +298,24 @@ export function checkRecords(
         version >= 0,
       "Invalid record version"
     );
-    const entries = keys(values, Object.keys(fields));
+    const entries = keys(values, Object.keys(innerFields));
 
-    for (const [field, spec] of Object.entries(fields)) {
+    for (const [field, spec] of Object.entries(innerFields)) {
       value(spec, entries[field]);
     }
   }
 }
 
-type Observation = { readonly binding: string; readonly relationship: string };
+interface Observation {
+  readonly binding: string;
+  readonly relationship: string;
+}
 
-type Path = { relationship: string; resource: string; key: string };
+interface Path {
+  relationship: string;
+  resource: string;
+  key: string;
+}
 
 const compare = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
 
@@ -330,10 +350,10 @@ export function routeRecipients(
   }
 
   return [...recipients]
-    .sort(([a], [b]) => compare(a, b))
+    .toSorted(([a], [b]) => compare(a, b))
     .map(([recipient, paths]) => ({
       recipient,
-      paths: [...paths.values()].sort((a, b) =>
+      paths: [...paths.values()].toSorted((a, b) =>
         compare(canonical(a), canonical(b))
       ),
     }));

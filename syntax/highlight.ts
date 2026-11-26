@@ -1,6 +1,5 @@
 import { writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import { fileURLToPath } from "node:url";
 
 import { errorMessage } from "../errors.ts";
 import { tokenize, parseSource } from "./frontend.ts";
@@ -22,7 +21,8 @@ const entities: Record<string, string> = {
   "'": "&#39;",
 };
 
-const escape = (s: string) => s.replace(/[&<>"']/g, (c) => entities[c] ?? c);
+const escape = (s: string) =>
+  s.replaceAll(/[&<>"']/gu, (c) => entities[c] ?? c);
 
 type Parsed = ReturnType<typeof parseSource>;
 
@@ -41,7 +41,8 @@ export function highlight(source: string, { quietIds = false } = {}) {
 
   if (quietIds) {
     let statement: string | number = "";
-    tokens.forEach((t, i) => {
+
+    for (const [i, t] of tokens.entries()) {
       if (i === 0 || tokens[i - 1]?.kind === "newline") {
         statement = t.value;
       }
@@ -59,11 +60,14 @@ export function highlight(source: string, { quietIds = false } = {}) {
         starts.add(t.start);
         ends.add(id.end);
       }
-    });
+    }
   }
 
   const gap = (s: string) =>
-    escape(s).replace(/#[^\n]*/g, (c) => `<span class="comment">${c}</span>`);
+    escape(s).replaceAll(
+      /#[^\n]*/gu,
+      (c) => `<span class="comment">${c}</span>`
+    );
 
   for (const [i, t] of tokens.entries()) {
     if (t.end === t.start) {
@@ -256,7 +260,7 @@ export function sourceExcerptPage(
       const span = sourceMap[id];
 
       if (!span) {
-        throw Error(`Unknown excerpt ID '${id}'.`);
+        throw new Error(`Unknown excerpt ID '${id}'.`);
       }
 
       return `<section><h2>${escape(id)} <small>L${span.start.line}–${span.end.line}</small></h2><pre><code>${lines
@@ -274,14 +278,13 @@ body{margin:0;color:var(--foreground,#e1e9f3);font:14px/1.5 var(--font-sans,syst
 </style><main><p>Exact excerpts from <code>${escape(filename)}</code> · <a href="${escape(fullHref)}">Open full source reader</a></p>${excerpts}<p>Full reader shows every line and ID continuously, with an outline and exact original source. Highlighting is not verification.</p></main></html>`;
 }
 
-if (
-  process.argv[1] &&
-  resolve(process.argv[1]) === fileURLToPath(import.meta.url)
-) {
+if (process.argv[1] && resolve(process.argv[1]) === import.meta.filename) {
   const [input, output] = process.argv.slice(2);
 
   if (!input || !output) {
-    throw Error("Usage: node syntax/highlight.ts source.domain output.html");
+    throw new Error(
+      "Usage: node syntax/highlight.ts source.domain output.html"
+    );
   }
 
   await writeFile(output, moduleSourcePage(input));

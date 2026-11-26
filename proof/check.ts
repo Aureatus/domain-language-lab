@@ -19,7 +19,7 @@ const expected = [
   "stale_approval_cannot_commit",
 ];
 
-const pin = readFileSync(resolve(dir, "lean-toolchain"), "utf8")
+const pin = readFileSync(resolve(dir, "lean-toolchain"), "utf-8")
   .trim()
   .split(":v")
   .at(-1);
@@ -60,8 +60,8 @@ let log = "";
 try {
   const version = spawnSync(lean, ["--version"], {
     cwd: dir,
-    encoding: "utf8",
-    timeout: 30000,
+    encoding: "utf-8",
+    timeout: 30_000,
   });
 
   if (version.error || version.status !== 0) {
@@ -71,7 +71,7 @@ try {
   }
 
   report.tool.version = version.stdout.trim();
-  const match = report.tool.version.match(/^Lean \(version ([\d.]+)(?:,|\))/);
+  const match = report.tool.version.match(/^Lean \(version ([\d.]+)(?:,|\))/u);
 
   if (!match || match[1] !== pin) {
     throw new Error(`Expected pinned Lean ${pin}, got ${report.tool.version}`);
@@ -79,8 +79,8 @@ try {
 
   const checked = spawnSync(lean, ["Approval.lean"], {
     cwd: dir,
-    encoding: "utf8",
-    timeout: 120000,
+    encoding: "utf-8",
+    timeout: 120_000,
   });
 
   log = (checked.stdout || "") + (checked.stderr || "");
@@ -103,17 +103,17 @@ try {
       throw new Error(`Missing/duplicate axiom report for ${name}`);
     }
 
-    const reported = line.match(/depends on axioms: \[([^\]]*)\]$/)?.[1];
+    const reported = line.match(/depends on axioms: \[([^\]]*)\]$/u)?.[1];
 
     const axioms =
-      reported !== undefined
-        ? reported
+      reported === undefined
+        ? line.endsWith("does not depend on any axioms")
+          ? []
+          : null
+        : reported
             .split(",")
             .map((x) => x.trim())
-            .filter(Boolean)
-        : line.endsWith("does not depend on any axioms")
-          ? []
-          : null;
+            .filter(Boolean);
 
     if (!axioms) {
       throw new Error(`Unrecognized axiom output: ${line}`);
@@ -124,7 +124,7 @@ try {
 
   report.axioms_reported = [
     ...new Set(Object.values(report.theorem_axioms).flat()),
-  ].sort();
+  ].toSorted();
 
   if (report.axioms_reported.some((axiom) => axiom !== "propext")) {
     throw new Error("Non-allowlisted theorem axiom");
@@ -140,11 +140,11 @@ try {
   report.detail = errorMessage(error);
 }
 
-writeFileSync(resolve(artifact, "lean-proof.log"), log || report.detail + "\n");
+writeFileSync(resolve(artifact, "lean-proof.log"), log || `${report.detail}\n`);
 
 writeFileSync(
   resolve(artifact, "lean-report.json"),
-  JSON.stringify(report, null, 2) + "\n"
+  `${JSON.stringify(report, null, 2)}\n`
 );
 
 console.log(JSON.stringify(report, null, 2));

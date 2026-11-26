@@ -4,9 +4,12 @@ export type Priority = "normal" | "high";
 
 export type Decision = "allow" | "deny" | "approval";
 
-export type Actor = { id: string; role: Role };
+export interface Actor {
+  id: string;
+  role: Role;
+}
 
-export type Ticket = {
+export interface Ticket {
   id: string;
   version: number;
   status: "open" | "resolved";
@@ -15,9 +18,9 @@ export type Ticket = {
   watchers: string[];
   resolution: string | null;
   resolvedAt: number | null;
-};
+}
 
-export type Model = {
+export interface Model {
   id: string;
   revision: number;
   policy: Record<Role, Record<Priority, Decision>>;
@@ -28,7 +31,7 @@ export type Model = {
     set: { status: "resolved"; resolution: "$summary"; resolvedAt: "$clock" };
     activity: { recipients: ("openedBy" | "watchers")[]; channel: "inbox" };
   };
-};
+}
 
 export const model: Model = {
   id: "issue-tracker",

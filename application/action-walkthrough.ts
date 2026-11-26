@@ -41,7 +41,9 @@ export async function* walkthrough(
     !submissionId.trim() ||
     submissionId.length > 200
   ) {
-    throw Error("Expected a nonempty submission ID of at most 200 characters.");
+    throw new Error(
+      "Expected a nonempty submission ID of at most 200 characters."
+    );
   }
 
   const body = {
@@ -78,15 +80,16 @@ export async function* walkthrough(
 
     try {
       await client.execute({ ...body, submissionId });
-    } catch (e) {
-      if (!isNotSubmittedError(e)) {
-        throw e;
+    } catch (error) {
+      if (!isNotSubmittedError(error)) {
+        throw error;
       }
 
-      yield { type: "invalid", message: e.message };
+      yield { type: "invalid", message: error.message };
 
       return;
-    } // Discard a successful reply; never submit twice.
+      // Discard a successful reply; never submit twice.
+    }
 
     // A separate delivery path may update the view before the writer even
     // learns its reply was lost. It is not the writer's acknowledgement.
@@ -97,7 +100,7 @@ export async function* walkthrough(
     const result = await client.reconcile({ actor, submissionId });
 
     if (!["pending", "committed", "rejected"].includes(result.status)) {
-      throw Error(`No recorded execution receipt: ${result.status}`);
+      throw new Error(`No recorded execution receipt: ${result.status}`);
     }
 
     yield { type: "receipt", result: structuredClone(result) };
@@ -107,7 +110,7 @@ export async function* walkthrough(
     }
 
     if (!result.evidence || !result.requirements) {
-      throw Error("Missing pending receipt evidence.");
+      throw new Error("Missing pending receipt evidence.");
     }
 
     const requestId = result.evidence.invocation.id;
@@ -115,7 +118,7 @@ export async function* walkthrough(
     for (const { policyId, approvers } of result.requirements) {
       const [approver] = approvers
         .filter((id) => contract.actors.some((a) => a.id === id))
-        .sort();
+        .toSorted();
 
       if (approver === undefined) {
         yield {

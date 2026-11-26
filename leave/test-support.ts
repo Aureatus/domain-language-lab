@@ -25,5 +25,5 @@ export const requestInvocation = ({
     actor,
     clock,
     action: "leave.request",
-    args: { start, end, ...(days === undefined ? {} : { days }) },
+    args: { start, end, ...(days !== undefined && { days }) },
   });

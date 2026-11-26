@@ -64,7 +64,7 @@ for (const decision of ["approval", "allow", "deny"] satisfies Decision[]) {
 
           const violations = runtime.events.flatMap((event) => {
             if (event.kind === "approved") {
-              subject = event.details["subject"];
+              ({ subject } = event.details);
             }
 
             return event.kind === "committed" &&
@@ -89,7 +89,7 @@ for (const decision of ["approval", "allow", "deny"] satisfies Decision[]) {
 
 async function report(name: string) {
   try {
-    const raw = await readFile(resolve(root, "artifacts", name), "utf8");
+    const raw = await readFile(resolve(root, "artifacts", name), "utf-8");
     const data = JSON.parse(raw);
 
     const sources =
@@ -135,7 +135,7 @@ async function report(name: string) {
 
 // A separate, explicitly fault-injected run; never overwrite the normal property report.
 const mutantReport = runProperties({
-  seed: 0x5eed,
+  seed: 0x5e_ed,
   samples: 12,
   maxSteps: 16,
   shrinkBudget: 2000,
@@ -196,17 +196,18 @@ const data = {
 };
 
 const template = (
-  await readFile(resolve(root, "workbench/template.html"), "utf8")
+  await readFile(resolve(root, "workbench/template.html"), "utf-8")
 ).replace(
-  /<style>[\s\S]*?<\/style>/,
-  "<style>" +
-    (await readFile(resolve(root, "workbench/workspace.css"), "utf8")) +
-    "</style>"
+  /<style>[\s\S]*?<\/style>/u,
+  `<style>${await readFile(
+    resolve(root, "workbench/workspace.css"),
+    "utf-8"
+  )}</style>`
 );
 
 const html = template.replace(
   "/*__WORKBENCH_DATA__*/",
-  JSON.stringify(data).replace(/</g, "\\u003c")
+  JSON.stringify(data).replaceAll("<", "\\u003c")
 );
 
 await mkdir(resolve(root, "artifacts"), { recursive: true });
@@ -215,8 +216,8 @@ await writeFile(resolve(root, "artifacts/workbench.html"), html);
 
 // All data and controls are retained. Native gzip decoding is local, with no fetch or libraries.
 let inline = template
-  .replace(/<header class="topbar">[\s\S]*?<\/header>/, "")
-  .replace(/<footer class="footer">[\s\S]*?<\/footer>/, "")
+  .replace(/<header class="topbar">[\s\S]*?<\/header>/u, "")
+  .replace(/<footer class="footer">[\s\S]*?<\/footer>/u, "")
   .replace(
     "/*__WORKBENCH_DATA__*/",
     gzipSync(JSON.stringify(data)).toString("base64")
@@ -231,19 +232,23 @@ let inline = template
     "renderReports();render();\n}catch(error){document.body.textContent='Workbench could not load: '+error.message;throw error}})();"
   );
 
-const inlineCSS = await readFile(resolve(root, "workbench/inline.css"), "utf8");
+const inlineCSS = await readFile(
+  resolve(root, "workbench/inline.css"),
+  "utf-8"
+);
 
 // Replace fixed colors throughout the shared structural CSS with host theme tokens.
-inline = inline.replace(/<style>([\s\S]*?)<\/style>/, (_, css) => {
-  css = css
-    .replace(/:root\{[^}]*\}/, "")
-    .replace(/min-height:calc\(100vh - 90px\)/g, "min-height:0");
-  css = css.replace(/#[a-fA-F0-9]{3,8}\b|\bwhite(?=[;}])/g, "var(--card)");
+inline = inline.replace(/<style>([\s\S]*?)<\/style>/u, (_, source) => {
+  let css = source
+    .replace(/:root\{[^}]*\}/u, "")
+    .replaceAll("min-height:calc(100vh - 90px)", "min-height:0");
 
-  return "<style>" + css + "\n" + inlineCSS + "</style>";
+  css = css.replaceAll(/#[a-fA-F0-9]{3,8}\b|\bwhite(?=[;}])/gu, "var(--card)");
+
+  return `<style>${css}\n${inlineCSS}</style>`;
 });
 
-if (inline.length >= 512000 || Buffer.byteLength(inline) >= 512000) {
+if (inline.length >= 512_000 || Buffer.byteLength(inline) >= 512_000) {
   throw new Error(
     `Inline artifact exceeds render limit: ${inline.length} characters / ${Buffer.byteLength(inline)} bytes`
   );

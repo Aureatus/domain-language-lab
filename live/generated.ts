@@ -6,7 +6,10 @@ type Runtime = ReturnType<typeof createApp>;
 
 type Dispatch = ReturnType<Runtime["dispatch"]>;
 
-type RulePatch = { allowedRoles?: string[]; notify?: string[] };
+interface RulePatch {
+  allowedRoles?: string[];
+  notify?: string[];
+}
 
 type Args = Record<string, string | null>;
 
@@ -20,13 +23,13 @@ type History =
   | { kind: "dispatch"; action: string; args: Args; actor: string }
   | { kind: "setRule"; action: string; patch: RulePatch };
 
-type Wrapper = {
-  dispatch?(
+interface Wrapper {
+  dispatch?: (
     this: Runtime,
     ...args: Parameters<Runtime["dispatch"]>
-  ): Dispatch | { ok: true; event?: never };
+  ) => Dispatch | { ok: true; event?: never };
   setRule?: Runtime["setRule"];
-};
+}
 
 interface Options {
   seed?: number;
@@ -44,12 +47,12 @@ function rng(seed: number) {
   let x = seed >>> 0;
 
   return () => {
-    x = (x + 0x6d2b79f5) >>> 0;
+    x = (x + 0x6d_2b_79_f5) >>> 0;
     let t = x;
     t = Math.imul(t ^ (t >>> 15), t | 1);
     t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
 
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    return ((t ^ (t >>> 14)) >>> 0) / 4_294_967_296;
   };
 }
 
@@ -57,7 +60,7 @@ function pick<T>(r: () => number, xs: readonly T[]): T {
   const selected = xs[Math.floor(r() * xs.length)];
 
   if (selected === undefined) {
-    throw Error("Empty generated sample");
+    throw new Error("Empty generated sample");
   }
 
   return selected;
@@ -120,7 +123,7 @@ function issueAfter(
   }
 
   const next = clone(old);
-  next.version++;
+  next.version += 1;
 
   if (action === "assign") {
     next.assignee = args["assignee"] ?? null;
@@ -195,7 +198,7 @@ function validateCandidate(state: State, action: string, args: Args) {
 
   if (action === "assign") {
     return (
-      Object.keys(args).sort().join() === "assignee,issueId" &&
+      Object.keys(args).toSorted().join(",") === "assignee,issueId" &&
       (args["assignee"] === null ||
         state.users.some((u) => u.id === args["assignee"]))
     );
@@ -203,7 +206,7 @@ function validateCandidate(state: State, action: string, args: Args) {
 
   if (action === "comment") {
     return (
-      Object.keys(args).sort().join() === "body,issueId" &&
+      Object.keys(args).toSorted().join(",") === "body,issueId" &&
       typeof args["body"] === "string" &&
       !!args["body"].trim() &&
       args["body"].length <= 5000
@@ -211,7 +214,7 @@ function validateCandidate(state: State, action: string, args: Args) {
   }
 
   if (["resolve", "reopen", "watch"].includes(action)) {
-    return Object.keys(args).join() === "issueId";
+    return Object.keys(args).join(",") === "issueId";
   }
 
   return false;
@@ -229,7 +232,7 @@ function domainValid(state: State, action: string, args: Args) {
         : true;
 }
 
-type TrialCoverage = {
+interface TrialCoverage {
   actions: Record<string, number>;
   acceptedActions: Record<string, number>;
   notificationPaths: Record<string, number>;
@@ -237,7 +240,7 @@ type TrialCoverage = {
   rejections: number;
   ruleEdits: number;
   invalidReferences: number;
-};
+}
 
 function trial(
   seed: number,
@@ -249,7 +252,7 @@ function trial(
   const r = rng(seed);
 
   const app = createApp({
-    clock: () => 1700000000000 + app.state.events.length,
+    clock: () => 1_700_000_000_000 + app.state.events.length,
   });
 
   const coverage = {
@@ -278,7 +281,7 @@ function trial(
         JSON.stringify(s.model) === s.modelJSON
     );
 
-  for (let step = 0; step < maxSteps; step++) {
+  for (let step = 0; step < maxSteps; step += 1) {
     const before = app.state;
     const modelBefore = app.model;
 
@@ -336,7 +339,7 @@ function trial(
       }
 
       if (result.ok) {
-        coverage.ruleEdits++;
+        coverage.ruleEdits += 1;
       }
 
       continue;
@@ -346,7 +349,7 @@ function trial(
     const actor = pick(r, ["u1", "u2", "u3", "nobody"]);
 
     if (!action) {
-      throw Error("Missing generated action");
+      throw new Error("Missing generated action");
     }
 
     const args: Args =
@@ -369,7 +372,7 @@ function trial(
       !validateCandidate(before, action, args) &&
       args["issueId"] === "missing"
     ) {
-      coverage.invalidReferences++;
+      coverage.invalidReferences += 1;
     }
 
     const allowed = permitted(before, modelBefore, action, actor);
@@ -397,7 +400,7 @@ function trial(
     coverage.actions[action] = (coverage.actions[action] ?? 0) + 1;
 
     if (!allowed) {
-      coverage.denials++;
+      coverage.denials += 1;
     }
 
     if (result.ok !== expected) {
@@ -409,7 +412,7 @@ function trial(
     }
 
     if (!result.ok) {
-      coverage.rejections++;
+      coverage.rejections += 1;
 
       if (app.state !== before || app.model !== modelBefore) {
         return {
@@ -430,11 +433,11 @@ function trial(
       action,
       args,
       actor,
-      1700000000000 + before.events.length
+      1_700_000_000_000 + before.events.length
     );
 
     if (!expectedIssue) {
-      const failed: true = true;
+      const failed = true;
 
       return { failed, history, why: "missing independently predicted issue" };
     }
@@ -444,7 +447,7 @@ function trial(
     const rule = modelBefore.actions[action];
 
     if (!rule) {
-      throw Error(`Missing generated action rule: ${action}`);
+      throw new Error(`Missing generated action rule: ${action}`);
     }
 
     if (JSON.stringify(actual) !== JSON.stringify(expectedIssue)) {
@@ -455,7 +458,7 @@ function trial(
       };
     }
 
-    const event = result.event;
+    const { event } = result;
     const route = oracleRoute(expectedIssue, rule.notify, actor);
 
     if (!event || JSON.stringify(event.recipients) !== JSON.stringify(route)) {
@@ -498,7 +501,7 @@ function trial(
 }
 
 export function runGenerated({
-  seed = 0x51eed,
+  seed = 0x5_1e_ed,
   runs = 40,
   maxSteps = 80,
   wrapper,
@@ -510,7 +513,7 @@ export function runGenerated({
     !Number.isInteger(maxSteps) ||
     maxSteps < 1
   ) {
-    throw Error("seed, runs and maxSteps must be valid integers");
+    throw new Error("seed, runs and maxSteps must be valid integers");
   }
 
   const aggregate = {
@@ -523,7 +526,7 @@ export function runGenerated({
     notificationPaths: Object.fromEntries(PATHS.map((p) => [p, 0])),
   };
 
-  for (let n = 0; n < runs; n++) {
+  for (let n = 0; n < runs; n += 1) {
     const run = trial((seed + n) >>> 0, maxSteps, wrapper);
 
     if (run.failed) {
@@ -593,7 +596,7 @@ export function runGenerated({
 
 if (import.meta.url === `file://${process.argv[1]}`) {
   const report = runGenerated({
-    seed: Number(process.env["SEED"] ?? 0x51eed),
+    seed: Number(process.env["SEED"] ?? 0x5_1e_ed),
     runs: Number(process.env["RUNS"] ?? 40),
     maxSteps: Number(process.env["MAX_STEPS"] ?? 80),
   });
@@ -601,7 +604,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   await mkdir("artifacts", { recursive: true });
   await writeFile(
     "artifacts/live-generated-report.json",
-    JSON.stringify(report, null, 2) + "\n"
+    `${JSON.stringify(report, null, 2)}\n`
   );
   console.log(JSON.stringify(report, null, 2));
 

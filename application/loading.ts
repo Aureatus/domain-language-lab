@@ -17,14 +17,21 @@ const phases: Readonly<Record<string, readonly Term[]>> = {
 
 function observation(term: Term): Observation {
   switch (term) {
-    case "!owned":
+    case "!owned": {
       return "owned";
-    case "!pending":
+    }
+
+    case "!pending": {
       return "pending";
-    case "!failed":
+    }
+
+    case "!failed": {
       return "failed";
-    default:
+    }
+
+    default: {
       return term;
+    }
   }
 }
 
@@ -45,7 +52,7 @@ export function lifecycleGuard(
   const terms = Object.hasOwn(phases, phase) ? phases[phase] : undefined;
 
   if (!terms) {
-    throw Error(`Unknown loading phase: ${phase}`);
+    throw new Error(`Unknown loading phase: ${phase}`);
   }
 
   return terms
@@ -54,7 +61,7 @@ export function lifecycleGuard(
       const binding = bindings[key];
 
       if (!binding) {
-        throw Error(`Missing loading observation: ${key}`);
+        throw new Error(`Missing loading observation: ${key}`);
       }
 
       return `${term.startsWith("!") ? "not " : ""}(${binding})`;
@@ -70,7 +77,7 @@ export function loadingPlan(contract: {
 }) {
   function check(s: string | undefined) {
     if (s !== undefined && !loadingModes.includes(s)) {
-      throw Error(`Invalid loading strategy: ${s}`);
+      throw new Error(`Invalid loading strategy: ${s}`);
     }
 
     return s;

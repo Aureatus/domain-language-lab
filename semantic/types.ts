@@ -91,10 +91,10 @@ export type Event =
 
 declare const opaque: unique symbol;
 
-export type Prepared = {
+export interface Prepared {
   readonly kind: "semantic-prepared/v1";
   readonly [opaque]: true;
-};
+}
 
 export type Rejected = Readonly<{
   status: "rejected";
@@ -122,10 +122,10 @@ export type Preparation =
 
 export interface Interpreter {
   readonly model: Model;
-  prepare(state: State, invocation: InvocationInput): Preparation;
-  commit(state: State, token: Prepared): Committed | Rejected;
-  execute(
+  prepare: (state: State, invocation: InvocationInput) => Preparation;
+  commit: (state: State, token: Prepared) => Committed | Rejected;
+  execute: (
     state: State,
     invocation: InvocationInput
-  ): Committed | Pending | Rejected;
+  ) => Committed | Pending | Rejected;
 }

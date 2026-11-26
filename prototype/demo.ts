@@ -6,7 +6,7 @@ import { explore, replay, storyboard } from "./scenarios.ts";
 
 const next = structuredClone(model);
 
-next.revision++;
+next.revision += 1;
 
 next.policy.support.high = "allow";
 
@@ -25,7 +25,7 @@ await mkdir("artifacts", { recursive: true });
 for (const [name, artifact] of Object.entries(artifacts)) {
   await writeFile(
     `artifacts/${name}.json`,
-    JSON.stringify(artifact, null, 2) + "\n"
+    `${JSON.stringify(artifact, null, 2)}\n`
   );
 }
 

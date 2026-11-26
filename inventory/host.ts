@@ -41,25 +41,25 @@ function isOperation(operation: unknown): operation is Operation {
     return false;
   }
 
-  const invocation =
+  const innerInvocation =
     "invocation" in operation ? operation.invocation : undefined;
 
   return (
-    !!invocation &&
-    typeof invocation === "object" &&
-    "id" in invocation &&
-    typeof invocation.id === "string" &&
-    "action" in invocation &&
-    typeof invocation.action === "string" &&
-    "actor" in invocation &&
-    typeof invocation.actor === "string" &&
-    "clock" in invocation &&
-    typeof invocation.clock === "number" &&
-    "args" in invocation &&
-    !!invocation.args &&
-    typeof invocation.args === "object" &&
-    !Array.isArray(invocation.args) &&
-    Object.values(invocation.args).every(
+    !!innerInvocation &&
+    typeof innerInvocation === "object" &&
+    "id" in innerInvocation &&
+    typeof innerInvocation.id === "string" &&
+    "action" in innerInvocation &&
+    typeof innerInvocation.action === "string" &&
+    "actor" in innerInvocation &&
+    typeof innerInvocation.actor === "string" &&
+    "clock" in innerInvocation &&
+    typeof innerInvocation.clock === "number" &&
+    "args" in innerInvocation &&
+    !!innerInvocation.args &&
+    typeof innerInvocation.args === "object" &&
+    !Array.isArray(innerInvocation.args) &&
+    Object.values(innerInvocation.args).every(
       (v: unknown) =>
         typeof v === "string" ||
         typeof v === "number" ||
@@ -69,16 +69,19 @@ function isOperation(operation: unknown): operation is Operation {
   );
 }
 
-type Observation = {
+interface Observation {
   status: Preparation["status"] | Committed["status"];
   code?: string;
   reason?: string;
   revision: number;
   oracle: ReturnType<typeof inspectInventory>;
   events: Event[];
-};
+}
 
-type Step = { operation: Operation; observation: Observation };
+interface Step {
+  operation: Operation;
+  observation: Observation;
+}
 
 interface ReplayBundle {
   format: string;
@@ -106,7 +109,7 @@ export function createHost(
 
   const usedIds = new Set<string>();
 
-  const model = runtime.model;
+  const { model } = runtime;
   const initial = validateState(model, initialSource);
 
   let state = initial;
@@ -162,7 +165,7 @@ export function createHost(
     }
 
     if (result.status === "committed") {
-      state = result.state;
+      ({ state } = result);
       events.push(...result.events);
     }
 

@@ -8,11 +8,11 @@ import { encodeJsonPretty } from "../adapters/effect/json.ts";
 const argv = process.argv.slice(2);
 const reportIndex = argv.indexOf("--report");
 
-const reportPath = reportIndex < 0 ? null : argv.splice(reportIndex, 2)[1];
+const reportPath = reportIndex === -1 ? null : argv.splice(reportIndex, 2)[1];
 const [directory, ...entries] = argv;
 
 if (!directory || !entries.length) {
-  throw Error("Usage: count.ts APP_DIR ENTRY [LAUNCHER] [--report OUTPUT]");
+  throw new Error("Usage: count.ts APP_DIR ENTRY [LAUNCHER] [--report OUTPUT]");
 }
 
 const root = resolve(directory);
@@ -24,7 +24,7 @@ async function visit(path: string) {
     return;
   }
 
-  const source = await readFile(path, "utf8");
+  const source = await readFile(path, "utf-8");
   const rel = relative(root, path);
 
   authored.set(path, {
@@ -48,12 +48,12 @@ async function visit(path: string) {
 
   // Explicit closed frontend loading convention; count the actual text too.
   for (const match of source.matchAll(
-    /loadSource\(\s*new URL\(\s*['"]([^'"]+\.domain)['"]\s*,\s*import\.meta\.url\s*\)\s*\)/g
+    /loadSource\(\s*new URL\(\s*['"]([^'"]+\.domain)['"]\s*,\s*import\.meta\.url\s*\)\s*\)/gu
   )) {
     const target = match[1];
 
     if (!target) {
-      throw Error(`Missing source path in ${rel}`);
+      throw new Error(`Missing source path in ${rel}`);
     }
 
     await visit(resolve(dirname(path), target));
@@ -61,28 +61,28 @@ async function visit(path: string) {
 
   if (
     source.includes("loadSource(") &&
-    !source.match(
-      /loadSource\(\s*new URL\(\s*['"][^'"]+\.domain['"]\s*,\s*import\.meta\.url\s*\)\s*\)/
+    !/loadSource\(\s*new URL\(\s*['"][^'"]+\.domain['"]\s*,\s*import\.meta\.url\s*\)\s*\)/u.test(
+      source
     )
   ) {
-    throw Error(
+    throw new Error(
       `Unsupported source loading syntax in ${rel}; cannot safely count.`
     );
   }
 
   // This report supports the repository's explicit static ESM `from` imports.
   // Dynamic or side-effect imports fail rather than silently undercounting.
-  if (/\bimport\s*\(|\bimport\s*['"]/.test(source)) {
-    throw Error(
+  if (/\bimport\s*\(|\bimport\s*['"]/u.test(source)) {
+    throw new Error(
       `Unsupported import syntax in ${rel}; extend accounting before claiming a count.`
     );
   }
 
-  for (const match of source.matchAll(/\bfrom\s*['"]([^'"]+)['"]/g)) {
+  for (const match of source.matchAll(/\bfrom\s*['"]([^'"]+)['"]/gu)) {
     const specifier = match[1];
 
     if (!specifier) {
-      throw Error(`Missing import in ${rel}`);
+      throw new Error(`Missing import in ${rel}`);
     }
 
     if (!specifier.startsWith(".")) {
@@ -104,7 +104,7 @@ for (const entry of entries) {
   await visit(resolve(root, entry));
 }
 
-const files = [...authored.values()].sort((a, b) =>
+const files = [...authored.values()].toSorted((a, b) =>
   a.path.localeCompare(b.path)
 );
 
@@ -129,12 +129,12 @@ const report = {
     nonblankLines: files.reduce((n, f) => n + f.nonblankLines, 0),
     bytes: files.reduce((n, f) => n + f.bytes, 0),
   },
-  externalImports: [...external].sort(),
+  externalImports: [...external].toSorted(),
   excluded,
 };
 
 if (reportPath) {
-  await writeFile(reportPath, encodeJsonPretty(report) + "\n");
+  await writeFile(reportPath, `${encodeJsonPretty(report)}\n`);
 }
 
 console.log(encodeJsonPretty(report));
