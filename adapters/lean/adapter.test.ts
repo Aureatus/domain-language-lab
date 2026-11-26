@@ -5,7 +5,7 @@ import {resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {spawnSync} from 'node:child_process';
 import {createInterpreter} from '../../semantic/core.ts';
-import {generate, MAX, Unsupported} from './generate.ts';
+import {generate, hash, MAX, Unsupported} from './generate.ts';
 import {check, PINNED_LEAN} from './check.ts';
 import {model, obligation} from './fixture.ts';
 import {present} from '../../semantic/test-support.ts';
@@ -60,6 +60,7 @@ test('pinned Lean checks generated nonvacuous law and complete axiom reports', (
   assert.equal(report.status, 'proof_checked', report.detail);
   assert.deepEqual(Object.keys(report.theorem_axioms), ['preserves', 'positive_witness']);
   assert.deepEqual(report.theorem_axioms['positive_witness'], []);
+  assert.equal(report.semantic_primitives_sha256, hash(readFileSync(new URL('../../semantic/primitives.ts', import.meta.url), 'utf8')));
 });
 
 test('unsupported selected strings, dynamic binding, boolean schema and operators fail closed', () => {

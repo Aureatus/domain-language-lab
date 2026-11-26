@@ -11,7 +11,11 @@ export const PINNED_LEAN = '/tmp/opencode/elan/toolchains/leanprover--lean4---v4
 type Report = {format:string;status:'tool_error'|'not_checked'|'proof_checked'|'unsupported';
   theorem_axioms:Record<string,string[]>;tool:{executable:string;version:string|null};scope:string;
   metadata?:ReturnType<typeof generate>['metadata'];generator_sha256?:string;template_sha256?:string;
-  runner_sha256?:string;semantic_core_sha256?:string;detail?:string};
+  runner_sha256?:string;semantic_core_sha256?:string;semantic_primitives_sha256?:string;detail?:string};
+export function writeReport(directory: string, report: object) {
+  writeFileSync(resolve(directory, 'report.json'), encodeJsonPretty(report) + '\n');
+}
+
 export function check(source:unknown, law:unknown, directory:string, lean = process.env['LEAN'] || PINNED_LEAN) {
   mkdirSync(directory, {recursive: true});
   const report: Report = {format: 'generated-lean-evidence/1', status: 'tool_error', theorem_axioms: {}, tool: {executable: lean, version: null}, scope: 'Generated numeric kernel only; no runtime correspondence or full-action theorem.'};
@@ -23,6 +27,7 @@ export function check(source:unknown, law:unknown, directory:string, lean = proc
     report.template_sha256 = hash(readFileSync(new URL('./template.ts', import.meta.url), 'utf8'));
     report.runner_sha256 = hash(readFileSync(new URL('./check.ts', import.meta.url), 'utf8'));
     report.semantic_core_sha256 = hash(readFileSync(new URL('../../semantic/core.ts', import.meta.url), 'utf8'));
+    report.semantic_primitives_sha256 = hash(readFileSync(new URL('../../semantic/primitives.ts', import.meta.url), 'utf8'));
     writeFileSync(resolve(directory, 'Generated.lean'), code);
     writeFileSync(resolve(directory, 'metadata.json'), encodeJsonPretty(metadata) + '\n');
     const version = spawnSync(lean, ['--version'], {encoding: 'utf8', timeout: 30000});
@@ -52,7 +57,7 @@ export function check(source:unknown, law:unknown, directory:string, lean = proc
     report.detail = errorMessage(e);
   }
   writeFileSync(resolve(directory, 'check.log'), log || report.detail + '\n');
-  writeFileSync(resolve(directory, 'report.json'), encodeJsonPretty(report) + '\n');
+  writeReport(directory, report);
   return report;
 }
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

@@ -6,7 +6,7 @@ import {inventoryModel} from '../../inventory/model.ts';
 import {validateModel} from '../../semantic/core.ts';
 import type {Expr, Model, Scalar} from '../../semantic/types.ts';
 import {generate, hash, Unsupported} from './generate.ts';
-import {check} from './check.ts';
+import {check, writeReport} from './check.ts';
 import {encodeJson, encodeJsonPretty} from '../effect/json.ts';
 
 export const PROJECTION = 'inventory-stock-capacity/1';
@@ -93,7 +93,7 @@ export function checkInventory(directory:string, source: Model = inventoryModel,
   const report = {...check(model, law, directory), inventory: metadata,
     inventory_adapter_sha256: hash(readFileSync(fileURLToPath(import.meta.url), 'utf8'))};
   writeFileSync(resolve(directory, 'inventory-projection.json'), encodeJsonPretty(metadata) + '\n');
-  writeFileSync(resolve(directory, 'report.json'), encodeJsonPretty(report) + '\n');
+  writeReport(directory, report);
   return report;
 }
 

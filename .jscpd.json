@@ -1,0 +1,20 @@
+{
+  "gitignore": true,
+  "threshold": 0.7,
+  "format": ["typescript", "javascript", "jsx", "tsx", "markup", "css"],
+  "ignore": [
+    "**/node_modules/**",
+    "**/artifacts/**",
+    "**/dist/**",
+    "**/generated/**",
+    "**/test-output/**",
+    "**/fixtures/**",
+    "**/snapshots/**",
+    "**/__snapshots__/**",
+    "**/*.snap",
+    "**/pnpm-lock.yaml",
+    "**/package-lock.json",
+    "**/yarn.lock"
+  ],
+  "reporters": ["console"]
+}

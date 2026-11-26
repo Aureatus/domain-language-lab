@@ -2,8 +2,8 @@
 
 Status: implemented bounded reference profile, not a durable engine or authentication
 system. Import `semantic/v2/core.ts`; declarations are in `types.ts`.
-This is an **opt-in new profile** (`semantic-core/v2`). v1 is neither modified nor
-automatically migrated. Its existing adapters and Lean evidence still describe v1,
+This is an **opt-in new profile** (`semantic-core/v2`). v1 semantics are unchanged
+and v1 models are not automatically migrated. Existing Lean evidence still describes v1,
 not this profile. No v2 theorem or runtime/proof correspondence is claimed.
 
 ## Exact model extension
@@ -33,10 +33,10 @@ Unknown members/operators, malformed/ill-typed unreachable declarations, incompl
 or extra fields fail closed. There are no inventory-specific opcodes.
 
 Schema types, strict JSON bounds/identity restrictions, safe-integer arithmetic,
-eager booleans and expression operators are exactly the v1 profile's rules. The
-implementation imports only v1's public `jsonSnapshot`; v2 explicitly implements
-its own schema/expression validation, evaluation and transitions (adapted from v1).
-It does not lower v2 lifecycle or approval into a rewritten v1 model.
+eager booleans and expression operators are exactly the v1 profile's rules. Both
+profiles share JSON snapshotting, schema checks and expression evaluation. v2
+retains its own model validation and transitions. It does not lower v2 lifecycle
+or approval into a rewritten v1 model.
 
 ## Lifecycle law
 
@@ -216,7 +216,7 @@ reactive propagation, business facts or v2 verification adapter is implemented.
 ## Evidence and implementation boundaries
 
 `node --test semantic/v2/*.test.ts semantic/*.test.ts` exercises the new mapping
-and the unchanged v1 core. v2 tests cover lifecycle grouping/rollback/aliasing,
+and the existing v1 semantics. v2 tests cover lifecycle grouping/rollback/aliasing,
 snapshots/no-ops/version bounds, malformed IR, approval outcomes, unauthorized and
 self grants, serialization/restart, exact binding invalidation, fresh-clock policy
 checks, no bypass and a positive resumed lifecycle commit. These are executed

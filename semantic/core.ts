@@ -1,26 +1,15 @@
 /** semantic-core/v1: browser-safe, data-only, bounded reference interpreter. */
 import {errorMessage} from '../errors.ts';
-import type {Committed, Event, Expr, FieldSchema, Interpreter, Invocation, InvocationInput, Model, Preparation, Prepared, Recipient, Rejected, State} from './types.ts';
+import {assert, binary, canonical, checkInvocation, checkRecords, evaluate, fail, fields, increment, keys, obj, own, ownValue, routeRecipients, safeKey, value} from './primitives.ts';
+import type {Kind} from './primitives.ts';
+import type {Committed, Event, Expr, Interpreter, InvocationInput, Model, Preparation, Prepared, Rejected, State} from './types.ts';
 export type * from './types.ts';
 type Patch = Pick<Extract<Event,{kind:'change'}>,'semanticId'|'resource'|'key'|'field'|'before'|'after'>;
-type CoreValue=Invocation['args'][string];
 type Snapshot=State['records'][string][string];
 type Bound={resource:string;key:string;record:Snapshot};
-type Context={inv:Invocation;bound:Map<string,Bound>};
 type Token={readonly kind:'semantic-prepared/v1'};
 type Plan={before:string;state:State;events:Event[]};
-const own = (o:object, k:PropertyKey) => Object.hasOwn(o, k);
-export function ownValue<T>(table:Readonly<Record<string,T>>|undefined,key:unknown):T|undefined {
-  return table!==undefined&&typeof key==='string'&&Object.hasOwn(table,key)?table[key]:undefined;
-}
-const obj = (x:unknown):x is Record<string,unknown> => x !== null && typeof x === 'object' && !Array.isArray(x);
-function fail(code:string,message?:string):never { throw Object.assign(new Error(message),{code}); }
-function assert(p:unknown,message:string|undefined,code='invalid'):asserts p { if(!p)fail(code,message); }
-const safeKey = (k:unknown):k is string => typeof k === 'string' && /^[A-Za-z][A-Za-z0-9_.:-]*$/.test(k) && !['__proto__', 'constructor', 'prototype'].includes(k);
-function keys(x:unknown,names:readonly string[]):Record<string,unknown> {
-  assert(obj(x) && Object.keys(x).length === names.length && names.every(k => own(x, k)), `Expected exactly ${names.join(', ')}`);
-  return x;
-}
+export {ownValue};
 const freeze = <T>(x:T):T => { if (x && typeof x === 'object') { Object.values(x).forEach(freeze); Object.freeze(x); } return x; };
 
 /** Reject accessors, cycles, exotic objects, sparse arrays and non-safe JSON numbers. */
@@ -52,34 +41,6 @@ export function jsonSnapshot<T>(value:T):T {
   // oxlint-disable-next-line typescript/consistent-type-assertions -- The walker copies every permitted value and key without coercion.
   return freeze(visit(value, 0)) as T;
 }
-
-const canonical = (x:unknown):string => Array.isArray(x) ? `[${x.map(canonical).join(',')}]` : obj(x)
-  ? `{${Object.keys(x).sort().map(k => `${JSON.stringify(k)}:${canonical(x[k])}`).join(',')}}` : JSON.stringify(x);
-const types = ['integer', 'string', 'boolean', 'ids'];
-function schema(s:unknown) {
-  assert(obj(s)&&typeof s['type']==='string'&&types.includes(s['type']), 'Unsupported schema');
-  const allowed = s['type'] === 'integer' ? ['type', 'min', 'max'] : s['type'] === 'string' ? ['type', 'enum'] : ['type'];
-  assert(Object.keys(s).every(k => allowed.includes(k)), 'Unknown schema member');
-  const min=s['min'],max=s['max'],choices=s['enum'];
-  if (own(s, 'min')) assert(typeof min==='number'&&Number.isSafeInteger(min), 'Invalid minimum');
-  if (own(s, 'max')) assert(typeof max==='number'&&Number.isSafeInteger(max), 'Invalid maximum');
-  if (typeof min==='number'&&typeof max==='number') assert(min<=max, 'Inverted bounds');
-  if (own(s, 'enum')) assert(Array.isArray(choices) && choices.length > 0 && choices.every(x => typeof x === 'string') && new Set(choices).size === choices.length, 'Invalid enum');
-}
-function value(s:FieldSchema,x:unknown):asserts x is CoreValue {
-  const valid = s.type === 'integer' ? typeof x==='number'&&Number.isSafeInteger(x) && !Object.is(x, -0) && (s.min===undefined||x>=s.min) && (s.max===undefined||x<=s.max)
-    : s.type === 'string' ? typeof x === 'string' && (!s.enum || s.enum.includes(x))
-    : s.type === 'boolean' ? typeof x === 'boolean'
-    : Array.isArray(x) && x.every(id => typeof id === 'string' && safeKey(id));
-  assert(valid, `Value violates ${s.type} schema`, 'schema');
-}
-function checkArgs(inputs:Readonly<Record<string,FieldSchema>>,args:unknown):asserts args is Invocation['args'] {
-  const record=keys(args,Object.keys(inputs));
-  for(const [name,schema] of Object.entries(inputs))value(schema,record[name]);
-}
-function fields(o:unknown) { assert(obj(o), 'Expected field map'); Object.values(o).forEach(schema); }
-type Kind=FieldSchema['type'];
-const binary:Readonly<Record<string,readonly [Kind,Kind]>> = {add: ['integer', 'integer'], sub: ['integer', 'integer'], lt: ['integer', 'boolean'], le: ['integer', 'boolean'], and: ['boolean', 'boolean'], or: ['boolean', 'boolean']};
 
 /** Validate the entire declaration, including unreachable expressions. Returns frozen JSON. */
 export function validateModel(source: unknown): Model {
@@ -151,48 +112,10 @@ function assertState(model:Model,s:unknown):asserts s is State {
   for (const [rid, r] of Object.entries(model.resources)) {
     const collection=ownValue(records,rid);
     assert(collection&&obj(collection), 'Missing resource collection');
-    for (const record of Object.values(collection)) {
-      const {version,values}=keys(record, ['version', 'values']);
-      assert(typeof version==='number'&&Number.isSafeInteger(version)&&version>=0, 'Invalid record version');
-      const fields=keys(values, Object.keys(r.fields));
-      for (const [f, spec] of Object.entries(r.fields)) value(spec, fields[f]);
-    }
+    checkRecords(collection, r.fields);
   }
 }
 
-function evaluate(e:Expr, ctx:Context):CoreValue {
-  if (e.op === 'literal') return e.value;
-  if (e.op === 'input') {
-    const arg=ownValue(ctx.inv.args,e.name);
-    assert(arg!==undefined,'Missing input');
-    return arg;
-  }
-  if (e.op === 'actor') return ctx.inv.actor;
-  if (e.op === 'clock') return ctx.inv.clock;
-  if (e.op === 'field') {
-    const field=ownValue(ctx.bound.get(e.binding)?.record.values,e.field);
-    assert(field!==undefined,'Missing bound field');
-    return field;
-  }
-  if (e.op === 'not') return !evaluate(e.value, ctx);
-  assert('left' in e&&'right' in e,'Missing binary operands');
-  const l = evaluate(e.left, ctx), r = evaluate(e.right, ctx);
-  switch (e.op) {
-    case 'add': case 'sub': {
-      assert(typeof l==='number'&&typeof r==='number','Expected integer operands');
-      const n = e.op === 'add' ? BigInt(l) + BigInt(r) : BigInt(l) - BigInt(r);
-      assert(n >= -9007199254740991n && n <= 9007199254740991n, 'Integer overflow', 'overflow'); return Number(n);
-    }
-    case 'eq': return l === r;
-    case 'lt': case 'le':
-      assert(typeof l==='number'&&typeof r==='number','Expected integer operands');
-      return e.op==='lt'?l<r:l<=r;
-    case 'and': return l && r;
-    case 'or': return l || r;
-    default: fail('unsupported', 'Unknown expression');
-  }
-}
-const increment = (x:number) => { assert(x < Number.MAX_SAFE_INTEGER, 'Version overflow', 'overflow'); return x + 1; };
 const rejection = (state:State,error:unknown):Rejected=>Object.freeze({status:'rejected',code:error instanceof Error&&'code' in error&&typeof error.code==='string'?error.code:'invalid',reason:errorMessage(error),state});
 
 /** Tokens are opaque interpreter-owned capabilities, not serializable commands. */
@@ -203,12 +126,7 @@ export function createInterpreter(source: unknown): Readonly<Interpreter> {
   function prepare(state:State, invocation:InvocationInput):Preparation {
     try {
       const before = checkState(model, state), input = jsonSnapshot(invocation);
-      keys(input, ['id', 'action', 'args', 'actor', 'clock']);
-      assert(safeKey(input.id) && safeKey(input.actor) && Number.isSafeInteger(input.clock) && input.clock >= 0, 'Invalid invocation identity/clock');
-      const a=ownValue(model.actions,input.action);
-      assert(a,'Unknown action');const {args}=input;
-      checkArgs(a.inputs,args);
-      const inv:Invocation={...input,args};
+      const {a, inv} = checkInvocation(model.actions, input, 'Invalid invocation identity/clock');
       const bound = new Map<string,Bound>(), ctx = {inv, bound};
       for (const b of a.bindings) {
         const key=evaluate(b.key,ctx),record=ownValue(ownValue(before.records,b.resource),key);
@@ -241,24 +159,13 @@ export function createInterpreter(source: unknown): Readonly<Interpreter> {
       }
       candidate.revision = increment(candidate.revision);
       const nextState = checkState(model, candidate);
-      // Routing snapshots poststate; duplicate support paths do not duplicate recipients.
-      const recipients = new Map<string,Map<string,Recipient['paths'][number]>>();
-      for (const o of a.observe) {
+      const routing = routeRecipients(a.observe, inv.actor, o => {
         const b = bound.get(o.binding), r = relations.get(o.relationship);
         assert(b&&r,'Missing observation declaration','routing');
         const record=ownValue(ownValue(nextState.records,b.resource),b.key);
         assert(record,'Missing observation record','routing');
-        const raw=ownValue(record.values,r.field);
-        for (const recipient of Array.isArray(raw) ? raw : [raw]) {
-          assert(safeKey(recipient), 'Invalid relationship recipient', 'routing');
-          if (recipient === inv.actor) continue;
-          let paths=recipients.get(recipient);
-          if (!paths) { paths=new Map();recipients.set(recipient,paths); }
-          const path = {relationship: r.id, resource: b.resource, key: b.key};
-          paths.set(canonical(path), path);
-        }
-      }
-      const routing = [...recipients].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0).map(([recipient, paths]) => ({recipient, paths: [...paths.values()].sort((a, b) => canonical(a) < canonical(b) ? -1 : canonical(a) > canonical(b) ? 1 : 0)}));
+        return {path: {relationship: r.id, resource: b.resource, key: b.key}, raw: ownValue(record.values,r.field)};
+      });
       const eventBase = {modelId: model.id, actionId: inv.action, invocationId: inv.id, actor: inv.actor, clock: inv.clock, revision: nextState.revision, recipients: routing};
       const eventPrefix = `event:${encodeURIComponent(inv.id)}`;
       const events:Event[] = [{...eventBase, id: `${eventPrefix}:action`, kind: 'action', semanticId: inv.action}, ...patches.filter(p => canonical(p.before) !== canonical(p.after)).map((p):Event => ({...eventBase, id: `${eventPrefix}:change:${encodeURIComponent(p.semanticId)}`, kind: 'change', ...p}))];
