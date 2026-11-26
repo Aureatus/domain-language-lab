@@ -2,14 +2,42 @@
   "name": "Premise (experimental)",
   "scopeName": "source.experimental-domain",
   "patterns": [
-    {"name": "comment.line.number-sign.domain", "match": "#.*$"},
-    {"name": "string.quoted.double.domain", "begin": "\"", "end": "\"", "patterns": [{"name": "constant.character.escape.domain", "match": "\\\\[nrt\"\\\\]"}]},
-    {"match": "^\\s*(field|input|resource|records|record|bind|set)\\s+([A-Za-z_$][A-Za-z0-9_$]*)", "captures": {"1": {"name": "keyword.declaration.domain"}, "2": {"name": "variable.other.domain"}}},
-    {"match": "^\\s*([A-Za-z_$][A-Za-z0-9_$]*)(?=\\s+(?:string|integer|boolean|like|from)\\b)", "captures": {"1": {"name": "variable.other.domain"}}},
-    {"name": "keyword.control.domain", "match": "\\b(module|import|use|singleton|identity|domain|fields|relationships|relationship|from|action|inputs|bindings|preconditions|requires|policies|changes|observations|type|like|key|id|require|policy|deny|allow|when|approve|by|update|end|create|as|observe|through|initial|revision|version|application|title|eyebrow|subtitle|scope|loading|actor|label|name|present|description|default|adapter|output|view|summary|list|format|min|max|enum|ownerField|reference|widget|constant|source)\\b"},
-    {"name": "storage.type.domain", "match": "\\b(string|integer|boolean)\\b"},
-    {"name": "constant.language.domain", "match": "\\b(true|false)\\b"},
-    {"name": "constant.numeric.domain", "match": "\\b[0-9]+\\b"},
-    {"name": "keyword.operator.domain", "match": "<=|>=|==|!=|[+<>=-]|\\b(and|or|not)\\b"}
+    { "name": "comment.line.number-sign.domain", "match": "#.*$" },
+    {
+      "name": "string.quoted.double.domain",
+      "begin": "\"",
+      "end": "\"",
+      "patterns": [
+        {
+          "name": "constant.character.escape.domain",
+          "match": "\\\\[nrt\"\\\\]"
+        }
+      ]
+    },
+    {
+      "match": "^\\s*(field|input|resource|records|record|bind|set)\\s+([A-Za-z_$][A-Za-z0-9_$]*)",
+      "captures": {
+        "1": { "name": "keyword.declaration.domain" },
+        "2": { "name": "variable.other.domain" }
+      }
+    },
+    {
+      "match": "^\\s*([A-Za-z_$][A-Za-z0-9_$]*)(?=\\s+(?:string|integer|boolean|like|from)\\b)",
+      "captures": { "1": { "name": "variable.other.domain" } }
+    },
+    {
+      "name": "keyword.control.domain",
+      "match": "\\b(module|import|use|singleton|identity|domain|fields|relationships|relationship|from|action|inputs|bindings|preconditions|requires|policies|changes|observations|type|like|key|id|require|policy|deny|allow|when|approve|by|update|end|create|as|observe|through|initial|revision|version|application|title|eyebrow|subtitle|scope|loading|actor|label|name|present|description|default|adapter|output|view|summary|list|format|min|max|enum|ownerField|reference|widget|constant|source)\\b"
+    },
+    {
+      "name": "storage.type.domain",
+      "match": "\\b(string|integer|boolean)\\b"
+    },
+    { "name": "constant.language.domain", "match": "\\b(true|false)\\b" },
+    { "name": "constant.numeric.domain", "match": "\\b[0-9]+\\b" },
+    {
+      "name": "keyword.operator.domain",
+      "match": "<=|>=|==|!=|[+<>=-]|\\b(and|or|not)\\b"
+    }
   ]
 }

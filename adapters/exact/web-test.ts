@@ -1,78 +1,201 @@
+import assert from "node:assert/strict";
+import { writeFile } from "node:fs/promises";
+import { createRequire } from "node:module";
+
 // Tests our generated renderer against the shared backend, not upstream's suite.
-import type {Browser} from 'playwright';
-import {createRequire} from 'node:module';
-import assert from 'node:assert/strict';
-import {writeFile} from 'node:fs/promises';
-const require=createRequire(`${process.env['EXACT_ROOT']??'/tmp/opencode/exact-source'}/package.json`);
-const {chromium}=require('playwright-core');
-const base=process.env['EXACT_URL']??'http://127.0.0.1:4186';
-const browser:Browser=await chromium.launch({headless:true});
-const page=await browser.newPage({viewport:{width:390,height:844}}),errors:string[]=[];
-page.on('pageerror',e=>errors.push(e.message));
-const snapshot=async()=>{const r=await fetch(base+'/api/snapshot');return r.json();};
-const balance=async()=> (await snapshot()).state.records.employee.maya.values.balance;
-try{
-  await page.goto(base);await page.waitForLoadState('networkidle');
-  await page.getByTestId('maya:leave.request:execute').waitFor();
-  assert.equal(await balance(),5,'Run this test with a fresh isolated server.');
+import type { Browser } from "playwright";
+
+const require = createRequire(
+  `${process.env["EXACT_ROOT"] ?? "/tmp/opencode/exact-source"}/package.json`
+);
+
+const { chromium } = require("playwright-core");
+const base = process.env["EXACT_URL"] ?? "http://127.0.0.1:4186";
+const browser: Browser = await chromium.launch({ headless: true });
+
+const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
+const errors: string[] = [];
+
+page.on("pageerror", (e) => errors.push(e.message));
+
+const snapshot = async () => {
+  const r = await fetch(base + "/api/snapshot");
+
+  return r.json();
+};
+
+const balance = async () =>
+  (await snapshot()).state.records.employee.maya.values.balance;
+
+try {
+  await page.goto(base);
+  await page.waitForLoadState("networkidle");
+  await page.getByTestId("maya:leave.request:execute").waitFor();
+  assert.equal(
+    await balance(),
+    5,
+    "Run this test with a fresh isolated server."
+  );
   // Hold a real poll in flight: records, drafts and geometry must stay stable.
-  const field=page.getByTestId('maya:leave.request:start');
-  await field.fill('2026-11-20');
-  const before=await field.boundingBox();
-  const {promise:held,resolve:release}=Promise.withResolvers<void>(),{promise:polling,resolve:started}=Promise.withResolvers<void>();
-  await page.route('**/api/snapshot',async route=>{started();await held;await route.continue();});
-  try{
+  const field = page.getByTestId("maya:leave.request:start");
+  await field.fill("2026-11-20");
+  const before = await field.boundingBox();
+
+  const { promise: held, resolve: release } = Promise.withResolvers<void>();
+  const { promise: polling, resolve: started } = Promise.withResolvers<void>();
+
+  await page.route("**/api/snapshot", async (route) => {
+    started();
+    await held;
+    await route.continue();
+  });
+
+  try {
     await polling;
-    await page.evaluate(()=>new Promise<number>(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
-    assert.equal(await page.getByText('Loading…',{exact:true}).count(),0,'Background polling must not insert loading content.');
-    assert.deepEqual(await field.boundingBox(),before,'Polling must not move the form.');
-    assert.equal(await field.inputValue(),'2026-11-20');
-  }finally{release();await page.unrouteAll({behavior:'wait'});}
-  await page.getByTestId('maya:leave.request:execute').dblclick();
-  await page.getByTestId('notice').filter({hasText:'Saved.'}).waitFor();assert.equal(await balance(),4);
-  await page.getByTestId('maya:leave.request:start').fill('2026-11-23');
-  await page.getByTestId('maya:leave.request:end').fill('2026-11-25');
-  await page.getByTestId('maya:leave.request:preview').click();
-  await page.getByTestId('notice').filter({hasText:'Approval needed'}).waitFor();
-  await page.getByTestId('maya:leave.request:execute').click();
-  await page.getByRole('button',{name:'Refresh',exact:true}).waitFor({state:'visible'});
-  await page.waitForFunction(()=>document.querySelectorAll('[data-testid^="grant-"]').length===0&&document.body.textContent.includes('Approval: Sam'));
-  assert.equal(await balance(),4);
-  await page.getByTestId('actor').selectOption('sam');
-  const grant=page.locator('[data-testid^="grant-"]').first();await grant.waitFor();
-  await grant.scrollIntoViewIfNeeded();await page.screenshot({path:'artifacts/exact-web-pending.png',fullPage:true});
-  await grant.click();await page.getByTestId('notice').filter({hasText:'Approval saved.'}).waitFor();assert.equal(await balance(),4);
+    await page.evaluate(
+      () =>
+        new Promise<number>((resolve) =>
+          requestAnimationFrame(() => requestAnimationFrame(resolve))
+        )
+    );
+    assert.equal(
+      await page.getByText("Loading…", { exact: true }).count(),
+      0,
+      "Background polling must not insert loading content."
+    );
+    assert.deepEqual(
+      await field.boundingBox(),
+      before,
+      "Polling must not move the form."
+    );
+    assert.equal(await field.inputValue(), "2026-11-20");
+  } finally {
+    release();
+    await page.unrouteAll({ behavior: "wait" });
+  }
+
+  await page.getByTestId("maya:leave.request:execute").dblclick();
+  await page.getByTestId("notice").filter({ hasText: "Saved." }).waitFor();
+  assert.equal(await balance(), 4);
+  await page.getByTestId("maya:leave.request:start").fill("2026-11-23");
+  await page.getByTestId("maya:leave.request:end").fill("2026-11-25");
+  await page.getByTestId("maya:leave.request:preview").click();
+  await page
+    .getByTestId("notice")
+    .filter({ hasText: "Approval needed" })
+    .waitFor();
+  await page.getByTestId("maya:leave.request:execute").click();
+  await page
+    .getByRole("button", { name: "Refresh", exact: true })
+    .waitFor({ state: "visible" });
+  await page.waitForFunction(
+    () =>
+      document.querySelectorAll('[data-testid^="grant-"]').length === 0 &&
+      document.body.textContent.includes("Approval: Sam")
+  );
+  assert.equal(await balance(), 4);
+  await page.getByTestId("actor").selectOption("sam");
+  const grant = page.locator('[data-testid^="grant-"]').first();
+  await grant.waitFor();
+  await grant.scrollIntoViewIfNeeded();
+  await page.screenshot({
+    path: "artifacts/exact-web-pending.png",
+    fullPage: true,
+  });
+  await grant.click();
+  await page
+    .getByTestId("notice")
+    .filter({ hasText: "Approval saved." })
+    .waitFor();
+  assert.equal(await balance(), 4);
   await page.locator('[data-testid^="resume-"]').first().click();
-  await page.getByTestId('notice').filter({hasText:'Saved.'}).waitFor();assert.equal(await balance(),1);
-  await page.getByTestId('actor').selectOption('maya');
-  await page.getByTestId('maya:leave.request:end').waitFor();
-  assert.equal(await page.getByTestId('maya:leave.request:end').inputValue(),'2026-11-25','Actor switches must retain drafts.');
+  await page.getByTestId("notice").filter({ hasText: "Saved." }).waitFor();
+  assert.equal(await balance(), 1);
+  await page.getByTestId("actor").selectOption("maya");
+  await page.getByTestId("maya:leave.request:end").waitFor();
+  assert.equal(
+    await page.getByTestId("maya:leave.request:end").inputValue(),
+    "2026-11-25",
+    "Actor switches must retain drafts."
+  );
   await page.locator('[data-testid="view:0:maya"]').waitFor();
   await page.locator('[data-testid="view:0:maya"]').scrollIntoViewIfNeeded();
-  await page.screenshot({path:'artifacts/exact-web-completed.png',fullPage:true});
-  await page.route('**/api/actions/execute',route=>route.abort('failed'));
-  await page.getByTestId('maya:leave.request:execute').click();
-  await page.getByTestId('notice').filter({hasText:'ambiguous outcome'}).waitFor();
-  assert.equal(await page.getByTestId('maya:leave.request:end').inputValue(),'2026-11-25');
-  await page.unroute('**/api/actions/execute');
-  await page.getByTestId('actor').selectOption('leo');
-  await page.getByTestId('leo:leave.request:start').fill('2026-11-23');
-  await page.getByTestId('leo:leave.request:end').fill('2026-11-25');
-  await page.getByTestId('leo:leave.request:execute').click();
-  await page.getByTestId('notice').filter({hasText:'Approval needed'}).waitFor();
-  await page.getByTestId('actor').selectOption('sam');
+  await page.screenshot({
+    path: "artifacts/exact-web-completed.png",
+    fullPage: true,
+  });
+  await page.route("**/api/actions/execute", (route) => route.abort("failed"));
+  await page.getByTestId("maya:leave.request:execute").click();
+  await page
+    .getByTestId("notice")
+    .filter({ hasText: "ambiguous outcome" })
+    .waitFor();
+  assert.equal(
+    await page.getByTestId("maya:leave.request:end").inputValue(),
+    "2026-11-25"
+  );
+  await page.unroute("**/api/actions/execute");
+  await page.getByTestId("actor").selectOption("leo");
+  await page.getByTestId("leo:leave.request:start").fill("2026-11-23");
+  await page.getByTestId("leo:leave.request:end").fill("2026-11-25");
+  await page.getByTestId("leo:leave.request:execute").click();
+  await page
+    .getByTestId("notice")
+    .filter({ hasText: "Approval needed" })
+    .waitFor();
+  await page.getByTestId("actor").selectOption("sam");
   await page.locator('[data-testid^="grant-"]').first().click();
-  await page.getByTestId('notice').filter({hasText:'Approval saved.'}).waitFor();
-  await page.getByTestId('sam:settings.change:threshold').fill('4');
-  await page.getByTestId('sam:settings.change:execute').click();
-  await page.getByTestId('notice').filter({hasText:'Saved.'}).waitFor();
+  await page
+    .getByTestId("notice")
+    .filter({ hasText: "Approval saved." })
+    .waitFor();
+  await page.getByTestId("sam:settings.change:threshold").fill("4");
+  await page.getByTestId("sam:settings.change:execute").click();
+  await page.getByTestId("notice").filter({ hasText: "Saved." }).waitFor();
   await page.locator('[data-testid^="resume-"]').first().click();
-  await page.getByTestId('notice').filter({hasText:'Approval is saved, but completion failed.'}).waitFor();
-  const stale=(await snapshot()).pending.at(-1);assert.equal(stale.grants.length,1);assert.equal(stale.stale,true);
-  assert.equal((await snapshot()).state.records.employee.leo.values.balance,5);
-  await page.getByTestId('notice').scrollIntoViewIfNeeded();await page.screenshot({path:'artifacts/exact-web-stale.png',fullPage:true});
-  const overflow=await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth);assert.equal(overflow,false);
-  assert.deepEqual(errors,[]);
-  await writeFile('artifacts/exact-web-report.json',JSON.stringify({format:'exact-web-runtime/v1',viewport:'390x844',balances:[5,4,4,4,1],draftRetained:true,ambiguousFailureShown:true,grantSavedAfterStaleCompletion:true,staleBalance:5,overflow,errors,scope:'Actual Exact compiled web UI and shared HTTP backend; not native.'},null,2));
-  console.log('Exact web real UI: 5 → 4 → pending 4 → grant 4 → resume 1; drafts retained.');
-}finally{await browser.close();}
+  await page
+    .getByTestId("notice")
+    .filter({ hasText: "Approval is saved, but completion failed." })
+    .waitFor();
+  const stale = (await snapshot()).pending.at(-1);
+  assert.equal(stale.grants.length, 1);
+  assert.equal(stale.stale, true);
+  assert.equal((await snapshot()).state.records.employee.leo.values.balance, 5);
+  await page.getByTestId("notice").scrollIntoViewIfNeeded();
+  await page.screenshot({
+    path: "artifacts/exact-web-stale.png",
+    fullPage: true,
+  });
+
+  const overflow = await page.evaluate(
+    () => document.documentElement.scrollWidth > innerWidth
+  );
+
+  assert.equal(overflow, false);
+  assert.deepEqual(errors, []);
+  await writeFile(
+    "artifacts/exact-web-report.json",
+    JSON.stringify(
+      {
+        format: "exact-web-runtime/v1",
+        viewport: "390x844",
+        balances: [5, 4, 4, 4, 1],
+        draftRetained: true,
+        ambiguousFailureShown: true,
+        grantSavedAfterStaleCompletion: true,
+        staleBalance: 5,
+        overflow,
+        errors,
+        scope:
+          "Actual Exact compiled web UI and shared HTTP backend; not native.",
+      },
+      null,
+      2
+    )
+  );
+  console.log(
+    "Exact web real UI: 5 → 4 → pending 4 → grant 4 → resume 1; drafts retained."
+  );
+} finally {
+  await browser.close();
+}

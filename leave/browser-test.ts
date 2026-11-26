@@ -1,2 +1,3 @@
-import {runLeaveBrowser} from './browser-scenario.ts';
+import { runLeaveBrowser } from "./browser-scenario.ts";
+
 await runLeaveBrowser();

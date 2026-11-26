@@ -16,5 +16,6 @@
     "**/package-lock.json",
     "**/yarn.lock"
   ],
-  "reporters": ["console"]
+  "reporters": ["console"],
+  "minLines": 14
 }

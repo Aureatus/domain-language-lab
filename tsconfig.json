@@ -30,18 +30,13 @@
           {
             "include": ["adapters/effect-ui/browser.ts"],
             "options": {
-              "diagnosticSeverity": {"experimentalApiUsage": "off"}
+              "diagnosticSeverity": { "experimentalApiUsage": "off" }
             }
           }
         ]
       }
     ]
   },
-  "include": [
-    "**/*.ts",
-    "**/*.tsx",
-    "**/*.mts",
-    "**/*.cts"
-  ],
+  "include": ["**/*.ts", "**/*.tsx", "**/*.mts", "**/*.cts"],
   "exclude": ["**/node_modules", "**/dist", "**/.lake", "artifacts"]
 }
