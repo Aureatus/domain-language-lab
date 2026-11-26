@@ -18,25 +18,65 @@
       "Notification preparation does not imply external delivery success."
     ],
     "events": [
-      {"id": "e1", "transition": "Ticket.resolve.commit", "causalParents": [], "delta": {"status": {"before": "open", "after": "resolved"}}},
-      {"id": "e2", "transition": "TicketProjection.refresh", "causalParents": ["e1"]},
-      {"id": "e3", "transition": "Notification.prepare", "causalParents": ["e1"]}
+      {
+        "id": "e1",
+        "transition": "Ticket.resolve.commit",
+        "causalParents": [],
+        "delta": { "status": { "before": "open", "after": "resolved" } }
+      },
+      {
+        "id": "e2",
+        "transition": "TicketProjection.refresh",
+        "causalParents": ["e1"]
+      },
+      {
+        "id": "e3",
+        "transition": "Notification.prepare",
+        "causalParents": ["e1"]
+      }
     ],
     "independence": [
-      {"events": ["e2", "e3"], "basis": "illustrative-model-assumption", "establishedByAnalysis": false}
+      {
+        "events": ["e2", "e3"],
+        "basis": "illustrative-model-assumption",
+        "establishedByAnalysis": false
+      }
     ]
   },
   "evidence": [],
   "claims": [
-    {"id": "c1", "text": "In this hypothetical scenario, resolving the ticket commits a status change.", "basis": "illustrative", "eventIds": ["e1"]},
-    {"id": "c2", "text": "The model permits projection refresh and notification preparation concurrently after commit.", "basis": "illustrative-assumption", "eventIds": ["e1", "e2", "e3"]}
+    {
+      "id": "c1",
+      "text": "In this hypothetical scenario, resolving the ticket commits a status change.",
+      "basis": "illustrative",
+      "eventIds": ["e1"]
+    },
+    {
+      "id": "c2",
+      "text": "The model permits projection refresh and notification preparation concurrently after commit.",
+      "basis": "illustrative-assumption",
+      "eventIds": ["e1", "e2", "e3"]
+    }
   ],
   "storyboard": {
     "timing": "editorial-not-measured",
     "productionEffectsAllowed": false,
     "scenes": [
-      {"id": "s1", "eventIds": ["e1"], "claimIds": ["c1"], "caption": "Hypothetical: the resolution commits", "durationMs": 1800},
-      {"id": "s2", "eventIds": ["e2", "e3"], "claimIds": ["c2"], "layoutIntent": "parallel-branches", "caption": "Two permitted follow-ups; neither waits for the other in this model", "durationMs": 2400}
+      {
+        "id": "s1",
+        "eventIds": ["e1"],
+        "claimIds": ["c1"],
+        "caption": "Hypothetical: the resolution commits",
+        "durationMs": 1800
+      },
+      {
+        "id": "s2",
+        "eventIds": ["e2", "e3"],
+        "claimIds": ["c2"],
+        "layoutIntent": "parallel-branches",
+        "caption": "Two permitted follow-ups; neither waits for the other in this model",
+        "durationMs": 2400
+      }
     ]
   }
 }

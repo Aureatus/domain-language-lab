@@ -1,51 +1,158 @@
-import {chromium} from 'playwright';
-import assert from 'node:assert/strict';
-import {mkdir,writeFile} from 'node:fs/promises';
-const root=new URL('../',import.meta.url), artifacts=new URL('artifacts/',root);
-await mkdir(artifacts,{recursive:true});
-const browser=await chromium.launch({headless:true});
-const page=await browser.newPage({viewport:{width:1440,height:1100}});
-const errors: string[]=[];page.on('pageerror',e=>errors.push(e.message));
-const requests: string[]=[];page.on('request',r=>{if(!r.url().startsWith('file:'))requests.push(r.url());});
+import assert from "node:assert/strict";
+import { mkdir, writeFile } from "node:fs/promises";
+
+import { chromium } from "playwright";
+
+const root = new URL("../", import.meta.url);
+const artifacts = new URL("artifacts/", root);
+
+await mkdir(artifacts, { recursive: true });
+
+const browser = await chromium.launch({ headless: true });
+const page = await browser.newPage({ viewport: { width: 1440, height: 1100 } });
+const errors: string[] = [];
+
+page.on("pageerror", (e) => errors.push(e.message));
+
+const requests: string[] = [];
+
+page.on("request", (r) => {
+  if (!r.url().startsWith("file:")) {
+    requests.push(r.url());
+  }
+});
+
 try {
-  await page.goto(new URL('artifacts/inventory.html',root).href);await page.waitForLoadState('networkidle');
-  await page.locator('#available').filter({hasText:'5'}).waitFor();
-  await page.screenshot({path:new URL('inventory-initial.png',artifacts).pathname,fullPage:true});
-  await page.click('#broken');
-  assert.match(await page.locator('#health').innerText(),/oversold/);
-  assert.match(await page.locator('#health').innerText(),/lost reservation/);
-  assert.equal(await page.locator('#steps .step').count(),4);
-  await page.screenshot({path:new URL('inventory-mutant.png',artifacts).pathname,fullPage:true});
-  await page.click('#replay');assert.match(await page.locator('#replay-result').innerText(),/Exact replay matched/);
+  await page.goto(new URL("artifacts/inventory.html", root).href);
+  await page.waitForLoadState("networkidle");
+  await page.locator("#available").filter({ hasText: "5" }).waitFor();
+  await page.screenshot({
+    path: new URL("inventory-initial.png", artifacts).pathname,
+    fullPage: true,
+  });
+  await page.click("#broken");
+  assert.match(await page.locator("#health").innerText(), /oversold/);
+  assert.match(await page.locator("#health").innerText(), /lost reservation/);
+  assert.equal(await page.locator("#steps .step").count(), 4);
+  await page.screenshot({
+    path: new URL("inventory-mutant.png", artifacts).pathname,
+    fullPage: true,
+  });
+  await page.click("#replay");
+  assert.match(
+    await page.locator("#replay-result").innerText(),
+    /Exact replay matched/
+  );
   // Browser export is actual JSON, then import it through the file control.
-  const downloadPromise=page.waitForEvent('download');await page.click('#export');const download=await downloadPromise;
-  const exportPath=new URL('inventory-mutant-replay.json',artifacts).pathname;await download.saveAs(exportPath);
-  await page.click('#reset');await page.setInputFiles('#import',exportPath);
-  await page.waitForFunction(()=>document.querySelector('#replay-result')?.textContent==='Imported replay verified.');
-  assert.match(await page.locator('#health').innerText(),/INVARIANT FAILURE/);
-  await page.locator('[data-step="1"]').click();assert.equal(await page.locator('#available').innerText(),'5');assert.ok(await page.locator('button[type=submit]').isDisabled());
-  await page.click('#live');assert.equal(await page.locator('#available').innerText(),'2');
-  await page.click('#correct');
-  assert.equal(await page.locator('#available').innerText(),'0');assert.match(await page.locator('#health').innerText(),/Conservation holds/);
-  assert.match(await page.locator('#steps').innerText(),/stale/);assert.match(await page.locator('#steps').innerText(),/precondition/);
-  await page.locator('[data-step="3"]').click();assert.match(await page.locator('#explanation').innerText(),/Stale preparation rejected/);
+  const downloadPromise = page.waitForEvent("download");
+  await page.click("#export");
+  const download = await downloadPromise;
+
+  const exportPath = new URL("inventory-mutant-replay.json", artifacts)
+    .pathname;
+
+  await download.saveAs(exportPath);
+  await page.click("#reset");
+  await page.setInputFiles("#import", exportPath);
+  await page.waitForFunction(
+    () =>
+      document.querySelector("#replay-result")?.textContent ===
+      "Imported replay verified."
+  );
+  assert.match(await page.locator("#health").innerText(), /INVARIANT FAILURE/);
+  await page.locator('[data-step="1"]').click();
+  assert.equal(await page.locator("#available").innerText(), "5");
+  assert.ok(await page.locator("button[type=submit]").isDisabled());
+  await page.click("#live");
+  assert.equal(await page.locator("#available").innerText(), "2");
+  await page.click("#correct");
+  assert.equal(await page.locator("#available").innerText(), "0");
+  assert.match(await page.locator("#health").innerText(), /Conservation holds/);
+  assert.match(await page.locator("#steps").innerText(), /stale/);
+  assert.match(await page.locator("#steps").innerText(), /precondition/);
+  await page.locator('[data-step="3"]').click();
+  assert.match(
+    await page.locator("#explanation").innerText(),
+    /Stale preparation rejected/
+  );
   await page.locator('[data-step="5"]').click();
-  await page.screenshot({path:new URL('inventory-correct.png',artifacts).pathname,fullPage:true});
-  await page.click('#live');await page.click('#replay');
-  assert.match(await page.locator('#replay-result').innerText(),/Exact replay matched/);
+  await page.screenshot({
+    path: new URL("inventory-correct.png", artifacts).pathname,
+    fullPage: true,
+  });
+  await page.click("#live");
+  await page.click("#replay");
+  assert.match(
+    await page.locator("#replay-result").innerText(),
+    /Exact replay matched/
+  );
   // Real form actions: owner rejection, early expiration, inclusive boundary, cancellation.
-  await page.click('#reset');await page.click('button[type=submit]');
-  await page.selectOption('#kind','expire');await page.selectOption('#actor','warehouse');await page.fill('#clock','29');await page.click('button[type=submit]');
-  assert.match(await page.locator('#explanation').innerText(),/expiryBoundary/);
-  await page.fill('#clock','30');await page.click('button[type=submit]');assert.equal(await page.locator('#available').innerText(),'5');
-  await page.click('#reset');await page.selectOption('#kind','reserve');await page.selectOption('#actor','bob');await page.fill('#clock','10');await page.click('button[type=submit]');
-  assert.match(await page.locator('#explanation').innerText(),/Ownership policy denied/);
-  await page.selectOption('#actor','alice');await page.click('button[type=submit]');
-  await page.selectOption('#kind','cancel');await page.click('button[type=submit]');assert.equal(await page.locator('#available').innerText(),'5');
-  await page.setViewportSize({width:390,height:844});await page.click('#reset');
-  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
-  await page.screenshot({path:new URL('inventory-mobile.png',artifacts).pathname,fullPage:true});
-  assert.deepEqual(errors,[]);assert.deepEqual(requests,[]);
-  await writeFile(new URL('inventory-browser-test.json',artifacts),JSON.stringify({status:'passed',checks:['offline file load','mutant actual failure','exact replay','JSON export/import','history snapshots','correct stale rejection/retry','form reserve/cancel/expire','policy denial','expiration boundary','mobile overflow','no page errors','no network requests']},null,2));
-  console.log('Inventory browser checks passed; screenshots and replay saved.');
-} finally {await browser.close();}
+  await page.click("#reset");
+  await page.click("button[type=submit]");
+  await page.selectOption("#kind", "expire");
+  await page.selectOption("#actor", "warehouse");
+  await page.fill("#clock", "29");
+  await page.click("button[type=submit]");
+  assert.match(
+    await page.locator("#explanation").innerText(),
+    /expiryBoundary/
+  );
+  await page.fill("#clock", "30");
+  await page.click("button[type=submit]");
+  assert.equal(await page.locator("#available").innerText(), "5");
+  await page.click("#reset");
+  await page.selectOption("#kind", "reserve");
+  await page.selectOption("#actor", "bob");
+  await page.fill("#clock", "10");
+  await page.click("button[type=submit]");
+  assert.match(
+    await page.locator("#explanation").innerText(),
+    /Ownership policy denied/
+  );
+  await page.selectOption("#actor", "alice");
+  await page.click("button[type=submit]");
+  await page.selectOption("#kind", "cancel");
+  await page.click("button[type=submit]");
+  assert.equal(await page.locator("#available").innerText(), "5");
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.click("#reset");
+  assert.equal(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth
+    ),
+    true
+  );
+  await page.screenshot({
+    path: new URL("inventory-mobile.png", artifacts).pathname,
+    fullPage: true,
+  });
+  assert.deepEqual(errors, []);
+  assert.deepEqual(requests, []);
+  await writeFile(
+    new URL("inventory-browser-test.json", artifacts),
+    JSON.stringify(
+      {
+        status: "passed",
+        checks: [
+          "offline file load",
+          "mutant actual failure",
+          "exact replay",
+          "JSON export/import",
+          "history snapshots",
+          "correct stale rejection/retry",
+          "form reserve/cancel/expire",
+          "policy denial",
+          "expiration boundary",
+          "mobile overflow",
+          "no page errors",
+          "no network requests",
+        ],
+      },
+      null,
+      2
+    )
+  );
+  console.log("Inventory browser checks passed; screenshots and replay saved.");
+} finally {
+  await browser.close();
+}

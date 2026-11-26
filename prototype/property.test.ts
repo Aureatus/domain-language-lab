@@ -1,141 +1,313 @@
-import test from 'node:test';
-import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { generateHistory, replayHistory, runProperties, shrinkHistory } from './property.ts';
-import type { Action, ReplayData } from './property.ts';
+import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import test from "node:test";
+import { fileURLToPath } from "node:url";
 
-const request: Action = { kind: 'request', actor: { id: 'support-1', role: 'support' }, summary: 'Original resolution' };
-const approve: Action = { kind: 'approve', actor: { id: 'reviewer-1', role: 'reviewer' } };
-const execute: Action = { kind: 'execute' };
+import {
+  generateHistory,
+  replayHistory,
+  runProperties,
+  shrinkHistory,
+} from "./property.ts";
+import type { Action, ReplayData } from "./property.ts";
+
+const request: Action = {
+  kind: "request",
+  actor: { id: "support-1", role: "support" },
+  summary: "Original resolution",
+};
+
+const approve: Action = {
+  kind: "approve",
+  actor: { id: "reviewer-1", role: "reviewer" },
+};
+
+const execute: Action = { kind: "execute" };
+
 const data = (history: Action[], mutant = false): ReplayData => ({
-  format: 'approval-property-replay/1', clock: 1000, staleApprovalMutant: mutant, history,
+  format: "approval-property-replay/1",
+  clock: 1000,
+  staleApprovalMutant: mutant,
+  history,
 });
 
-test('generated sampled reports are deterministic, serializable and non-vacuous', () => {
+test("generated sampled reports are deterministic, serializable and non-vacuous", () => {
   const options = { seed: 12345, samples: 150, maxSteps: 24 };
   const first = runProperties(options);
   assert.deepEqual(first, runProperties(options));
   assert.deepEqual(first, JSON.parse(JSON.stringify(first)));
-  assert.equal(first.result, 'sampled_pass');
+  assert.equal(first.result, "sampled_pass");
   assert.equal(first.sampleCount, 150);
   assert.equal(first.skipped, 0);
   assert.ok(first.coverage.approvalRequiredCommits > 0);
   assert.ok(first.coverage.staleRejections > 0);
-  for (const kind of ['request', 'approve', 'edit', 'execute', 'policy', 'revision', 'resource']) {
+
+  for (const kind of [
+    "request",
+    "approve",
+    "edit",
+    "execute",
+    "policy",
+    "revision",
+    "resource",
+  ]) {
     assert.ok((first.coverage.actions[kind] ?? 0) > 0, kind);
   }
+
   assert.match(first.engine.sha256, /^[a-f0-9]{64}$/);
-  assert.equal(first.engine.oracle, 'independent-snapshot-state-machine/1');
+  assert.equal(first.engine.oracle, "independent-snapshot-state-machine/1");
 });
 
-test('property CLI persists its bounded evidence and signals a deliberate counterexample', async t => {
-  const cwd = await mkdtemp(join(tmpdir(), 'premise-property-cli-'));
+test("property CLI persists its bounded evidence and signals a deliberate counterexample", async (t) => {
+  const cwd = await mkdtemp(join(tmpdir(), "premise-property-cli-"));
   t.after(() => rm(cwd, { recursive: true, force: true }));
-  const path = fileURLToPath(new URL('./property.ts', import.meta.url));
-  const run = (...args: string[]) => spawnSync(process.execPath, [path, ...args], { cwd, encoding: 'utf8' });
-  const output = join(cwd, 'artifacts/property-report.json');
+  const path = fileURLToPath(new URL("./property.ts", import.meta.url));
+
+  const run = (...args: string[]) =>
+    spawnSync(process.execPath, [path, ...args], { cwd, encoding: "utf8" });
+
+  const output = join(cwd, "artifacts/property-report.json");
   const options = { seed: 12345, samples: 40, maxSteps: 24, shrinkBudget: 100 };
-  const flags = ['--seed', '12345', '--samples', '40', '--max-steps', '24', '--shrink-budget', '100'];
-  for (const args of [['--samples'], ['--seed', ' '], ['--unknown', '1']]) {
+
+  const flags = [
+    "--seed",
+    "12345",
+    "--samples",
+    "40",
+    "--max-steps",
+    "24",
+    "--shrink-budget",
+    "100",
+  ];
+
+  for (const args of [["--samples"], ["--seed", " "], ["--unknown", "1"]]) {
     const invalid = run(...args);
     assert.equal(invalid.status, 1);
     assert.match(invalid.stderr, /Invalid argument:/);
   }
-  await assert.rejects(readFile(output), { code: 'ENOENT' });
+
+  await assert.rejects(readFile(output), { code: "ENOENT" });
   const passing = run(...flags);
   assert.equal(passing.status, 0, passing.stderr);
-  assert.match(passing.stdout, /sampled_pass: 40 sampled histories, 0 failures/);
-  assert.deepEqual(JSON.parse(await readFile(output, 'utf8')), runProperties(options));
-  const failing = run(...flags, '--mutant');
+  assert.match(
+    passing.stdout,
+    /sampled_pass: 40 sampled histories, 0 failures/
+  );
+  assert.deepEqual(
+    JSON.parse(await readFile(output, "utf8")),
+    runProperties(options)
+  );
+  const failing = run(...flags, "--mutant");
   assert.equal(failing.status, 1, failing.stderr);
   assert.match(failing.stdout, /counterexample: 40 sampled histories/);
-  assert.deepEqual(JSON.parse(await readFile(output, 'utf8')), runProperties({ ...options, staleApprovalMutant: true }));
+  assert.deepEqual(
+    JSON.parse(await readFile(output, "utf8")),
+    runProperties({ ...options, staleApprovalMutant: true })
+  );
 });
 
-test('seed zero is reproducible; seeds vary values, order and lengths inside bounds', () => {
-  const histories = Array.from({ length: 100 }, (_, seed) => generateHistory(seed, 20));
+test("seed zero is reproducible; seeds vary values, order and lengths inside bounds", () => {
+  const histories = Array.from({ length: 100 }, (_, seed) =>
+    generateHistory(seed, 20)
+  );
+
   assert.deepEqual(generateHistory(0, 20), histories[0]);
-  assert.ok(new Set(histories.map(h => JSON.stringify(h))).size > 90);
-  assert.ok(new Set(histories.map(h => h.length)).size > 10);
-  assert.ok(histories.every(h => h.length >= 1 && h.length <= 20));
+  assert.ok(new Set(histories.map((h) => JSON.stringify(h))).size > 90);
+  assert.ok(new Set(histories.map((h) => h.length)).size > 10);
+  assert.ok(histories.every((h) => h.length >= 1 && h.length <= 20));
   assert.equal(generateHistory(0, 1).length, 1);
 });
 
-test('known stale-binding mutant is found by generated samples and replayed exactly', () => {
-  const report = runProperties({ seed: 12345, samples: 40, maxSteps: 24, staleApprovalMutant: true });
-  assert.equal(report.result, 'counterexample');
+test("known stale-binding mutant is found by generated samples and replayed exactly", () => {
+  const report = runProperties({
+    seed: 12345,
+    samples: 40,
+    maxSteps: 24,
+    staleApprovalMutant: true,
+  });
+
+  assert.equal(report.result, "counterexample");
   assert.ok(report.failures.length > 0);
+
   for (const failure of report.failures) {
-    assert.equal(failure.originalFailure.kind, 'stale-approval-commit');
-    assert.deepEqual(generateHistory(failure.sampleSeed, 24), failure.originalHistory);
-    assert.deepEqual(replayHistory(JSON.parse(JSON.stringify(failure.replay))), failure.minimized);
-    assert.equal(failure.minimized.trace.interpreter.staleApprovalMutantUsed, true);
-    assert.equal(replayHistory({ ...failure.replay, staleApprovalMutant: false }).result, 'sampled_pass');
+    assert.equal(failure.originalFailure.kind, "stale-approval-commit");
+    assert.deepEqual(
+      generateHistory(failure.sampleSeed, 24),
+      failure.originalHistory
+    );
+    assert.deepEqual(
+      replayHistory(JSON.parse(JSON.stringify(failure.replay))),
+      failure.minimized
+    );
+    assert.equal(
+      failure.minimized.trace.interpreter.staleApprovalMutantUsed,
+      true
+    );
+    assert.equal(
+      replayHistory({ ...failure.replay, staleApprovalMutant: false }).result,
+      "sampled_pass"
+    );
     assert.ok(failure.minimalHistory.length <= failure.originalHistory.length);
   }
 });
 
-test('shrinking removes noise, simplifies values, is deterministic and reaches a deletion-minimal reproducer', () => {
-  const history: Action[] = [execute, { kind: 'approve', actor: { id: 'bad', role: 'viewer' } },
-    request, approve, { kind: 'edit', summary: 'Changed resolution' }, execute, execute];
+test("shrinking removes noise, simplifies values, is deterministic and reaches a deletion-minimal reproducer", () => {
+  const history: Action[] = [
+    execute,
+    { kind: "approve", actor: { id: "bad", role: "viewer" } },
+    request,
+    approve,
+    { kind: "edit", summary: "Changed resolution" },
+    execute,
+    execute,
+  ];
+
   const shrunk = shrinkHistory(history, true);
   assert.deepEqual(shrunk, shrinkHistory(history, true));
-  assert.equal(shrunk.minimality, 'single-deletion-and-listed-values');
+  assert.equal(shrunk.minimality, "single-deletion-and-listed-values");
   assert.equal(shrunk.budgetExhausted, false);
-  assert.deepEqual(shrunk.minimalHistory.map(a => a.kind), ['request', 'approve', 'edit', 'execute']);
-  assert.ok(JSON.stringify(shrunk.minimalHistory).length < JSON.stringify(history.slice(2, 6)).length);
-  assert.equal(replayHistory(shrunk.replay).failure?.kind, 'stale-approval-commit');
+  assert.deepEqual(
+    shrunk.minimalHistory.map((a) => a.kind),
+    ["request", "approve", "edit", "execute"]
+  );
+  assert.ok(
+    JSON.stringify(shrunk.minimalHistory).length <
+      JSON.stringify(history.slice(2, 6)).length
+  );
+  assert.equal(
+    replayHistory(shrunk.replay).failure?.kind,
+    "stale-approval-commit"
+  );
+
   for (let index = 0; index < shrunk.minimalHistory.length; index++) {
-    assert.equal(replayHistory(data(shrunk.minimalHistory.filter((_, i) => i !== index), true)).failure, null);
+    assert.equal(
+      replayHistory(
+        data(
+          shrunk.minimalHistory.filter((_, i) => i !== index),
+          true
+        )
+      ).failure,
+      null
+    );
   }
+
   assert.equal(replayHistory(data(shrunk.minimalHistory)).failure, null);
 });
 
-test('argument, resource and whole-model changes invalidate snapshots; reapproval repairs them', () => {
+test("argument, resource and whole-model changes invalidate snapshots; reapproval repairs them", () => {
   const changes: Action[] = [
-    { kind: 'edit', summary: 'Different' }, { kind: 'revision', value: 2 },
-    { kind: 'resource', field: 'version', value: 2 },
-    { kind: 'resource', field: 'watchers', value: [] },
-    { kind: 'policy', role: 'viewer', priority: 'normal', decision: 'allow' },
+    { kind: "edit", summary: "Different" },
+    { kind: "revision", value: 2 },
+    { kind: "resource", field: "version", value: 2 },
+    { kind: "resource", field: "watchers", value: [] },
+    { kind: "policy", role: "viewer", priority: "normal", decision: "allow" },
   ];
+
   for (const change of changes) {
-    const history:Action[] = [request, approve, change, execute];
+    const history: Action[] = [request, approve, change, execute];
     assert.equal(replayHistory(data(history)).coverage.staleRejections, 1);
-    assert.equal(replayHistory(data(history, true)).failure?.kind, 'stale-approval-commit');
-    const repaired = replayHistory(data([request, approve, change, approve, execute, execute]));
+    assert.equal(
+      replayHistory(data(history, true)).failure?.kind,
+      "stale-approval-commit"
+    );
+
+    const repaired = replayHistory(
+      data([request, approve, change, approve, execute, execute])
+    );
+
     assert.equal(repaired.failure, null);
     assert.equal(repaired.coverage.commits, 1);
   }
 });
 
-test('oracle handles denial, current-policy allow, no-op changes and restoring exact snapshots', () => {
-  const deny: Action = { kind: 'policy', role: 'support', priority: 'high', decision: 'deny' };
-  const allow: Action = { ...deny, decision: 'allow' };
+test("oracle handles denial, current-policy allow, no-op changes and restoring exact snapshots", () => {
+  const deny: Action = {
+    kind: "policy",
+    role: "support",
+    priority: "high",
+    decision: "deny",
+  };
+
+  const allow: Action = { ...deny, decision: "allow" };
+
   for (const mutant of [false, true]) {
-    assert.equal(replayHistory(data([request, approve, deny, execute], mutant)).coverage.commits, 0);
-    assert.equal(replayHistory(data([request, allow, execute], mutant)).coverage.commits, 1);
-    assert.equal(replayHistory(data([request, approve, { kind: 'revision', value: 1 }, execute], mutant)).failure, null);
-    const restored = replayHistory(data([request, approve, { kind: 'edit', summary: 'temporary' },
-      { kind: 'edit', summary: 'Original resolution' }, execute], mutant));
+    assert.equal(
+      replayHistory(data([request, approve, deny, execute], mutant)).coverage
+        .commits,
+      0
+    );
+    assert.equal(
+      replayHistory(data([request, allow, execute], mutant)).coverage.commits,
+      1
+    );
+    assert.equal(
+      replayHistory(
+        data(
+          [request, approve, { kind: "revision", value: 1 }, execute],
+          mutant
+        )
+      ).failure,
+      null
+    );
+
+    const restored = replayHistory(
+      data(
+        [
+          request,
+          approve,
+          { kind: "edit", summary: "temporary" },
+          { kind: "edit", summary: "Original resolution" },
+          execute,
+        ],
+        mutant
+      )
+    );
+
     assert.equal(restored.failure, null);
     assert.equal(restored.coverage.commits, 1);
   }
 });
 
-test('budget exhaustion is explicit and invalid inputs cannot silently pass', () => {
-  const history: Action[] = [request, approve, { kind: 'edit', summary: 'b' }, execute];
+test("budget exhaustion is explicit and invalid inputs cannot silently pass", () => {
+  const history: Action[] = [
+    request,
+    approve,
+    { kind: "edit", summary: "b" },
+    execute,
+  ];
+
   const shrunk = shrinkHistory(history, true, 0);
   assert.equal(shrunk.budgetExhausted, true);
-  assert.equal(shrunk.minimality, 'budget-limited');
+  assert.equal(shrunk.minimality, "budget-limited");
   assert.deepEqual(shrunk.minimalHistory, history);
   assert.throws(() => shrinkHistory(history, false), /passing/);
-  for (const options of [{ seed: -1 }, { seed: 2 ** 32 }, { samples: 0 }, { maxSteps: 0 },
-    { shrinkBudget: -1 }, { seed: NaN }, { samples: 1.5 }]) assert.throws(() => runProperties(options), RangeError);
+
+  for (const options of [
+    { seed: -1 },
+    { seed: 2 ** 32 },
+    { samples: 0 },
+    { maxSteps: 0 },
+    { shrinkBudget: -1 },
+    { seed: NaN },
+    { samples: 1.5 },
+  ]) {
+    assert.throws(() => runProperties(options), RangeError);
+  }
+
   assert.throws(() => replayHistory({ ...data([]), clock: 2 }), /Unsupported/);
-  assert.throws(() => replayHistory({ ...data([]), history: [{ kind: 'unknown' }] }), /Invalid replay action/);
-  assert.throws(() => replayHistory({ ...data([]), history: [{ kind: 'approve', actor: { id: 'x', role: 'admin' } }] }), /Invalid replay action/);
+  assert.throws(
+    () => replayHistory({ ...data([]), history: [{ kind: "unknown" }] }),
+    /Invalid replay action/
+  );
+  assert.throws(
+    () =>
+      replayHistory({
+        ...data([]),
+        history: [{ kind: "approve", actor: { id: "x", role: "admin" } }],
+      }),
+    /Invalid replay action/
+  );
 });

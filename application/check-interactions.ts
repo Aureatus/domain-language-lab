@@ -1,30 +1,109 @@
-import {parseArgs} from 'node:util';
-import {createHash} from 'node:crypto';
-import {writeFile,mkdtemp} from 'node:fs/promises';
-import {tmpdir} from 'node:os';
-import {join} from 'node:path';
-import {loadSource} from '../syntax/load.ts';
-import {deriveApplication} from './derive.ts';
-import {exampleArgs} from './action-review.ts';
-import {checkInteractions} from './interaction-check.ts';
-import {checkerBuild} from './checker-build.ts';
-import {decodeJsonObject,encodeJson,encodeJsonPretty} from '../adapters/effect/json.ts';
-const {positionals,values}=parseArgs({allowPositionals:true,options:{actor:{type:'string'},args:{type:'string'},mutant:{type:'string'},out:{type:'string'}}});
-const [entry,action]=positionals;
-if(!entry||!action||positionals.length!==2)throw Error('Usage: check:interactions -- VIEW.domain ACTION [--actor ID] [--args JSON] [--mutant snapshot-unlocks] [--out PATH]');
-if(values.mutant!==undefined&&values.mutant!=='snapshot-unlocks')throw Error('Unknown test mutant.');
-const {declaration}=loadSource(entry),derived=deriveApplication(declaration),{contract,model}=derived;
-const actor=values.actor??contract.actors[0]?.id;
-if(!actor||!Object.hasOwn(contract.actions,action)||!contract.actors.some(a=>a.id===actor))throw Error('Unknown action or actor.');
-const {args,selection}=values.args?{args:decodeJsonObject(values.args),selection:'explicit arguments'}:exampleArgs(derived,action,actor);
-const report=await checkInteractions(declaration,contract,{action,actor,args,submissionId:'review-request-1'},values.mutant===undefined?{}:{mutant:values.mutant});
-const {counterexample,...summary}=report;
-if(counterexample){
-  const path=values.out??join(await mkdtemp(join(tmpdir(),'interaction-check-')),'counterexample.json');
-  const {events,observed,...failure}=counterexample;
-  const contractId=createHash('sha256').update(encodeJson({model,contract})).digest('hex');
-  await writeFile(path,encodeJsonPretty({format:'action-events/v1',contractId,checkerBuild:await checkerBuild(),action,actor,args,selection,mutant:values.mutant,failure:{...failure,eventCount:events.length},events}),{flag:'wx'});
-  Object.assign(summary,{...failure,trace:path,sequence:events.map(e=>e.type),observedControls:observed?.controls});
+import { createHash } from "node:crypto";
+import { writeFile, mkdtemp } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { parseArgs } from "node:util";
+
+import {
+  decodeJsonObject,
+  encodeJson,
+  encodeJsonPretty,
+} from "../adapters/effect/json.ts";
+import { loadSource } from "../syntax/load.ts";
+import { exampleArgs } from "./action-review.ts";
+import { checkerBuild } from "./checker-build.ts";
+import { deriveApplication } from "./derive.ts";
+import { checkInteractions } from "./interaction-check.ts";
+
+const { positionals, values } = parseArgs({
+  allowPositionals: true,
+  options: {
+    actor: { type: "string" },
+    args: { type: "string" },
+    mutant: { type: "string" },
+    out: { type: "string" },
+  },
+});
+
+const [entry, action] = positionals;
+
+if (!entry || !action || positionals.length !== 2) {
+  throw Error(
+    "Usage: check:interactions -- VIEW.domain ACTION [--actor ID] [--args JSON] [--mutant snapshot-unlocks] [--out PATH]"
+  );
 }
+
+if (values.mutant !== undefined && values.mutant !== "snapshot-unlocks") {
+  throw Error("Unknown test mutant.");
+}
+
+const { declaration } = loadSource(entry);
+const derived = deriveApplication(declaration);
+const { contract, model } = derived;
+
+const actor = values.actor ?? contract.actors[0]?.id;
+
+if (
+  !actor ||
+  !Object.hasOwn(contract.actions, action) ||
+  !contract.actors.some((a) => a.id === actor)
+) {
+  throw Error("Unknown action or actor.");
+}
+
+const { args, selection } = values.args
+  ? { args: decodeJsonObject(values.args), selection: "explicit arguments" }
+  : exampleArgs(derived, action, actor);
+
+const report = await checkInteractions(
+  declaration,
+  contract,
+  { action, actor, args, submissionId: "review-request-1" },
+  values.mutant === undefined ? {} : { mutant: values.mutant }
+);
+
+const { counterexample, ...summary } = report;
+
+if (counterexample) {
+  const path =
+    values.out ??
+    join(
+      await mkdtemp(join(tmpdir(), "interaction-check-")),
+      "counterexample.json"
+    );
+
+  const { events, observed, ...failure } = counterexample;
+
+  const contractId = createHash("sha256")
+    .update(encodeJson({ model, contract }))
+    .digest("hex");
+
+  await writeFile(
+    path,
+    encodeJsonPretty({
+      format: "action-events/v1",
+      contractId,
+      checkerBuild: await checkerBuild(),
+      action,
+      actor,
+      args,
+      selection,
+      mutant: values.mutant,
+      failure: { ...failure, eventCount: events.length },
+      events,
+    }),
+    { flag: "wx" }
+  );
+  Object.assign(summary, {
+    ...failure,
+    trace: path,
+    sequence: events.map((e) => e.type),
+    observedControls: observed?.controls,
+  });
+}
+
 console.log(encodeJsonPretty(summary));
-if(report.status!=='bounded-pass')process.exitCode=report.status==='failed'?1:2;
+
+if (report.status !== "bounded-pass") {
+  process.exitCode = report.status === "failed" ? 1 : 2;
+}

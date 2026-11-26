@@ -3,14 +3,14 @@ name: Effect UI spike
 on:
   pull_request:
     paths:
-      - '.github/workflows/effect-ui.yml'
-      - 'adapters/effect-ui/**'
-      - 'adapters/effect/**'
-      - 'application/**'
-      - 'leave/**'
-      - 'semantic/**'
-      - 'syntax/**'
-      - 'package.json'
+      - ".github/workflows/effect-ui.yml"
+      - "adapters/effect-ui/**"
+      - "adapters/effect/**"
+      - "application/**"
+      - "leave/**"
+      - "semantic/**"
+      - "syntax/**"
+      - "package.json"
 
 permissions:
   contents: read
