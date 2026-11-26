@@ -17,7 +17,7 @@ export type SubmissionEvent<R extends SubmissionReceipt=SubmissionReceipt> =
 export function submissionWireBody(body:object,contractId:string|undefined,encode:(value:object)=>string=JSON.stringify){
   const json=encode({...body,expectedContractId:contractId});
   let bytes=0;
-  for(const c of json){const n=c.codePointAt(0)!;bytes+=n<128?1:n<2048?2:n<65536?3:4;}
+  for(const c of json){const n=c.charCodeAt(0);bytes+=c.length===2?4:n<128?1:n<2048?2:3;}
   if(bytes>16384)throw Object.assign(Error('Submission is too large. Shorten the inputs before submitting.'),{notSubmitted:true});
   return json;
 }

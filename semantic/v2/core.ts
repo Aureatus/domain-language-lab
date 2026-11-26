@@ -49,6 +49,7 @@ type Kind=FieldSchema['type'];
 const binary:Readonly<Record<string,readonly [Kind,Kind]>> = {add: ['integer', 'integer'], sub: ['integer', 'integer'], lt: ['integer', 'boolean'], le: ['integer', 'boolean'], and: ['boolean', 'boolean'], or: ['boolean', 'boolean']};
 
 export function validateModel(source: unknown): Model {
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- The checks below validate the frozen declaration before returning it.
   const m = jsonSnapshot(source) as Model;
   keys(m, ['format', 'id', 'resources', 'relationships', 'actions']);
   assert(m.format === 'semantic-core/v2', 'Unsupported semantic profile');
@@ -116,19 +117,24 @@ export function validateModel(source: unknown): Model {
   return m;
 }
 function checkState(model: Model, source: unknown): State {
-  const s = jsonSnapshot(source) as State;
-  keys(s, ['revision', 'records']); assert(Number.isSafeInteger(s.revision) && s.revision >= 0, 'Invalid revision');
-  keys(s.records, Object.keys(model.resources));
+  const s = jsonSnapshot(source);
+  assertState(model,s);
+  return s;
+}
+function assertState(model:Model,s:unknown):asserts s is State {
+  const record=keys(s, ['revision', 'records']),revision=record['revision'];
+  assert(typeof revision==='number'&&Number.isSafeInteger(revision)&&revision>=0, 'Invalid revision');
+  const records=keys(record['records'], Object.keys(model.resources));
   for (const [rid, r] of Object.entries(model.resources)) {
-    const collection=ownValue(s.records,rid);
+    const collection=ownValue(records,rid);
     assert(collection&&obj(collection),'Invalid resource collection');
     for (const record of Object.values(collection)) {
-      keys(record, ['version', 'values']); assert(Number.isSafeInteger(record.version) && record.version >= 0, 'Invalid record version');
-      keys(record.values, Object.keys(r.fields));
-      for (const [f, spec] of Object.entries(r.fields)) value(spec, record.values[f]);
+      const entry=keys(record, ['version', 'values']),version=entry['version'];
+      assert(typeof version==='number'&&Number.isSafeInteger(version)&&version>=0, 'Invalid record version');
+      const fields=keys(entry['values'], Object.keys(r.fields));
+      for (const [f, spec] of Object.entries(r.fields)) value(spec, fields[f]);
     }
   }
-  return s;
 }
 export function validateState(model: Model, source: unknown): State { return checkState(validateModel(model), source); }
 function evaluate(e:Expr,ctx:EvalContext):Value {
@@ -159,6 +165,7 @@ const rejection = (state:State,error:unknown):Rejected=>Object.freeze({status:'r
 
 export function createInterpreter(source: unknown): Readonly<Interpreter> {
   const model = validateModel(source), tokens = new WeakMap<Token,Plan>();
+  const isPrepared=(token:Token):token is Prepared=>tokens.has(token);
   const relations = new Map(model.relationships.map(r => [r.id, r]));
   function context(state:State,invocation:InvocationInput) {
     const before = checkState(model, state), input = jsonSnapshot(invocation);
@@ -268,7 +275,8 @@ export function createInterpreter(source: unknown): Readonly<Interpreter> {
       ...deletes.map((p):Event=>({...base,id:factId('delete',p.semanticId),kind:'delete',...p}))]);
     const token:Token = Object.freeze({kind: 'semantic-prepared/v2'});
     tokens.set(token, {before: canonical(before), state: nextState, events});
-    return Object.freeze({status: 'prepared', prepared: token as Prepared});
+    assert(isPrepared(token), 'Unregistered preparation token');
+    return Object.freeze({status: 'prepared', prepared: token});
   }
   function prepare(state:State,invocation:InvocationInput):PreparedResult|Pending|Rejected {
     try {

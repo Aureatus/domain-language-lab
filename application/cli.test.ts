@@ -5,6 +5,7 @@ import {promisify} from 'node:util';
 import {mkdtemp,readFile,writeFile,copyFile} from 'node:fs/promises';
 import {createApplicationServer} from './server.ts';
 import {createApplicationClient} from './client.ts';
+import {deriveApplication} from './derive.ts';
 import declaration from '../leave/model.ts';
 import {present} from '../semantic/test-support.ts';
 const exec=promisify(execFile);
@@ -47,6 +48,7 @@ test('spawned CLI advances the same durable HTTP backend; grant/resume, duplicat
   }finally{await server.close();}
 });
 test('shared client fails closed on contract mismatch',async()=>{
-  let calls=0;const client=createApplicationClient('http://127.0.0.1:1',{fetch:async()=>Response.json({contractId:++calls===1?'a':'b',contract:{}})});
+  const {contract}=deriveApplication(declaration);
+  let calls=0;const client=createApplicationClient('http://127.0.0.1:1',{fetch:async()=>Response.json({contractId:++calls===1?'a':'b',contract})});
   await client.contract();await assert.rejects(client.snapshot(),/contract changed/);
 });

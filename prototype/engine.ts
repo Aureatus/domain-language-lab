@@ -37,8 +37,9 @@ export class Runtime {
   }
 
   private record(kind: string, details: Record<string, unknown>, parents?: string[]): Event {
+    const previous = this.events.at(-1);
     const event = { id: `e${this.events.length + 1}`, kind, source: this.model.resolve.source,
-      parents: parents ?? (this.events.length ? [this.events.at(-1)!.id] : []), details };
+      parents: parents ?? (previous ? [previous.id] : []), details };
     this.events.push(event);
     return event;
   }
@@ -51,7 +52,8 @@ export class Runtime {
   decision(actor: Actor): Decision { return this.model.policy[actor.role][this.ticket.priority]; }
 
   private approvalSubject() {
-    const i = this.invocation!;
+    const i = this.invocation;
+    if (!i) throw new Error('Missing approval invocation');
     return structuredClone({ invocation: i.id, actor: i.actor, summary: i.summary,
       ticket: this.ticket, model: this.model });
   }

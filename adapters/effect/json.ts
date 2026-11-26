@@ -29,6 +29,8 @@ export const decodeJsonValue = (text: unknown) => decodeJsonValueSync(text);
 
 export const decodeJsonObject = (text: unknown) => decodeJsonObjectSync(text);
 
+export const decodeValue = Schema.decodeUnknownSync;
+
 export const encodeJson = (value: unknown, schema?: Schema.ConstraintEncoder<unknown>) =>
   schema ? Schema.encodeUnknownSync(Schema.fromJsonString(schema))(value) : encodeUnknownJsonSync(value);
 
@@ -261,13 +263,129 @@ export const ApplicationSavedSubmissionsSchema = Schema.Array(Schema.Struct({
   body: Schema.Struct({actor: Schema.String, action: Schema.String, args: Schema.JsonObject}),
 }));
 
+const stringMap = <S extends Schema.Constraint>(value:S) => Schema.Record(Schema.String,value);
+const ScalarSchema = Schema.Union([Schema.String,Schema.Finite,Schema.Boolean]);
+const ValueSchema = Schema.Union([ScalarSchema,Schema.Array(Schema.String)]);
+const ValueMapSchema = stringMap(ValueSchema);
+export const SemanticStateSchema = openObject({
+  revision: SafeClock, records: stringMap(stringMap(openObject({version:SafeClock,values:ValueMapSchema}))),
+});
+export const SemanticInvocationSchema = openObject({
+  id:Schema.String,action:Schema.String,actor:Schema.String,args:ValueMapSchema,clock:Schema.Finite,
+});
+export const ApprovalRequirementSchema = openObject({
+  policyId:Schema.String,approvers:Schema.Array(Schema.String),allowSelfApproval:Schema.Boolean,
+});
+export const ApprovalGrantSchema = openObject({policyId:Schema.String,approver:Schema.String});
+const PendingStatus = Schema.Literals(['pending','consumed']);
+export const FieldSchemaCodec = Schema.Union([
+  openObject({type:Schema.Literal('integer'),min:Schema.optionalKey(Schema.Finite),max:Schema.optionalKey(Schema.Finite)}),
+  openObject({type:Schema.Literal('string'),enum:Schema.optionalKey(Schema.Array(Schema.String))}),
+  openObject({type:Schema.Literal('boolean')}),
+  openObject({type:Schema.Literal('ids')}),
+]);
 export const ApplicationSnapshotSchema = openObject({
   contractId: Schema.String,
   snapshotVersion: SafeClock,
-  state: DurableStateSchema,
-  pending: Schema.Array(Schema.JsonObject),
-  defaults: Schema.JsonObject,
-  availability: Schema.JsonObject,
+  state: SemanticStateSchema,
+  pending: Schema.Array(openObject({
+    id:Schema.String,status:PendingStatus,invocation:SemanticInvocationSchema,
+    requirements:Schema.Array(ApprovalRequirementSchema),grants:Schema.Array(ApprovalGrantSchema),stale:Schema.Boolean,
+  })),
+  defaults: stringMap(stringMap(ValueMapSchema)),
+  availability: stringMap(stringMap(Schema.Boolean)),
+});
+
+export const ApplicationReceiptSchema = openObject({
+  contractId:Schema.String,status:Schema.String,submissionId:Schema.optionalKey(Schema.String),
+  message:Schema.optionalKey(Schema.String),code:Schema.optionalKey(Schema.String),args:Schema.optionalKey(Schema.Json),
+  requirements:Schema.optionalKey(Schema.Array(ApprovalRequirementSchema)),
+  evidence:Schema.optionalKey(openObject({
+    phase:Schema.String,invocation:openObject({id:Schema.String,actor:Schema.String,action:Schema.String,args:Schema.Json}),
+    outcome:openObject({status:Schema.String}),
+  })),
+  snapshot:Schema.optionalKey(ApplicationSnapshotSchema),
+});
+
+const SubmissionBodySchema = openObject({actor:Schema.String,action:Schema.String,args:Schema.JsonObject});
+const reviewFields = Schema.Struct({
+  snapshot:Schema.optionalKey(ApplicationSnapshotSchema),result:Schema.optionalKey(ApplicationReceiptSchema),
+  actor:Schema.optionalKey(Schema.String),policyId:Schema.optionalKey(Schema.String),
+  body:Schema.optionalKey(SubmissionBodySchema),id:Schema.optionalKey(Schema.String),message:Schema.optionalKey(Schema.String),
+});
+const reviewEvent = <const Fields extends Schema.Struct.Fields>(fields:Fields) =>
+  Schema.StructWithRest(reviewFields.pipe(Schema.fieldsAssign(fields)),[Schema.Record(Schema.String,Schema.Json)]);
+export const ReviewEventSchema = Schema.Union([
+  reviewEvent({type:Schema.Literals(['open','refresh-start','submit','lost','check'])}),
+  reviewEvent({type:Schema.Literal('switch'),actor:Schema.String}),
+  reviewEvent({type:Schema.Literal('snapshot'),snapshot:ApplicationSnapshotSchema}),
+  reviewEvent({type:Schema.Literal('refresh-end'),snapshot:ApplicationSnapshotSchema}),
+  reviewEvent({type:Schema.Literal('draft'),id:Schema.String,body:SubmissionBodySchema}),
+  reviewEvent({type:Schema.Literals(['invalid','blocked','unavailable']),message:Schema.String}),
+  reviewEvent({type:Schema.Literal('receipt'),result:ApplicationReceiptSchema}),
+  reviewEvent({type:Schema.Literal('grant'),result:ApplicationReceiptSchema,actor:Schema.String,policyId:Schema.String}),
+  reviewEvent({type:Schema.Literal('complete'),result:ApplicationReceiptSchema,actor:Schema.String}),
+]);
+
+const FieldReference = Schema.Struct({resource:Schema.String,key:Schema.String,field:Schema.String});
+const ContractFieldSchema = Schema.Struct({
+  name:Schema.String,schema:FieldSchemaCodec,label:Schema.String,widget:Schema.String,hidden:Schema.Boolean,
+  binding:Schema.optionalKey(Schema.Struct({
+    source:Schema.Literals(['actor','operation-id','clock','constant']),value:Schema.optionalKey(ValueSchema),
+  })),
+  reference:Schema.optionalKey(Schema.Struct({resource:Schema.String,labelField:Schema.optionalKey(Schema.String)})),
+  default:Schema.optionalKey(Schema.Union([ValueSchema,FieldReference])),
+});
+const ExprSchema:Schema.Codec<import('../../semantic/v2/types.ts').Expr> = Schema.Union([
+  Schema.Struct({op:Schema.Literal('literal'),value:ScalarSchema}),
+  Schema.Struct({op:Schema.Literal('input'),name:Schema.String}),
+  Schema.Struct({op:Schema.Literals(['actor','clock'])}),
+  Schema.Struct({op:Schema.Literal('field'),binding:Schema.String,field:Schema.String}),
+  Schema.Struct({op:Schema.Literal('not'),value:Schema.suspend(()=>ExprSchema)}),
+  Schema.Struct({
+    op:Schema.Literals(['add','sub','lt','le','eq','and','or']),
+    left:Schema.suspend(()=>ExprSchema),right:Schema.suspend(()=>ExprSchema),
+  }),
+]);
+const policies = Schema.Array(Schema.Union([
+  Schema.Struct({id:Schema.String,when:ExprSchema,effect:Schema.Literals(['allow','deny'])}),
+  Schema.Struct({
+    id:Schema.String,when:ExprSchema,effect:Schema.Literal('approval-required'),approvers:ExprSchema,
+    allowSelfApproval:Schema.optionalKey(Schema.Boolean),
+  }),
+]));
+const ApplicationContractSchema = Schema.Struct({
+  format:Schema.String,title:Schema.String,eyebrow:Schema.String,subtitle:Schema.String,scope:Schema.String,loading:Schema.optionalKey(Schema.String),
+  actors:Schema.mutable(Schema.Array(Schema.Struct({id:Schema.String,label:Schema.String,name:Schema.optionalKey(Schema.String)}))),
+  actions:stringMap(Schema.Struct({
+    id:Schema.String,label:Schema.String,description:Schema.String,fields:Schema.mutable(Schema.Array(ContractFieldSchema)),
+    adapters:Schema.mutable(Schema.Array(Schema.Struct({
+      name:Schema.Literal('utc-weekday-range/v1'),mapping:Schema.Struct({start:Schema.String,end:Schema.String,output:Schema.String}),
+    }))),
+    policies,preconditions:Schema.Array(Schema.Struct({id:Schema.String,when:ExprSchema})),
+  })),
+  views:Schema.mutable(Schema.Array(Schema.Struct({
+    kind:Schema.Literals(['list','summary']),resource:Schema.String,label:Schema.String,
+    loading:Schema.optionalKey(Schema.String),key:Schema.optionalKey(Schema.String),ownerField:Schema.optionalKey(Schema.String),
+    columns:Schema.mutable(Schema.Array(Schema.Struct({field:Schema.String,label:Schema.String,format:Schema.optionalKey(Schema.Literals(['date','text']))}))),
+  }))),
+  resources:stringMap(Schema.Struct({fields:stringMap(FieldSchemaCodec)})),
+  relationships:Schema.Array(Schema.Struct({id:Schema.String,resource:Schema.String,field:Schema.String})),
+});
+export const isApplicationContract = Schema.is(ApplicationContractSchema);
+
+export const WorkspaceSnapshotSchema = Schema.Struct({
+  profile:Schema.Literals(['v1','v2']),sequence:SafeClock,state:SemanticStateSchema,scope:Schema.Json,
+  tools:Schema.Array(openObject({name:Schema.String,inputs:stringMap(FieldSchemaCodec)})),
+  pending:Schema.optionalKey(Schema.Array(Schema.Struct({
+    status:PendingStatus,invocationId:Schema.String,grants:Schema.Array(ApprovalGrantSchema),
+    resumeId:Schema.NullOr(Schema.String),request:Schema.Struct({
+      invocation:SemanticInvocationSchema,requirements:Schema.Array(ApprovalRequirementSchema),prestate:SemanticStateSchema,
+    }),
+  }))),
+  events:Schema.optionalKey(Schema.Array(Schema.Struct({
+    sequence:SafeClock,eventId:Schema.String,event:openObject({type:Schema.optionalKey(Schema.String),kind:Schema.optionalKey(Schema.String)}),
+  }))),
 });
 
 export const WorkspaceChangeSchema = openObject({

@@ -1,5 +1,5 @@
 // Shared, renderer-independent HTTP client. No domain rules or local execution.
-import {ApplicationSnapshotSchema,decodeJson,decodeJsonObject,encodeJson} from '../adapters/effect/json.ts';
+import {ApplicationReceiptSchema,ApplicationSnapshotSchema,decodeJson,decodeJsonObject,decodeValue,encodeJson,isApplicationContract} from '../adapters/effect/json.ts';
 import {submissionWireBody} from './submission.ts';
 import type {SubmissionBody,SubmissionReceipt} from './submission.ts';
 import type {ApplicationContract} from './derive.ts';
@@ -25,7 +25,7 @@ type GrantBody=ResumeBody&{policyId:string};
 type RequestBody=ExecuteBody|ReconcileBody|GrantBody|ResumeBody;
 
 export function decodeApplicationSnapshot(text:unknown):ApplicationSnapshot{
-  return decodeJson(ApplicationSnapshotSchema,text) as unknown as ApplicationSnapshot;
+  return decodeJson(ApplicationSnapshotSchema,text);
 }
 
 export function createApplicationClient(url: string | URL,{fetch:transport=globalThis.fetch}={}){
@@ -55,11 +55,16 @@ export function createApplicationClient(url: string | URL,{fetch:transport=globa
   async function receipt(path:string,body:RequestBody):Promise<ApplicationReceipt>{
     const value=await request(path,body);
     if(typeof value['contractId']!=='string'||typeof value['status']!=='string')throw Error('Invalid application receipt.');
-    return value as unknown as ApplicationReceipt;
+    return decodeValue(ApplicationReceiptSchema)(value);
   }
   return {
-    async contract(): Promise<{contract:ApplicationContract;contractId:string}>{const value=await request('/api/contract');if(typeof value['contractId']!=='string'||!value['contract']||typeof value['contract']!=='object'||Array.isArray(value['contract']))throw Error('Invalid application contract.');contractId=value['contractId'];return {contractId,contract:value['contract'] as unknown as ApplicationContract};},
-    snapshot:async()=>{const value=await request('/api/snapshot');return value as unknown as ApplicationSnapshot;},
+    async contract(): Promise<{contract:ApplicationContract;contractId:string}>{
+      const value=await request('/api/contract');
+      const contract=value['contract'];
+      if(typeof value['contractId']!=='string'||!isApplicationContract(contract))throw Error('Invalid application contract.');
+      contractId=value['contractId'];return {contractId,contract};
+    },
+    snapshot:async():Promise<ApplicationSnapshot>=>decodeValue(ApplicationSnapshotSchema)(await request('/api/snapshot')),
     preview:(body:SubmissionBody):Promise<ApplicationReceipt>=>receipt('/api/actions/preview',body),
     execute:(body:ExecuteBody):Promise<ApplicationReceipt>=>receipt('/api/actions/execute',body),
     reconcile:(body:ReconcileBody):Promise<ApplicationReceipt>=>receipt('/api/actions/reconcile',body),

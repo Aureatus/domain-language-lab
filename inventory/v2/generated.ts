@@ -5,14 +5,14 @@ import {join, resolve, dirname} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {createRequire} from 'node:module';
 import {makeDurableRuntime, makeDurableStore, initializeDurableState, durableExecute, durableApprove, durableResume, durablePending, durableState, pullOutbox, acknowledgeOutbox, closeDurableStore} from '../../adapters/effect/durable.ts';
-import {decodeJsonObject, decodeJsonValue, encodeJson, encodeJsonPretty, encodeCanonicalJson as canonical} from '../../adapters/effect/json.ts';
+import {decodeJsonObject, encodeJson, encodeJsonPretty, encodeCanonicalJson as canonical} from '../../adapters/effect/json.ts';
 import {inventoryV2Model, initialState, invocation} from './model.ts';
 import type {ApprovalReceipt, ApprovalRequest, Grant, Value} from '../../semantic/v2/types.ts';
 
 const require = createRequire(new URL('../../adapters/effect/package.json', import.meta.url));
 const Effect: typeof import('../../adapters/effect/node_modules/effect/dist/Effect.js') = await import(require.resolve('effect/Effect'));
 const run = Effect.runPromise;
-const copy = <T extends object>(x: T): T => decodeJsonValue(encodeJson(x)) as T;
+const copy = structuredClone;
 const policyId = 'reserve.warehouse-approval';
 const rng = (seed:number) => { let x = seed >>> 0; return () => { x = (x + 0x6d2b79f5) | 0; let t = Math.imul(x ^ x >>> 15, 1 | x); t ^= t + Math.imul(t ^ t >>> 7, 61 | t); return ((t ^ t >>> 14) >>> 0) / 0x100000000; }; };
 const positiveInteger = (n:number, name:string) => { if (!Number.isSafeInteger(n) || n < 1) throw new TypeError(`${name} must be a positive safe integer`); return n; };
@@ -314,9 +314,11 @@ async function observe(path: string, commands: Operation[]): Promise<{observatio
   try { await durable(path, (rt, db) => run(initializeDurableState(rt, db, initialState))); }
   catch (error) { return {observations, failure:{status:'counterexample', phase:'initialize', cause:{name:asError(error).name, message:errorMessage(error)}, failingPrefix:[]}}; }
   for (const [index,command] of commands.entries()) {
-    // The replay contract is JSON data. Optional undefined JS properties (for
-    // example conflict.state) cannot survive report serialization.
-    try { observations.push({result:copy(await execute(path,command)),snapshot:await snapshot(path,commands)}); }
+    try {
+      const result=copy(await execute(path,command));
+      if(result.state===undefined)delete result.state;
+      observations.push({result,snapshot:await snapshot(path,commands)});
+    }
     catch (error) { return {observations, failure:{status:'counterexample', index, command, cause:{name:asError(error).name, message:errorMessage(error)}, failingPrefix:commands.slice(0, index + 1)}}; }
   }
   return {observations};

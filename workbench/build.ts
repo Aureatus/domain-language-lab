@@ -15,12 +15,12 @@ const root = fileURLToPath(new URL('../', import.meta.url));
 const schedules = permutations<Step>(['approve', 'edit', 'execute']);
 const cases: Record<string, unknown> = {};
 const policies: Record<string, unknown> = {};
-for (const decision of ['approval', 'allow', 'deny'] as Decision[]) {
+for (const decision of ['approval', 'allow', 'deny'] satisfies Decision[]) {
   const variant = structuredClone(model);
   variant.policy.support.high = decision;
   policies[decision] = { model: variant, diff: policyDiff(model, variant) };
-  for (const role of ['support', 'reviewer', 'viewer'] as Role[]) {
-    for (const priority of ['high', 'normal'] as Priority[]) {
+  for (const role of ['support', 'reviewer', 'viewer'] satisfies Role[]) {
+    for (const priority of ['high', 'normal'] satisfies Priority[]) {
       for (const [scheduleIndex,schedule] of schedules.entries()) {
         for (const mutant of [false, true]) {
           const initial = { ...ticket(), priority };
@@ -66,7 +66,7 @@ async function report(name: string) {
     return { availability: 'available', path: `artifacts/${name}`, sha256: hash(data), data };
   } catch (error) {
     return { availability: 'unavailable', path: `artifacts/${name}`,
-      reason: (error as NodeJS.ErrnoException).code === 'ENOENT' ? 'Not present at build time. Rebuild after generating this report.' : 'Could not read valid JSON. No evidence inferred.' };
+      reason: error instanceof Error && 'code' in error && error.code === 'ENOENT' ? 'Not present at build time. Rebuild after generating this report.' : 'Could not read valid JSON. No evidence inferred.' };
   }
 }
 // A separate, explicitly fault-injected run; never overwrite the normal property report.
@@ -77,10 +77,10 @@ const propertyExamples = mutantReport.failures.map(failure => ({
   originalHistory: failure.originalHistory, minimalHistory: failure.minimalHistory,
   attempts: failure.attempts, budgetExhausted: failure.budgetExhausted, minimality: failure.minimality,
   replay: failure.replay,
-  recordings: Object.fromEntries([['original', failure.originalHistory], ['shrunk', failure.minimalHistory]].map(([name, history]) => [name,
+  recordings: Object.fromEntries(Object.entries({original: failure.originalHistory, shrunk: failure.minimalHistory}).map(([name, history]) => [name,
     Object.fromEntries([false, true].map(staleApprovalMutant => [String(staleApprovalMutant),
-      Array.from({ length: (history as typeof failure.originalHistory).length + 1 }, (_, length) => replayHistory({
-        ...failure.replay, staleApprovalMutant, history: (history as typeof failure.originalHistory).slice(0, length),
+      Array.from({ length: history.length + 1 }, (_, length) => replayHistory({
+        ...failure.replay, staleApprovalMutant, history: history.slice(0, length),
       }))]))])),
 }));
 const data = { format: 'semantic-workbench/1', modelHash: hash(model), schedules, policies, cases,

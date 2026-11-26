@@ -24,7 +24,7 @@ export type WalkthroughEvent = (
 export async function* walkthrough(declaration:unknown, {action, actor, args, submissionId = randomUUID()}: SubmissionBody & {submissionId?: string}):AsyncGenerator<WalkthroughEvent> {
   if (typeof submissionId !== 'string' || !submissionId.trim() || submissionId.length > 200)
     throw Error('Expected a nonempty submission ID of at most 200 characters.');
-  const body = {action, actor, args: structuredClone(args)};
+  const body = {action, actor, args: structuredClone(Object.fromEntries(Object.entries(args).filter(([, value])=>value!==undefined)))};
   const directory = await mkdtemp(join(tmpdir(), 'action-walkthrough-'));
   let server;
   try {

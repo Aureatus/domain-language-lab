@@ -106,7 +106,7 @@ test('budget exhaustion is explicit and invalid inputs cannot silently pass', ()
   assert.throws(() => shrinkHistory(history, false), /passing/);
   for (const options of [{ seed: -1 }, { seed: 2 ** 32 }, { samples: 0 }, { maxSteps: 0 },
     { shrinkBudget: -1 }, { seed: NaN }, { samples: 1.5 }]) assert.throws(() => runProperties(options), RangeError);
-  assert.throws(() => replayHistory({ ...data([]), clock: 2 } as unknown as ReplayData), /Unsupported/);
-  assert.throws(() => replayHistory(data([{ kind: 'unknown' } as unknown as Action])), /Invalid replay action/);
-  assert.throws(() => replayHistory(data([{ kind: 'approve', actor: { id: 'x', role: 'admin' } } as unknown as Action])), /Invalid replay action/);
+  assert.throws(() => replayHistory({ ...data([]), clock: 2 }), /Unsupported/);
+  assert.throws(() => replayHistory({ ...data([]), history: [{ kind: 'unknown' }] }), /Invalid replay action/);
+  assert.throws(() => replayHistory({ ...data([]), history: [{ kind: 'approve', actor: { id: 'x', role: 'admin' } }] }), /Invalid replay action/);
 });

@@ -1,6 +1,6 @@
-import {decodeJson,decodeJsonObject,decodeJsonValue,encodeJson,WorkspaceChangeSchema} from '../adapters/effect/json.ts';
+import {decodeJson,decodeJsonObject,decodeJsonValue,decodeValue,encodeJson,WorkspaceChangeSchema,WorkspaceSnapshotSchema} from '../adapters/effect/json.ts';
 import {errorMessage} from '../errors.ts';
-import type {ApprovalRequest,FieldSchema,Grant,RecordSnapshot,State,Value} from '../semantic/v2/types.ts';
+import type {RecordSnapshot,Value} from '../semantic/v2/types.ts';
 
 function $(id:string) {
   const element=document.getElementById(id);
@@ -16,12 +16,8 @@ const profileInput=control('profile',HTMLSelectElement),actorInput=control('acto
 const actionInput=control('action',HTMLSelectElement),clockInput=control('clock',HTMLInputElement);
 const resumeClock=control('resume-clock',HTMLInputElement),toolInput=control('tool-json',HTMLTextAreaElement);
 const executeJSON=control('execute-json',HTMLButtonElement);
-type Snapshot = {
-  state:State;profile:'v1'|'v2';sequence:number;scope:unknown;
-  tools:{name:string;inputs:Record<string,FieldSchema>}[];
-  pending?:{status:'pending'|'consumed';invocationId:string;request:ApprovalRequest;grants:Grant[];resumeId:string|null}[];
-  events?:{sequence:number;eventId:string;event:{type?:string;kind?:string}}[];
-};
+type Snapshot = typeof WorkspaceSnapshotSchema.Type;
+const decodeSnapshot = decodeValue(WorkspaceSnapshotSchema);
 const entities:Record<string,string>={'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'};
 const esc = (value:unknown) => String(value ?? '').replace(/[&<>"']/g, c => entities[c] ?? c);
 const json = (value:unknown) => JSON.stringify(value, null, 2);
@@ -91,8 +87,7 @@ async function refresh(gen = generation) {
     const response = await fetch(`/api/snapshot?${new URLSearchParams({profile,actor})}`);
     const value = decodeJsonObject(await response.text()); if (!response.ok) throw Error(typeof value['error']==='string'?value['error']:`HTTP ${response.status}`);
     if (gen !== generation || serial !== requestSerial) return;
-    if((value['profile']!=='v1'&&value['profile']!=='v2')||!Array.isArray(value['tools'])||!value['state']||typeof value['state']!=='object'||typeof value['sequence']!=='number')throw Error('Invalid workspace snapshot.');
-    const first = !snapshot; const current=value as unknown as Snapshot;snapshot=current;
+    const first = !snapshot, current=decodeSnapshot(value);snapshot=current;
     if (first) { actionInput.innerHTML = current.tools.map(t => `<option>${esc(t.name)}</option>`).join(''); buildForm(); }
     render(current); $('notice').textContent = ''; $('action-form').inert = false; executeJSON.disabled = false;
     if (stream?.readyState === EventSource.OPEN) $('connection').textContent = 'Connected · snapshot current';
