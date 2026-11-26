@@ -70,6 +70,35 @@ test('JSON replay includes declarations; tampered observations fail closed',()=>
   assert.throws(()=>replay({...b,steps:[{operation:{type:'prepare',invocation:{}},observation:{}}]}),/Invalid replay operation/);
   present(b.steps[0]).observation.status='committed';assert.throws(()=>replay(b),/mismatch/);
 });
+test('inventory replay rejects malformed operations before comparing observations',()=>{
+  const bundle=competition().export();
+  const command=invocation('valid','reserve');
+  const execute={type:'execute',invocation:command};
+  for(const [operation,field] of [
+    [null,'operation'],
+    ['execute','operation'],
+    [{invocation:command},'type'],
+    [{...execute,type:'unknown'},'type'],
+    [{type:'commit'},'token'],
+    [{type:'commit',token:1},'token type'],
+    [{type:'commit',token:'A',mutant:'false'},'mutant type'],
+    [{type:'prepare',token:1,invocation:command},'prepare token'],
+    [{type:'execute'},'invocation'],
+    [{...execute,invocation:'reserve'},'invocation type'],
+    [{...execute,invocation:{...command,id:1}},'id'],
+    [{...execute,invocation:{...command,action:null}},'action'],
+    [{...execute,invocation:{...command,actor:false}},'actor'],
+    [{...execute,invocation:{...command,clock:'10'}},'clock'],
+    [{...execute,invocation:{...command,args:null}},'null args'],
+    [{...execute,invocation:{...command,args:1}},'scalar args'],
+    [{...execute,invocation:{...command,args:[]}},'array args'],
+    [{...execute,invocation:{...command,args:{watchers:[1]}}},'array value'],
+    [{...execute,invocation:{...command,args:{quantity:{value:3}}}},'object value'],
+  ] satisfies [unknown,string][]){
+    const tampered={...bundle,steps:[{operation,observation:{}}]};
+    assert.throws(()=>replay(JSON.parse(JSON.stringify(tampered))),/Invalid replay operation/,field);
+  }
+});
 test('oracle independently detects bad stock and lost reservations',()=>{
   const bad=structuredClone(initialState);present(present(bad.records['stock'])['camera']).values['available']=4;
   assert.equal(inspectInventory(bad,[]).ok,false);

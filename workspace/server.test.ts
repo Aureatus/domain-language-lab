@@ -214,7 +214,7 @@ test('snapshot selection is exact and rejected commands leave the profile unchan
     ['/api/snapshot?profile=v2','POST',405,/Method not allowed/],
     ['/api/execute?profile=v2','POST',400,/Unexpected query members/],
     ['/index.html','POST',405,/Method not allowed/],
-  ] as const){
+  ] satisfies [string,string,number,RegExp][]){
     const response=await fetch(f.url+path,{method});
     assert.equal(response.status,status,path);
     assert.match((await response.json()).error,message);

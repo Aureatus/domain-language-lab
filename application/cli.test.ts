@@ -56,6 +56,24 @@ test('shared client fails closed on contract mismatch',async()=>{
   await client.contract();await assert.rejects(client.snapshot(),/contract changed/);
 });
 
+test('shared client rejects malformed contracts, snapshots and receipts at the transport boundary',async()=>{
+  const {contract}=deriveApplication(declaration);
+  let body:object={contractId:'c',contract:{...contract,actors:[{id:'maya'}]}};
+  const client=createApplicationClient('http://127.0.0.1:1',{fetch:async()=>Response.json(body)});
+  await assert.rejects(client.contract(),/Invalid application contract/);
+  body={contract};
+  await assert.rejects(client.contract(),/Invalid application contract/);
+  body={contractId:'c',contract};
+  assert.deepEqual(await client.contract(),body);
+  body={contractId:'c',snapshotVersion:'0',state:{revision:0,records:{}},pending:[],defaults:{},availability:{}};
+  await assert.rejects(client.snapshot(),/snapshotVersion/);
+  const preview={actor:'maya',action:'leave.request',args:{start:'2026-11-23',end:'2026-11-23'}};
+  body={contractId:'c'};
+  await assert.rejects(client.preview(preview),/Invalid application receipt/);
+  body={contractId:'c',status:'pending',requirements:[{policyId:'approval',approvers:[7],allowSelfApproval:false}]};
+  await assert.rejects(client.preview(preview),/approvers/);
+});
+
 test('CLI rejects ambiguous arguments before connecting',async()=>{
   const output:string[]=[];
   const run=(...args:string[])=>runCLI(args,{stdout:(line:string)=>output.push(line)});

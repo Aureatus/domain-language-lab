@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {submissionStep as step,submissionControls} from './submission.ts';
+import {submissionStep as step,submissionControls,submissionWireBody} from './submission.ts';
 import type {SubmissionEvent} from './submission.ts';
 import {createApplicationClient} from './client.ts';
 const contract={format:'derived-application/v1',title:'Test',eyebrow:'',subtitle:'',scope:'Local',actors:[],actions:{},views:[],resources:{},relationships:[]};
@@ -9,6 +9,16 @@ test('oversized UTF-8 payloads never dispatch; wrong receipt IDs never resolve t
   await client.contract();const body={actor:'person',action:'reserve',args:{note:'❄'.repeat(6000)},submissionId:'expected'};
   await assert.rejects(client.execute(body),e=>e instanceof Error&&'notSubmitted' in e&&e.notSubmitted===true);assert.equal(calls,1);
   body.args.note='ok';await assert.rejects(client.execute(body),/identity mismatch/);assert.equal(calls,2);
+});
+test('submission size counts two-, three- and four-byte characters at the wire limit',()=>{
+  const command=(input:string)=>({args:{input}});
+  const remaining=16384-Buffer.byteLength(submissionWireBody(command(''),'c'));
+  const mixed='Aé雪🙂';
+  const input=mixed+'x'.repeat(remaining-Buffer.byteLength(mixed));
+  const wire=submissionWireBody(command(input),'c');
+  assert.equal(Buffer.byteLength(wire),16384);
+  assert.deepEqual(JSON.parse(wire),{...command(input),expectedContractId:'c'});
+  assert.throws(()=>submissionWireBody(command(input+'🙂'),'c'),/Submission is too large/);
 });
 test('a lost response locks resubmission; absence permits replay only of the captured command',()=>{
   const body={actor:'person',action:'reserve',args:{units:2}};

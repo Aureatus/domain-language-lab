@@ -70,7 +70,7 @@ test('approval examples are derived from visible inputs without changing the ini
 
 test('bounded search can find an approval controlled by a checkbox or enum',()=>{
   const action='supply.take',actor='nora';
-  for(const [name,value] of [['tracked',true],['reason','Repair']] as const){
+  for(const [name,value] of [['tracked',true],['reason','Repair']] satisfies [string,boolean|string][]){
     const model=structuredClone(fixture);
     const take=model.domain.actions[action];
     assert.ok(take);

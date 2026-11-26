@@ -45,7 +45,7 @@ test('HTTP command validation cannot publish an update or change the durable sna
 
 test('application serves the built assets and ends its event stream on idempotent close',async t=>{
   const {server}=await setup(t);
-  for(const [path,type] of [['/','text/html'],['/style.css','text/css'],['/app.js','text/javascript']] as const){
+  for(const [path,type] of [['/','text/html'],['/style.css','text/css'],['/app.js','text/javascript']] satisfies [string,string][]){
     const response=await fetch(server.url+path);
     assert.equal(response.status,200);
     assert.ok(response.headers.get('content-type')?.startsWith(type));
