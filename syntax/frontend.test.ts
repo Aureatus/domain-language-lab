@@ -57,6 +57,21 @@ test('precedence, parentheses, comparison reversal and left-associative subtract
 });
 
 for(const [label,mutate,pattern] of [
+  ['numeric resource name',s=>s.replace('resource employee','resource 42'),/Expected a name/],
+  ['unquoted title',s=>s.replace('title "Time away"','title Unquoted'),/Expected quoted text/],
+  ['unknown qualified input',s=>s.replace('days <= employee.balance','input.missing <= employee.balance'),/Unknown input 'missing'/],
+  ['empty inline enum',s=>s.replace('leaveId string','leaveId string enum'),/Expected at least one enum value/],
+  ['invalid record literal',s=>s.replace('balance = 5','balance = five'),/Expected a literal value/],
+  ['unknown create target',s=>s.replace('create leave key','create missing key'),/Unknown resource 'missing'/],
+  ['aliased create collision',s=>s.replace('as saved','as employee'),/Duplicate observation alias 'employee'/],
+  ['duplicate application',s=>s+'application\nend\n',/Duplicate application/],
+  ['duplicate actor',s=>s.replace('  actor leo label','  actor maya label'),/Duplicate actor 'maya'/],
+  ['invalid field presentation',s=>s.replace('label "First day"','color "red"'),/Expected label, widget, bind or default/],
+  ['invalid adapter mapping',s=>s.replace('      start start','      first start'),/Unknown adapter mapping/],
+  ['invalid action presentation',s=>s.replace('    label "Request time off"','    color "red"'),/Expected label, description, field or adapter/],
+  ['duplicate initial state',s=>s+'initial revision 0\nend\n',/Duplicate initial block/],
+  ['duplicate record collections',s=>s.replace('records leave','records employee'),/Duplicate records 'employee'/],
+  ['unknown record collection',s=>s.replace('records leave','records missing'),/Unknown resource 'missing'/],
   ['unknown statement',s=>s+'import "evil"\n',/Expected resource/],
   ['unknown expression',s=>s.replace('days <= employee.balance','mystery <= employee.balance'),/Unknown expression/],
   ['unknown field',s=>s.replace('days <= employee.balance','days <= employee.missing'),/Unknown binding\/field/],
