@@ -67,6 +67,7 @@ test('both mutant schedules actually lose accepted reservation and oversell; det
 });
 test('JSON replay includes declarations; tampered observations fail closed',()=>{
   const b=competition().export();assert.deepEqual(b.model,inventoryModel);
+  assert.throws(()=>replay({...b,steps:[{operation:{type:'prepare',invocation:{}},observation:{}}]}),/Invalid replay operation/);
   present(b.steps[0]).observation.status='committed';assert.throws(()=>replay(b),/mismatch/);
 });
 test('oracle independently detects bad stock and lost reservations',()=>{

@@ -5,7 +5,7 @@
   "packageManager": "pnpm@10.34.7",
   "engines": { "node": "^22.18.0 || ^24.11.0 || >=26.0.0" },
   "scripts": {
-    "lint": "vp lint",
+    "lint": "vp lint -c .oxlintrc.json",
     "typecheck": "effect-language-service patch && tsc -p tsconfig.json && effect-tsgo tsc@7.0.2 -p tsconfig.json",
     "test": "node --test prototype/*.test.ts live/*.test.ts semantic/*.test.ts semantic/v2/*.test.ts inventory/*.test.ts inventory/v2/*.test.ts adapters/effect/*.test.ts adapters/lean/*.test.ts adapters/exact/test.ts workspace/*.test.ts application/*.test.ts leave/*.test.ts syntax/*.test.ts",
     "syntax:check": "node syntax/cli.ts check",

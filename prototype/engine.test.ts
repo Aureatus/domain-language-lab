@@ -91,7 +91,10 @@ test('simulation and storyboards are deterministic and preserve causal reference
   assert.deepEqual(first, storyboard(replay(['approve', 'edit', 'execute'])));
   const positions = new Map(first.scenes.flatMap((s, i) => s.eventIds.map(id => [id, i] as const)));
   for (const event of first.trace.events) {
-    for (const parent of event.parents) assert.ok(positions.get(parent)! < positions.get(event.id)!);
+    for (const parent of event.parents) {
+      const before = positions.get(parent), after = positions.get(event.id);
+      assert.ok(before !== undefined && after !== undefined && before < after);
+    }
   }
   assert.equal(hash({ a: 1, b: 2 }), hash({ b: 2, a: 1 }));
 });

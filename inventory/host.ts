@@ -6,6 +6,19 @@ export const HOST_VERSION='inventory-host/v1';
 type Operation = {type:'prepare'; token:string; invocation:Invocation}
   | {type:'commit'; token:string; mutant?:boolean}
   | {type:'execute'; invocation:Invocation};
+function isOperation(operation:unknown):operation is Operation {
+  if(!operation||typeof operation!=='object'||!('type' in operation))return false;
+  if(operation.type==='commit')return 'token' in operation&&typeof operation.token==='string'
+    &&(!('mutant' in operation)||typeof operation.mutant==='boolean');
+  if(operation.type!=='prepare'&&operation.type!=='execute')return false;
+  if(operation.type==='prepare'&&(!('token' in operation)||typeof operation.token!=='string'))return false;
+  const invocation='invocation' in operation?operation.invocation:undefined;
+  return !!invocation&&typeof invocation==='object'&&'id' in invocation&&typeof invocation.id==='string'
+    &&'action' in invocation&&typeof invocation.action==='string'&&'actor' in invocation&&typeof invocation.actor==='string'
+    &&'clock' in invocation&&typeof invocation.clock==='number'&&'args' in invocation&&!!invocation.args
+    &&typeof invocation.args==='object'&&!Array.isArray(invocation.args)&&Object.values(invocation.args).every((v:unknown)=>
+      typeof v==='string'||typeof v==='number'||typeof v==='boolean'||Array.isArray(v)&&v.every(x=>typeof x==='string'));
+}
 type Observation = {status: Preparation['status'] | Committed['status']; code?: string; reason?: string; revision: number; oracle: ReturnType<typeof inspectInventory>; events: Event[]};
 type Step = {operation: Operation; observation: Observation};
 interface ReplayBundle {
@@ -55,10 +68,8 @@ export function replay(bundle: ReplayBundle) {
   for(const row of bundle.steps) {
     if(!row||typeof row!=='object'||!('operation' in row)||!('observation' in row))throw new Error('Invalid replay step');
     const {operation,observation}=row;
-    if(!operation||typeof operation!=='object'||!('type' in operation)||
-        !(operation.type==='commit'&&'token' in operation&&typeof operation.token==='string'||
-          (operation.type==='prepare'||operation.type==='execute')&&'invocation' in operation&&operation.invocation&&typeof operation.invocation==='object'))throw new Error('Invalid replay operation');
-    const actual=host.step(operation as Operation);
+    if(!isOperation(operation))throw new Error('Invalid replay operation');
+    const actual=host.step(operation);
     if(JSON.stringify(actual)!==JSON.stringify(observation)) throw new Error('Replay observation mismatch');
   }
   if(JSON.stringify(host.state)!==JSON.stringify(bundle.final)) throw new Error('Replay final mismatch');

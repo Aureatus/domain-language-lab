@@ -20,6 +20,7 @@ import {
   WorkspaceResumeRequestSchema,
   ApplicationSavedSubmissionsSchema,
   ApplicationSnapshotSchema,
+  ReviewEventSchema,
   WorkspaceChangeSchema,
   LiveWorkspaceDocumentSchema,
   InventoryReplaySchema,
@@ -65,6 +66,18 @@ test('browser SSE codecs require snapshot and change envelopes without discardin
     for (const raw of ['', '{}', '{broken']) assert.throws(() => decodeJson(schema, raw));
   }
   assert.deepEqual(decodeJson(WorkspaceChangeSchema, encodeJson({ ...change, sequence: 1, invalidations: [], reason: 'outcome' })).invalidations, []);
+});
+
+test('action review replay validates variant fields and nested receipts', () => {
+  const grant={type:'grant',actor:'reviewer',policyId:'policy',result:{
+    contractId:'contract',status:'approved',evidence:{phase:'grant',invocation:{id:'inv',actor:'writer',action:'request',args:{amount:null}},
+      outcome:{status:'approved',events:[]}},
+  }};
+  const decode=(event:unknown)=>decodeJson(ReviewEventSchema,encodeJson(event));
+  assert.deepEqual(decode(grant),grant);
+  assert.throws(()=>decode({...grant,actor:undefined}));
+  assert.throws(()=>decode({...grant,result:{...grant.result,snapshot:{contractId:'contract'}}}));
+  assert.throws(()=>decode({...grant,result:{...grant.result,evidence:{...grant.result.evidence,invocation:{id:1}}}}));
 });
 
 test('browser Live workspace codec round-trips empty and populated journals without bypassing replay', () => {

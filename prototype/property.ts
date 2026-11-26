@@ -102,7 +102,8 @@ class SnapshotOracle {
   invocation?: Invocation;
   approved?: Subject;
   subject(): Subject {
-    const i = this.invocation!;
+    const i = this.invocation;
+    if (!i) throw new Error('Missing approval invocation');
     return clone({ invocation: i.id, actor: i.actor, summary: i.summary, ticket: this.ticket, model: this.model });
   }
   apply(action: Action): Outcome {
@@ -182,44 +183,48 @@ function observableInvocation(i: Runtime['invocation'] | Invocation) {
   return i ? { id: i.id, actor: i.actor, summary: i.summary, state: i.state } : null;
 }
 
-function validateAction(action: Action): void {
-  if (!action || typeof action !== 'object') throw new Error('Invalid replay action');
-  const actor = (value: Actor) => value && typeof value.id === 'string' && roles.includes(value.role);
+const object = (value:unknown):value is Record<string,unknown> =>
+  value!==null&&typeof value==='object'&&!Array.isArray(value);
+const member = <T>(values:readonly T[], value:unknown):value is T => values.some(v=>v===value);
+const validActor = (value:unknown) => object(value)&&typeof value['id']==='string'&&member(roles,value['role']);
+const natural = (value:unknown):value is number => typeof value==='number'&&Number.isSafeInteger(value)&&value>=0;
+function validateAction(action: unknown): asserts action is Action {
+  if (!object(action)) throw new Error('Invalid replay action');
+  const {kind,actor,summary,role,priority,decision,value,field}=action;
   let valid = false;
-  switch (action.kind) {
-    case 'request': valid = Boolean(actor(action.actor)) && typeof action.summary === 'string'; break;
-    case 'approve': valid = Boolean(actor(action.actor)); break;
-    case 'edit': valid = typeof action.summary === 'string'; break;
+  switch (kind) {
+    case 'request': valid = validActor(actor) && typeof summary === 'string'; break;
+    case 'approve': valid = validActor(actor); break;
+    case 'edit': valid = typeof summary === 'string'; break;
     case 'execute': valid = true; break;
-    case 'policy': valid = roles.includes(action.role) && priorities.includes(action.priority)
-      && decisions.includes(action.decision); break;
-    case 'revision': valid = Number.isSafeInteger(action.value) && action.value >= 0; break;
+    case 'policy': valid = member(roles,role) && member(priorities,priority) && member(decisions,decision); break;
+    case 'revision': valid = natural(value); break;
     case 'resource':
-      if (action.field === 'version') valid = Number.isSafeInteger(action.value) && action.value >= 0
-        && action.value < Number.MAX_SAFE_INTEGER;
-      if (action.field === 'priority') valid = priorities.includes(action.value);
-      if (action.field === 'watchers') valid = Array.isArray(action.value)
-        && action.value.every(item => typeof item === 'string');
+      if (field === 'version') valid = natural(value) && value < Number.MAX_SAFE_INTEGER;
+      if (field === 'priority') valid = member(priorities,value);
+      if (field === 'watchers') valid = Array.isArray(value) && value.every(item => typeof item === 'string');
       break;
   }
   if (!valid) throw new Error('Invalid replay action');
 }
 
 /** Replay exact commands from the fixed initial model/ticket; stops at the first discrepancy. */
-export function replayHistory(data: ReplayData) {
-  if (data.format !== 'approval-property-replay/1' || data.clock !== CLOCK
-    || typeof data.staleApprovalMutant !== 'boolean' || !Array.isArray(data.history)) throw new Error('Unsupported replay contract');
+export function replayHistory(data: unknown) {
+  if (!object(data)) throw new Error('Unsupported replay contract');
+  const {format,clock,staleApprovalMutant,history}=data;
+  if (format !== 'approval-property-replay/1' || clock !== CLOCK
+    || typeof staleApprovalMutant !== 'boolean' || !Array.isArray(history)) throw new Error('Unsupported replay contract');
   // Validate the entire history, including commands beyond a potential first discrepancy.
-  data.history.forEach(validateAction);
-  const runtime = new Runtime(model, ticket(), () => data.clock);
+  const raw:unknown[]=history, actions=raw.map(action=>{validateAction(action);return action;});
+  const runtime = new Runtime(model, ticket(), () => clock);
   const oracle = new SnapshotOracle();
   const coverage = { steps: 0, executes: 0, commits: 0, approvalRequiredCommits: 0, staleRejections: 0 };
-  for (const [index, action] of data.history.entries()) {
+  for (const [index, action] of actions.entries()) {
     const wasCompleted = oracle.invocation?.state === 'completed';
     const approvalRequired = oracle.invocation
       ? oracle.model.policy[oracle.invocation.actor.role][oracle.ticket.priority] === 'approval' : false;
     const expected = oracle.apply(action);
-    const actual = apply(runtime, action, data.staleApprovalMutant);
+    const actual = apply(runtime, action, staleApprovalMutant);
     coverage.steps++;
     if (action.kind === 'execute') {
       coverage.executes++;
@@ -327,8 +332,8 @@ export function runProperties(options: PropertyOptions = {}) {
     originalFailure:NonNullable<ReturnType<typeof replayHistory>['failure']>;
     minimized:ReturnType<typeof replayHistory>;
   } & ReturnType<typeof shrinkHistory>)[] = [];
-  const coverage = { steps: 0, executes: 0, commits: 0, approvalRequiredCommits: 0, staleRejections: 0,
-    actions: {} as Record<string, number> };
+  const actions: Record<string, number> = {};
+  const coverage = { steps: 0, executes: 0, commits: 0, approvalRequiredCommits: 0, staleRejections: 0, actions };
   for (let sample = 0; sample < samples; sample++) {
     const sampleSeed = next();
     const history = generateHistory(sampleSeed, maxSteps);

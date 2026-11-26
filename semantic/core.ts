@@ -49,6 +49,7 @@ export function jsonSnapshot<T>(value:T):T {
     seen.delete(x);
     return result;
   }
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- The walker copies every permitted value and key without coercion.
   return freeze(visit(value, 0)) as T;
 }
 
@@ -82,6 +83,7 @@ const binary:Readonly<Record<string,readonly [Kind,Kind]>> = {add: ['integer', '
 
 /** Validate the entire declaration, including unreachable expressions. Returns frozen JSON. */
 export function validateModel(source: unknown): Model {
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- The checks below validate the frozen declaration before returning it.
   const m = jsonSnapshot(source) as Model;
   keys(m, ['format', 'id', 'resources', 'relationships', 'actions']);
   assert(m.format === 'semantic-core/v1', 'Unsupported semantic profile');
@@ -137,19 +139,25 @@ export function validateState(model: Model, source: unknown): State {
 }
 
 function checkState(model: Model, source: unknown): State {
-  const s = jsonSnapshot(source) as State;
-  keys(s, ['revision', 'records']); assert(Number.isSafeInteger(s.revision) && s.revision >= 0, 'Invalid revision');
-  assert(obj(s.records) && Object.keys(s.records).length === Object.keys(model.resources).length, 'Resource collection mismatch');
+  const s = jsonSnapshot(source);
+  assertState(model,s);
+  return s;
+}
+
+function assertState(model:Model,s:unknown):asserts s is State {
+  const {revision,records}=keys(s, ['revision', 'records']);
+  assert(typeof revision==='number'&&Number.isSafeInteger(revision)&&revision>=0, 'Invalid revision');
+  assert(obj(records) && Object.keys(records).length === Object.keys(model.resources).length, 'Resource collection mismatch');
   for (const [rid, r] of Object.entries(model.resources)) {
-    const collection=ownValue(s.records,rid);
+    const collection=ownValue(records,rid);
     assert(collection&&obj(collection), 'Missing resource collection');
     for (const record of Object.values(collection)) {
-      keys(record, ['version', 'values']); assert(Number.isSafeInteger(record.version) && record.version >= 0, 'Invalid record version');
-      keys(record.values, Object.keys(r.fields));
-      for (const [f, spec] of Object.entries(r.fields)) value(spec, record.values[f]);
+      const {version,values}=keys(record, ['version', 'values']);
+      assert(typeof version==='number'&&Number.isSafeInteger(version)&&version>=0, 'Invalid record version');
+      const fields=keys(values, Object.keys(r.fields));
+      for (const [f, spec] of Object.entries(r.fields)) value(spec, fields[f]);
     }
   }
-  return s;
 }
 
 function evaluate(e:Expr, ctx:Context):CoreValue {
@@ -190,6 +198,7 @@ const rejection = (state:State,error:unknown):Rejected=>Object.freeze({status:'r
 /** Tokens are opaque interpreter-owned capabilities, not serializable commands. */
 export function createInterpreter(source: unknown): Readonly<Interpreter> {
   const model = validateModel(source), tokens = new WeakMap<Token,Plan>();
+  const isPrepared=(token:Token):token is Prepared=>tokens.has(token);
   const relations = new Map(model.relationships.map(r => [r.id, r]));
   function prepare(state:State, invocation:InvocationInput):Preparation {
     try {
@@ -255,7 +264,8 @@ export function createInterpreter(source: unknown): Readonly<Interpreter> {
       const events:Event[] = [{...eventBase, id: `${eventPrefix}:action`, kind: 'action', semanticId: inv.action}, ...patches.filter(p => canonical(p.before) !== canonical(p.after)).map((p):Event => ({...eventBase, id: `${eventPrefix}:change:${encodeURIComponent(p.semanticId)}`, kind: 'change', ...p}))];
       const token:Token = freeze({kind: 'semantic-prepared/v1'});
       tokens.set(token, {before: canonical(before), state: nextState, events: jsonSnapshot(events)});
-      return freeze({status: 'prepared', prepared: token as Prepared});
+      assert(isPrepared(token), 'Unregistered preparation token');
+      return freeze({status: 'prepared', prepared: token});
     } catch (error) { return rejection(state, error); }
   }
   function commit(state:State, token:Token):Committed|Rejected {

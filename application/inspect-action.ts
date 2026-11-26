@@ -9,7 +9,7 @@ import {exampleArgs,actionReview} from './action-review.ts';
 import {walkthrough} from './action-walkthrough.ts';
 import {interactionOracle} from './interaction-check.ts';
 import {checkerBuild} from './checker-build.ts';
-import {decodeJson,decodeJsonObject,encodeJson,encodeJsonPretty,ActionEventsTraceSchema} from '../adapters/effect/json.ts';
+import {decodeJson,decodeJsonObject,decodeValue,encodeJson,encodeJsonPretty,ActionEventsTraceSchema,ReviewEventSchema} from '../adapters/effect/json.ts';
 
 const {values,positionals}=parseArgs({allowPositionals:true,options:{actor:{type:'string'},args:{type:'string'},json:{type:'boolean'},record:{type:'string'},replay:{type:'string'}}});
 const [entry,action]=positionals;
@@ -39,7 +39,7 @@ for await(const event of trace?.events??walkthrough(declaration,{actor,action,ar
   const snap=event.snapshot??(payload&&typeof payload==='object'&&'snapshot' in payload?payload.snapshot:undefined);
   if(snap&&(typeof snap!=='object'||!('contractId' in snap)||snap.contractId!==contractId))throw Error('Snapshot contract mismatch.');
   let rule: string | null=null;
-  try{const reviewEvent=event as ReviewEvent,step=fold(reviewEvent);steps.push(step);if(trace?.['failure'])rule=check(reviewEvent,step);}
+  try{const reviewEvent:ReviewEvent=decodeValue(ReviewEventSchema)(event),step=fold(reviewEvent);steps.push(step);if(trace?.['failure'])rule=check(reviewEvent,step);}
   catch(e){if(!trace?.['failure'])throw e;rule=`projection.error: ${errorMessage(e)}`;}
   events.push(event);
   if(rule){firstFailure={rule,eventCount:events.length};break;}
