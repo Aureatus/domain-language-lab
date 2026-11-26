@@ -36,7 +36,7 @@ In the [time-off prototype](docs/time-off-demo.md), the reusable runtime derives
 
 ## Start here
 
-**Fresh clone:** use Node 24.11+ and [pnpm](https://pnpm.io/installation). Run `pnpm install --frozen-lockfile` and `pnpm run check:interactions leave/browser.domain leave.request --actor maya`. Node runs the TypeScript modules directly; Vite+ bundles browser entry points with Rolldown. Run `pnpm lint` for Oxlint and `pnpm typecheck` for the semantic API contract and shared submission helpers. The checker and offline replay need no browser. See [Chromium/Exact setup](docs/exact-adapter.md#chromiumexact-conformance) for separate renderer conformance. `artifacts/` is local generated output; the historical media and report links below are not part of the public source checkout.
+**Fresh clone:** use Node 24.11+ and [pnpm](https://pnpm.io/installation). Run `pnpm install --frozen-lockfile` and `pnpm run check:interactions leave/browser.domain leave.request --actor maya`. Node runs the TypeScript modules directly; Vite+ bundles browser entry points with Rolldown. Run `pnpm lint` for Oxlint and `pnpm typecheck` to check all repository TypeScript sources, scripts, and tests. The checker and offline replay need no browser. See [Chromium/Exact setup](docs/exact-adapter.md#chromiumexact-conformance) for separate renderer conformance. `artifacts/` is local generated output; the historical media and report links below are not part of the public source checkout.
 
 - **[Check interactions](docs/check-interactions.md):** explore alternative orders of snapshot delivery, reconciliation, refresh and viewer switching; replay the shortest failing prefix in the action inspector.
 

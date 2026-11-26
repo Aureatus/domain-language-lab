@@ -24,7 +24,7 @@ export function exampleArgs({runtime,contract,initialState},action,actor){
 
 // Fold only what the viewer has observed. In particular, a snapshot never
 // supplies a transport receipt for this submission.
-export function actionReview(contract,actor,action,{mutant}={}){
+export function actionReview(contract,actor,action,{mutant}: {mutant?: string}={}){
   if(mutant!==undefined&&mutant!=='snapshot-unlocks')throw Error('Unknown review mutant.');
   const forms=new Map();
   function formFor(owner){

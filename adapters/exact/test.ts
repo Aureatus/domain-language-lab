@@ -2,6 +2,7 @@ import {test} from 'node:test';
 import './submission.test.ts';
 import assert from 'node:assert/strict';
 import {Agent,request} from 'node:http';
+import type {Socket} from 'node:net';
 import {mkdtemp,rm,writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
@@ -27,8 +28,8 @@ test('Exact gateway leaves no pooled API connection for an unanswered execute to
   t.after(()=>gateway.close());
   const agent=new Agent({keepAlive:true,maxSockets:1});
   t.after(()=>agent.destroy());
-  function api(path,body){
-    return new Promise((resolve,reject)=>{
+  function api(path: string,body?: string){
+    return new Promise<{status:number|undefined;connection:string|undefined;socket:Socket|null;text:string}>((resolve,reject)=>{
       const req=request(gateway.url+'/api/'+path,{agent,...(body?{method:'POST',headers:{'content-type':'application/json'}}:{})},res=>{
         const socket=res.socket;
         let text='';res.setEncoding('utf8');res.on('data',chunk=>{text+=chunk;});
@@ -144,7 +145,7 @@ test('inbox coverage follows every captured server requirement, not a single man
 
 test('transport never overwrites a newer accepted snapshot with an older HTTP reply',async()=>{
   const contract={actors:[]},responses=[{contractId:'same',snapshotVersion:8,marker:'new'},{contractId:'same',snapshotVersion:7,marker:'old'},{contractId:'other',snapshotVersion:9}];
-  const c=createClient({contract,contractId:'same'},'http://127.0.0.1:1',async()=>({ok:true,json:async()=>responses.shift()}));
+  const c=createClient({contract,contractId:'same'},'http://127.0.0.1:1',async()=>Response.json(responses.shift()));
   assert.equal((await c.snapshot()).marker,'new');assert.equal((await c.snapshot()).marker,'new');
   await assert.rejects(()=>c.snapshot(),/Declaration changed/);
 });

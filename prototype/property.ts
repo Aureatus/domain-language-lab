@@ -316,7 +316,11 @@ export function runProperties(options: PropertyOptions = {}) {
   const mutant = options.staleApprovalMutant ?? false;
   if (typeof mutant !== 'boolean') throw new TypeError('staleApprovalMutant must be boolean');
   const next = random(seed);
-  const failures = [];
+  const failures: ({
+    sample:number;sampleSeed:number;originalHistory:Action[];
+    originalFailure:NonNullable<ReturnType<typeof replayHistory>['failure']>;
+    minimized:ReturnType<typeof replayHistory>;
+  } & ReturnType<typeof shrinkHistory>)[] = [];
   const coverage = { steps: 0, executes: 0, commits: 0, approvalRequiredCommits: 0, staleRejections: 0,
     actions: {} as Record<string, number> };
   for (let sample = 0; sample < samples; sample++) {

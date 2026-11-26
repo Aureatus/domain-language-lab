@@ -2,6 +2,7 @@ import {Effect,Layer,Schema} from 'effect';
 import {Command,UiSchema} from '@effect/ui';
 import {BrowserHost,Html} from '@effect/ui/html';
 import {createApplicationClient} from '../../application/client.ts';
+import type {ApplicationAction,ApplicationContract,ApplicationField} from '../../application/derive.ts';
 import {acceptsSnapshot} from '../../application/snapshot.ts';
 import {submissionControls,submissionStep} from '../../application/submission.ts';
 
@@ -13,33 +14,55 @@ const SavedSubmissionCodec=Schema.fromJsonString(Schema.NullOr(Schema.Struct({
 const encodeStorageKey=Schema.encodeSync(StorageKeyCodec);
 const decodeSavedSubmission=Schema.decodeUnknownSync(SavedSubmissionCodec);
 const encodeSavedSubmission=Schema.encodeSync(SavedSubmissionCodec);
+const SubmissionBodySchema=Schema.Struct({actor:Schema.String,action:Schema.String,args:Schema.Record(Schema.String,Schema.Unknown)});
+const SnapshotSchema=Schema.Struct({
+  contractId:Schema.String,snapshotVersion:Schema.Number,
+  availability:Schema.Record(Schema.String,Schema.Record(Schema.String,Schema.Boolean)),
+  defaults:Schema.Record(Schema.String,Schema.Record(Schema.String,Schema.Record(Schema.String,Schema.Unknown)))
+});
+const ReceiptSchema=Schema.Struct({status:Schema.String,message:Schema.optional(Schema.String),snapshot:Schema.optional(SnapshotSchema)});
+const SubmissionSchema=Schema.Struct({
+  phase:Schema.Literals(['editing','submitting','unknown','checking','retryable','known']),id:Schema.optional(Schema.String),
+  body:Schema.optional(SubmissionBodySchema),result:Schema.optional(ReceiptSchema),message:Schema.optional(Schema.String)
+});
+const EventSchema=Schema.Union([
+  Schema.Struct({type:Schema.Literal('submit'),id:Schema.String,body:SubmissionBodySchema}),
+  Schema.Struct({type:Schema.Literal('found'),result:ReceiptSchema}),
+  Schema.Struct({type:Schema.Literal('invalid'),message:Schema.String}),
+  Schema.Struct({type:Schema.Literals(['lost','check','missing','retry'])})
+]);
 
 const Message=UiSchema.TaggedEnum({
   DraftChanged:{field:Schema.String,value:Schema.String},
   Submitted:{id:Schema.String}, CheckRequested:{}, RetryRequested:{},
-  SubmissionObserved:{event:Schema.Unknown},
-  RefreshRequested:{}, SnapshotReceived:{snapshot:Schema.Unknown}, RefreshFailed:{}
+  SubmissionObserved:{event:EventSchema},
+  RefreshRequested:{}, SnapshotReceived:{snapshot:SnapshotSchema}, RefreshFailed:{}
 });
-const phaseText={
+const phaseText: Partial<Record<typeof SubmissionSchema.Type.phase,string>>={
   editing:'Ready to submit.', submitting:'Sending your request…',
   unknown:'No response received. Check the original submission before sending another.',
   checking:'Checking the original submission…',
   retryable:'No receipt found. Retry the same submission to avoid sending a duplicate.'
 };
 
-function actionForm({actor,action,fields,contractId,snapshot,client,storage}){
+function actionForm({actor,action,fields,contractId,snapshot,client,storage}:{
+  actor:ApplicationContract['actors'][number]; action:ApplicationAction; fields:ApplicationField[];
+  contractId:string; snapshot:typeof SnapshotSchema.Type;
+  client:ReturnType<typeof createApplicationClient>; storage:Storage;
+}){
   const key=encodeStorageKey(['effect-ui/spike',contractId,actor.id,action.id]);
   const saved=decodeSavedSubmission(storage.getItem(key)??'null');
   const clearSaved=()=>{try{storage.removeItem(key);}catch{/* A reload can safely check the same receipt again. */}};
-  const observe=event=>Message.SubmissionObserved({event});
-  const observeReceipt=result=>{
+  const observe=(event: typeof EventSchema.Type)=>Message.SubmissionObserved({event});
+  const observeReceipt=(result: typeof ReceiptSchema.Type)=>{
     if(!['pending','committed','rejected'].includes(result.status))return observe({type:'lost'});
     clearSaved();
     return observe({type:'found',result});
   };
-  const Execute=Command.make('Execute',{args:{submission:Schema.Unknown,persist:Schema.Boolean}},({submission,persist})=>Effect.promise(async()=>{
+  const Execute=Command.make('Execute',{args:{submission:SubmissionSchema,persist:Schema.Boolean}},({submission,persist})=>Effect.promise(async()=>{
     const {id,body}=submission;
-    try{if(persist)storage.setItem(key,encodeSavedSubmission({id,body}));}
+    if(!id||!body)return observe({type:'lost'});
+    try{if(persist)storage.setItem(key,encodeSavedSubmission({id,body:{...body,args:Schema.decodeUnknownSync(Schema.Record(Schema.String,Schema.String))(body.args)}}));}
     catch{return observe({type:'invalid',message:'Could not store the submission identity. The request was not sent.'});}
     try{
       return observeReceipt(await client.execute({...body,submissionId:id}));
@@ -59,40 +82,47 @@ function actionForm({actor,action,fields,contractId,snapshot,client,storage}){
     try{return Message.SnapshotReceived({snapshot:await client.snapshot()});}
     catch{return Message.RefreshFailed();}
   }));
-  const nextSnapshot=(current,next)=>next&&acceptsSnapshot(current,next,contractId)?next:current;
-  const available=model=>model.snapshot.availability[actor.id][action.id];
-  const updateSubmission=($,event,command)=>{
-    const submission=submissionStep($.model.submission,event);
-    const next=$.evolve({submission});
-    return command?next.run(command(submission)):next;
-  };
+  const nextSnapshot=(current:typeof SnapshotSchema.Type,next?:typeof SnapshotSchema.Type)=>
+    next&&acceptsSnapshot(current,next,contractId)?next:current;
+  const available=(model:{snapshot:typeof SnapshotSchema.Type})=>model.snapshot.availability[actor.id][action.id];
 
   return Html.component({
     name:'DerivedActionForm',
     model:Schema.Struct({
       draft:Schema.Record(Schema.String,Schema.String),
-      submission:Schema.Unknown,snapshot:Schema.Unknown,refreshing:Schema.Boolean,refreshError:Schema.Boolean
+      submission:SubmissionSchema,snapshot:SnapshotSchema,refreshing:Schema.Boolean,refreshError:Schema.Boolean
     }),
     message:Message
   }).make({
     init:()=>({
-      draft:Object.fromEntries(fields.map(({name})=>[name,(saved?.body.args??snapshot.defaults[actor.id][action.id])[name]??''])),
+      draft:Object.fromEntries(fields.map(({name})=>{
+        const value=(saved?.body.args??snapshot.defaults[actor.id][action.id])[name];
+        return [name,typeof value==='string'?value:''];
+      })),
       submission:saved?{...saved,phase:'unknown'}:{phase:'editing'},
       snapshot,refreshing:false,refreshError:false
     }),
     update:{
       DraftChanged:($,{field,value})=>submissionControls($.model.submission).submit?
         $.evolve({draft:{...$.model.draft,[field]:value}}):$.model,
-      Submitted:($,{id})=>available($.model)&&submissionControls($.model.submission).submit?
-        updateSubmission($,{type:'submit',id,body:{actor:actor.id,action:action.id,args:$.model.draft}},
-          submission=>Execute.make({submission,persist:true})):$.model,
-      CheckRequested:$=>submissionControls($.model.submission).check?
-        updateSubmission($,{type:'check'},({id})=>Reconcile.make({id})):$.model,
-      RetryRequested:$=>submissionControls($.model.submission).retry?
-        updateSubmission($,{type:'retry'},submission=>Execute.make({submission,persist:false})):$.model,
+      Submitted:($,{id})=>{
+        if(!available($.model)||!submissionControls($.model.submission).submit)return $.model;
+        const submission=submissionStep($.model.submission,{type:'submit',id,body:{actor:actor.id,action:action.id,args:$.model.draft}});
+        return $.evolve({submission}).run(Execute.make({submission,persist:true}));
+      },
+      CheckRequested:$=>{
+        if(!submissionControls($.model.submission).check||!$.model.submission.id)return $.model;
+        const submission=submissionStep($.model.submission,{type:'check'});
+        return $.evolve({submission}).run(Reconcile.make({id:$.model.submission.id}));
+      },
+      RetryRequested:$=>{
+        if(!submissionControls($.model.submission).retry)return $.model;
+        const submission=submissionStep($.model.submission,{type:'retry'});
+        return $.evolve({submission}).run(Execute.make({submission,persist:false}));
+      },
       SubmissionObserved:($,{event})=>$.evolve({
         submission:submissionStep($.model.submission,event),
-        snapshot:nextSnapshot($.model.snapshot,event.result?.snapshot)
+        snapshot:nextSnapshot($.model.snapshot,event.type==='found'?event.result.snapshot:undefined)
       }),
       RefreshRequested:$=>$.model.refreshing?$.model:$.evolve({refreshing:true,refreshError:false}).run(Refresh.make({})),
       SnapshotReceived:($,{snapshot})=>$.evolve({snapshot:nextSnapshot($.model.snapshot,snapshot),refreshing:false}),
@@ -127,6 +157,7 @@ function actionForm({actor,action,fields,contractId,snapshot,client,storage}){
 }
 
 const root=document.querySelector('#app');
+if(!root)throw Error('Missing Effect UI mount point.');
 try{
   const client=createApplicationClient(location.origin);
   const {contractId,contract}=await client.contract();

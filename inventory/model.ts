@@ -1,11 +1,13 @@
 import {createInterpreter, validateState} from '../semantic/core.ts';
-const lit = value => ({op:'literal', value});
-const input = name => ({op:'input', name});
-const field = (binding, name) => ({op:'field', binding, field:name});
-const bin = (op,left,right) => ({op,left,right});
-const integer = min => ({type:'integer',min});
-const string = {type:'string'};
-function action(kind) {
+import type {Action, Expr, FieldSchema, Model, Scalar} from '../semantic/core.ts';
+
+const lit = (value: Scalar): Expr => ({op:'literal', value});
+const input = (name: string): Expr => ({op:'input', name});
+const field = (binding: string, name: string): Expr => ({op:'field', binding, field:name});
+const bin = (op: Extract<Expr, {left: Expr}>['op'], left: Expr, right: Expr): Expr => ({op,left,right});
+const integer = (min: number): FieldSchema => ({type:'integer',min});
+const string: FieldSchema = {type:'string'};
+function action(kind: string): Action {
   const prefix = `reservation.${kind}`, stock = `${prefix}.stock`, slot = `${prefix}.slot`;
   const s = name => field(stock,name), r = name => field(slot,name);
   const condition = (name,when) => ({id:`${prefix}.${name}`,when});
@@ -31,7 +33,7 @@ export const inventoryModel = {
     reservation:{fields:{stockId:string,owner:string,quantity:integer(0),expiresAt:integer(0),status:{type:'string',enum:['free','active','cancelled','expired']}}}},
   relationships:[{id:'stock.watchers',resource:'stock',field:'watchers'},{id:'reservation.owner',resource:'reservation',field:'owner'}],
   actions:Object.fromEntries(['reserve','cancel','expire'].map(k=>[`reservation.${k}`,action(k)]))
-};
+} satisfies Model;
 export const runtime = createInterpreter(inventoryModel);
 const record = values => ({version:0,values});
 export const initialState = validateState(inventoryModel,{revision:0,records:{stock:{camera:record({capacity:5,available:5,watchers:['warehouse','alice','bob'],operator:'warehouse'})},reservation:{
@@ -39,6 +41,7 @@ export const initialState = validateState(inventoryModel,{revision:0,records:{st
   slotB:record({stockId:'camera',owner:'bob',quantity:0,expiresAt:0,status:'free'}),
   slotC:record({stockId:'camera',owner:'alice',quantity:0,expiresAt:0,status:'free'})
 }}});
-export function invocation(id,kind,slotId='slotA',actor='alice',clock=10,quantity=3,expiresAt=30) {
-  return {id,action:`reservation.${kind}`,actor,clock,args:{stockId:'camera',slotId,...(kind==='reserve'?{quantity,expiresAt}:{})}};
+export function invocation(id: string,kind: string,slotId='slotA',actor='alice',clock=10,quantity=3,expiresAt=30) {
+  const args = {stockId:'camera',slotId,...(kind==='reserve'?{quantity,expiresAt}:{})};
+  return {id,action:`reservation.${kind}`,actor,clock,args};
 }

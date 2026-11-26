@@ -1,6 +1,14 @@
+import type {Invocation, State} from '../semantic/core.ts';
+
+function count(value: unknown): bigint {
+  if (typeof value !== 'number' || !Number.isSafeInteger(value)) throw new TypeError('Inventory count must be a safe integer');
+  return BigInt(value);
+}
+
 // Independent of the expression evaluator: integer accounting over accepted commands.
-export function inspectInventory(state, accepted) {
-  const ledger = new Map(), failures = [];
+export function inspectInventory(state: State, accepted: readonly Invocation[]) {
+  const ledger = new Map<Invocation['args'][string], Pick<Invocation['args'], 'quantity' | 'stockId'>>();
+  const failures: string[] = [];
   for (const command of accepted) {
     const {slotId,quantity,stockId} = command.args;
     if (command.action === 'reservation.reserve') {
@@ -10,11 +18,12 @@ export function inspectInventory(state, accepted) {
     else failures.push(`Unsupported oracle action: ${command.action}`);
   }
   for (const [key,{values:s}] of Object.entries(state.records.stock)) {
-    const active = Object.values(state.records.reservation).filter(r=>r.values.stockId===key && r.values.status==='active').reduce((n,r)=>n+BigInt(r.values.quantity),0n);
-    const promised = [...ledger.values()].filter(r=>r.stockId===key).reduce((n,r)=>n+BigInt(r.quantity),0n);
-    if (BigInt(s.available)+active!==BigInt(s.capacity)) failures.push(`${key}: state conservation failed`);
-    if (promised>BigInt(s.capacity)) failures.push(`${key}: oversold — accepted ${promised} of ${s.capacity}`);
-    if (BigInt(s.available)+promised!==BigInt(s.capacity)) failures.push(`${key}: accepted-ledger conservation failed`);
+    const active = Object.values(state.records.reservation).filter(r=>r.values.stockId===key && r.values.status==='active').reduce((n,r)=>n+count(r.values.quantity),0n);
+    const promised = [...ledger.values()].filter(r=>r.stockId===key).reduce((n,r)=>n+count(r.quantity),0n);
+    const available=count(s.available), capacity=count(s.capacity);
+    if (available+active!==capacity) failures.push(`${key}: state conservation failed`);
+    if (promised>capacity) failures.push(`${key}: oversold — accepted ${promised} of ${s.capacity}`);
+    if (available+promised!==capacity) failures.push(`${key}: accepted-ledger conservation failed`);
   }
   for (const [key,{values:r}] of Object.entries(state.records.reservation)) {
     const expected=ledger.get(key);

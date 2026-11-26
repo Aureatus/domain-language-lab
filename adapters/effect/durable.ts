@@ -1,6 +1,7 @@
 import * as Effect from 'effect/Effect';
 import * as Context from 'effect/Context';
 import * as Layer from 'effect/Layer';
+import type { ConstraintDecoder } from 'effect/Schema';
 import { DatabaseSync } from 'node:sqlite';
 import { createInterpreter, jsonSnapshot, validateState } from '../../semantic/core.ts';
 import { createInterpreter as createV2, validateState as validateV2State } from '../../semantic/v2/core.ts';
@@ -25,13 +26,13 @@ const profile = model => {
 };
 
 const FORMAT = 'durable-effect/v1';
-const decodeWith = (schema, text) => jsonSnapshot(decodeJson(schema, text));
+const decodeWith = <S extends ConstraintDecoder<unknown>>(schema: S, text: unknown): S['Type'] => jsonSnapshot(decodeJson(schema, text));
 const decodeOutcome = (text, model) => {
   const value = decodeWith(DurableOutcomeSchema, text);
   profile(model).validate(model, value.state);
   return value;
 };
-const conflict = result => ({ status: 'rejected', code: 'invocation-conflict', reason: 'Invocation ID already has a different command or model.' , state: result?.state });
+const conflict = (result?) => ({ status: 'rejected' as const, code: 'invocation-conflict' as const, reason: 'Invocation ID already has a different command or model.' , state: result?.state });
 
 function initialize(db) {
   db.exec(`PRAGMA foreign_keys=ON;
@@ -71,7 +72,7 @@ function validateStored(db, modelKey, model) {
 }
 
 /** Open a synchronous SQLite store. Caller owns the database file and filesystem durability policy. */
-export const makeDurableStore = (path, { busyTimeout = 5000 } = {}) => Effect.try({
+export const makeDurableStore = (path: string, { busyTimeout = 5000 } = {}) => Effect.try({
   try: () => {
     const db = new DatabaseSync(path, { timeout: busyTimeout });
     initialize(db);
@@ -82,7 +83,7 @@ export const makeDurableStore = (path, { busyTimeout = 5000 } = {}) => Effect.tr
 export const makeDurableRuntime = model => profile(model).create(model);
 
 /** Effect wrapper; SQLite operations are synchronous and cannot be interrupted mid-call. */
-export const durableExecute = (runtime, db, invocation, { beforeCommit } = {}) => Effect.try({
+export const durableExecute = (runtime, db, invocation, { beforeCommit }: {beforeCommit?: (result) => void} = {}) => Effect.try({
   try: () => {
     const command = jsonSnapshot(invocation);
     const modelKey = canonical(runtime.model);
@@ -99,7 +100,7 @@ export const durableExecute = (runtime, db, invocation, { beforeCommit } = {}) =
       if (previous) {
         db.exec('COMMIT');
         if (previous.model_key === modelKey && previous.command_key === canonical(command))
-          return { status: 'duplicate', result: decodeOutcome(previous.outcome_json, runtime.model) };
+          return { status: 'duplicate' as const, result: decodeOutcome(previous.outcome_json, runtime.model) };
         return conflict();
       }
       const current = validateStored(db, modelKey, runtime.model);
@@ -148,7 +149,7 @@ export const durableState = (runtime, db) => Effect.try({
   try: () => { db.exec('BEGIN'); try { const state = validateStored(db, canonical(runtime.model), runtime.model); db.exec('COMMIT'); if (state === null) throw new Error('Durable store is not initialized.'); return state; } catch (e) { try { db.exec('ROLLBACK'); } catch {} throw e; } }, catch: error => error,
 });
 
-const exactKeys = (value, required, optional = []) => {
+const exactKeys = (value, required: readonly string[], optional: readonly string[] = []) => {
   if (!value || typeof value !== 'object' || Array.isArray(value) ||
       required.some(key => !Object.hasOwn(value, key)) ||
       Object.keys(value).some(key => !required.includes(key) && !optional.includes(key)))
@@ -231,7 +232,7 @@ export const durableApprove = (runtime, db, source, host) => Effect.try({
 });
 
 /** No receipt parameter: only receipts from the transactional grant ledger are used. */
-export const durableResume = (runtime, db, source, options = {}) => Effect.try({
+export const durableResume = (runtime, db, source, options: {beforeCommit?: (result) => void} = {}) => Effect.try({
   try: () => {
     requireV2(runtime);
     const command = jsonSnapshot(source);
@@ -264,7 +265,7 @@ export const durablePending = (runtime, db, invocationId) => Effect.try({
 });
 
 /** Pull ordered unacknowledged facts. A crash after delivery and before ack can redeliver. */
-export const pullOutbox = (db, { limit = 100 } = {}) => Effect.try({
+export const pullOutbox = (db: DatabaseSync, { limit = 100 } = {}) => Effect.try({
   try: () => {
     if (!Number.isSafeInteger(limit) || limit < 1 || limit > 1000) throw new TypeError('limit must be an integer from 1 to 1000');
     return db.prepare('SELECT sequence,event_id,event_json FROM durable_outbox WHERE acknowledged=0 ORDER BY sequence LIMIT ?')
@@ -275,9 +276,9 @@ export const acknowledgeOutbox = (db, sequence) => Effect.try({
   try: () => { if (!Number.isSafeInteger(sequence) || sequence < 1) throw new TypeError('sequence must be a positive safe integer'); return db.prepare('UPDATE durable_outbox SET acknowledged=1 WHERE sequence=? AND acknowledged=0').run(sequence).changes === 1; }, catch: error => error,
 });
 
-export const closeDurableStore = db => Effect.try({ try: () => db.close(), catch: error => error });
+export const closeDurableStore = (db: DatabaseSync) => Effect.try({ try: () => db.close(), catch: error => error });
 
-export const DurableStore = Context.Service('DurableStore');
-export const durableStoreLayer = path => Layer.scoped(DurableStore, Effect.acquireRelease(
-  makeDurableStore(path), db => closeDurableStore(db),
+export const DurableStore = Context.Service<DatabaseSync>('DurableStore');
+export const durableStoreLayer = (path: string) => Layer.effect(DurableStore, Effect.acquireRelease(
+  makeDurableStore(path), db => Effect.orDie(closeDurableStore(db)),
 ));

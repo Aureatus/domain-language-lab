@@ -35,13 +35,13 @@ test('all ownership policies reject atomically, including expiration by owner',(
 });
 test('invalid quantities, clock, expiry, slot/stock pairing and capacity reject unchanged',()=>{
   const bad=[invocation('zero','reserve','slotA','alice',10,0),invocation('fraction','reserve','slotA','alice',10,1.5),invocation('full','reserve','slotA','alice',10,6),invocation('past','reserve','slotA','alice',30,1,30),invocation('clock','reserve','slotA','alice',-1),invocation('missing','reserve','unknown')];
-  for(const inv of bad){const result=runtime.execute(initialState,inv);assert.equal(result.status,'rejected');assert.equal(result.state,initialState);assert.equal(result.events,undefined);}
+  for(const inv of bad){const result=runtime.execute(initialState,inv);assert.equal(result.status,'rejected');assert.equal(result.state,initialState);assert.equal('events' in result,false);}
   const paired=structuredClone(initialState);paired.records.reservation.slotA.values.stockId='other';
-  assert.equal(runtime.execute(paired,invocation('pair','reserve')).code,'precondition');
+  const pair=runtime.execute(paired,invocation('pair','reserve'));assert.equal(pair.status,'rejected');assert.equal(pair.code,'precondition');
 });
 test('late grouped failure and bad routing never partially publish',()=>{
   const overflow=structuredClone(initialState);overflow.records.reservation.slotA.version=Number.MAX_SAFE_INTEGER;
-  const r=runtime.execute(overflow,invocation('overflow','reserve'));assert.equal(r.code,'overflow');assert.equal(r.state,overflow);assert.equal(overflow.records.stock.camera.values.available,5);
+  const r=runtime.execute(overflow,invocation('overflow','reserve'));assert.equal(r.status,'rejected');assert.equal(r.code,'overflow');assert.equal(r.state,overflow);assert.equal(overflow.records.stock.camera.values.available,5);
   const bad=structuredClone(initialState);bad.records.stock.camera.values.watchers=['not an id'];
   assert.equal(runtime.execute(bad,invocation('badRoute','reserve')).status,'rejected');assert.equal(bad.revision,0);
 });
@@ -59,7 +59,8 @@ test('both mutant schedules actually lose accepted reservation and oversell; det
     assert.equal(h.steps[3].observation.status,'committed');assert.equal(h.state.revision,1);
     assert.equal(h.oracle.ok,false);assert.match(h.oracle.failures.join(' '),/oversold/);assert.match(h.oracle.failures.join(' '),/lost reservation/);
     // Snapshot-only conservation cannot expose the overwritten promise.
-    assert.equal(h.state.records.stock.camera.values.available+Object.values(h.state.records.reservation).filter(r=>r.values.status==='active').reduce((n,r)=>n+r.values.quantity,0),5);
+    const available=h.state.records.stock.camera.values.available;assert.ok(typeof available==='number');
+    assert.equal(available+Object.values(h.state.records.reservation).filter(r=>r.values.status==='active').reduce((n,r)=>{assert.ok(typeof r.values.quantity==='number');return n+r.values.quantity;},0),5);
     assert.deepEqual(replay(JSON.parse(JSON.stringify(h.export()))).oracle,h.oracle);
   }
 });

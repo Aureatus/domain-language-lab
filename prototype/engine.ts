@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import type { Actor, Decision, Model, Ticket } from './model.ts';
+import type { Actor, Decision, Model, Priority, Role, Ticket } from './model.ts';
 
 // Hash semantic JSON independent of object-key insertion order. Arrays retain order.
 export function canonical(value: unknown): string {
@@ -146,7 +146,7 @@ export class Runtime {
 }
 
 export function policyDiff(before: Model, after: Model) {
-  const changes = [];
+  const changes: {witness:{role:Role;priority:Priority};before:Decision;after:Decision}[] = [];
   for (const role of ['support', 'reviewer', 'viewer'] as const) {
     for (const priority of ['normal', 'high'] as const) {
       if (before.policy[role][priority] !== after.policy[role][priority]) {

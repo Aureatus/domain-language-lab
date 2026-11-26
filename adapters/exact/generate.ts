@@ -4,6 +4,7 @@ import {pathToFileURL} from 'node:url';
 import {stripTypeScriptTypes} from 'node:module';
 import pin from './pin.json' with {type:'json'};
 import {loadingPlan,lifecycleGuard} from '../../application/loading.ts';
+import type {ApplicationAction,ApplicationContract,ApplicationField} from '../../application/derive.ts';
 const q=JSON.stringify;
 function placeholder({index,strategy,label}){
   const name=q(`Loading ${label}…`),id=q(`loading:${index}:${strategy}`);
@@ -15,12 +16,15 @@ function placeholder({index,strategy,label}){
     default:throw Error(`Unsupported loading strategy: ${strategy}`);
   }
 }
-export function generate(envelope,{api='http://127.0.0.1:4186'}={}){
+type Envelope = {contract:ApplicationContract; contractId:string};
+type Marker = {semanticId:string; marker?:string; generated?:{file:string;line:number}; contractPointer?:string};
+type Form = {k:string;actor:ApplicationContract['actors'][number];a:ApplicationAction;fields:ApplicationField[];shape:string};
+export function generate(envelope: Envelope,{api='http://127.0.0.1:4186'}={}){
   const {contract:c,contractId}=envelope;
   if(c.format!=='derived-application/v1'||!contractId)throw Error('Unsupported derived contract.');
   if(!/^http:\/\/127\.0\.0\.1:\d+$/.test(api))throw Error('This experimental adapter requires a loopback HTTP backend.');
   for(const v of c.views)if(!['summary','list'].includes(v.kind)||v.columns.some(x=>!['text','date',undefined].includes(x.format)))throw Error('Unsupported view.');
-  const lines=[],maps=[];const emit=(s,id)=>{if(id){const marker=`// mapping-${maps.length}`;maps.push({semanticId:id,marker});const indent=s.match(/^ */)[0];lines.push(indent+marker);}lines.push(s);};
+  const lines:string[]=[],maps:Marker[]=[];const emit=(s:string,id?:string)=>{if(id){const marker=`// mapping-${maps.length}`;maps.push({semanticId:id,marker});const indent=s.match(/^ */)?.[0]??'';lines.push(indent+marker);}lines.push(s);};
   const plan=loadingPlan(c),guard=phase=>lifecycleGuard(phase,{pending:'pending(screen)',failed:'failed(screen)',owned:'screen.owner == actor'});
   emit(`// Generated; edit the domain/application declarations, never this file.
 shape Row
@@ -69,7 +73,7 @@ component App
     if not busy
       noticeOwner = actor
       send changed = completeRequest(actor, id)`);
-  const sources=[],forms=[];let n=0;
+  const sources:string[]=[],forms:Form[]=[];let n=0;
   for(const actor of c.actors)for(const a of Object.values(c.actions)){
     const k=`f${n++}`,fields=a.fields.filter(f=>!f.hidden);
     for(const f of fields)if(!['string','integer','boolean'].includes(f.schema.type)||!['text','date','number','checkbox','select'].includes(f.widget))throw Error(`Unsupported field ${a.id}.${f.name}`);
@@ -166,7 +170,7 @@ const client=createClient(envelope,API);
 ${forms.map(({k,actor,a})=>`const driver${k}=submissionDriver(client,${q(actor.id)},${q(a.id)});`).join('\n')}
 const sources: Sources={
   loadScreen:async ([actor])=>client.project(await client.snapshot(),actor),
-${forms.map(({k,actor,a,fields})=>`  loadForm${k}:async ()=>{const s=await client.snapshot(),d=s.defaults[${q(actor.id)}][${q(a.id)}];return {available:s.availability[${q(actor.id)}][${q(a.id)}],${fields.map((f,i)=>`v${i}:${f.schema.type==='boolean'?`Boolean(d[${q(f.name)}])`:`String(d[${q(f.name)}]??'')`}${f.widget==='select'?`,options${i}:${f.reference?`Object.entries(s.state.records[${q(f.reference.resource)}] as Record<string,{values:Record<string,unknown>}>).map(([id,r])=>({id,title:String(${f.reference.labelField?`r.values[${q(f.reference.labelField)}]`:'id'}),detail:''}))`:`${q(f.schema.enum)}.map(id=>({id,title:id,detail:''}))`}`:''}`).join(',')}};},`).join('\n')}
+${forms.map(({k,actor,a,fields})=>`  loadForm${k}:async ()=>{const s=await client.snapshot(),d=s.defaults[${q(actor.id)}][${q(a.id)}];return {available:s.availability[${q(actor.id)}][${q(a.id)}],${fields.map((f,i)=>`v${i}:${f.schema.type==='boolean'?`Boolean(d[${q(f.name)}])`:`String(d[${q(f.name)}]??'')`}${f.widget==='select'?`,options${i}:${f.reference?`Object.entries(s.state.records[${q(f.reference.resource)}] as Record<string,{values:Record<string,unknown>}>).map(([id,r])=>({id,title:String(${f.reference.labelField?`r.values[${q(f.reference.labelField)}]`:'id'}),detail:''}))`:`${q(f.schema.type==='string' ? f.schema.enum : undefined)}.map(id=>({id,title:id,detail:''}))`}`:''}`).join(',')}};},`).join('\n')}
   saveGrant:async ([actor,requestId,policyId])=>client.command('approvals/grant',{actor,requestId,policyId}),
   completeRequest:async ([actor,requestId])=>client.command('approvals/resume',{actor,requestId}),
 ${sources.join('\n')}
@@ -175,7 +179,7 @@ export const answer:Answer=(source,args,store,storage,native)=>sources[source](a
 `;
   return {contract,ts,manifest:{format:'exact-adapter/v1',contractId,exact:pin,api,sourceMap:maps,views:c.views.map((v,i)=>({semanticId:`resource:${v.resource}`,contractPointer:`/contract/views/${i}`,projection:`view:${i}`}))},app:{name:c.title,app:{id:'research.derived.exact',name:c.title},host:{web:{},android:{}}}};
 }
-export async function writeAdapter(envelope,out,options){
+export async function writeAdapter(envelope: Envelope,out: string,options?: Parameters<typeof generate>[1]){
   const r=generate(envelope,options);
   await mkdir(out,{recursive:true});
   for(const [name,data] of Object.entries({'app.contract':r.contract,'app.ts':r.ts,'app.json':JSON.stringify(r.app,null,2),'adapter-manifest.json':JSON.stringify(r.manifest,null,2),'contract.json':JSON.stringify(envelope,null,2)}))

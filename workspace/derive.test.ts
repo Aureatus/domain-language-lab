@@ -19,24 +19,27 @@ test('tools preserve exact schema/policy/precondition declarations in both profi
 });
 
 test('action declarations and facts route views, independently of actor-excluded human recipients', () => {
-  for (const [model, runtime, state, invocation] of [
-    [inventoryModel, v1, initialV1, invokeV1('derive1', 'reserve')],
-    [inventoryV2Model, v2, initialV2, invokeV2('derive2', 'reserve', {reservationId: 'res1'})],
-  ]) {
-    const result = runtime.execute(state, invocation); assert.equal(result.status, 'committed');
+  const invocation1=invokeV1('derive1','reserve'), invocation2=invokeV2('derive2','reserve',{reservationId:'res1'});
+  const cases=[
+    {model:inventoryModel,invocation:invocation1,result:v1.execute(initialV1,invocation1)},
+    {model:inventoryV2Model,invocation:invocation2,result:v2.execute(initialV2,invocation2)}
+  ];
+  for (const {model,invocation,result} of cases) {
+    assert.equal(result.status, 'committed');
     const change = deriveChange(model, result.events, {sequence: 1});
     assert(change.invalidations.some(x => x.resource === 'reservation'));
     assert(change.invalidations.some(x => x.relationship === 'reservation.owner'));
     assert(!change.recipients.some(x => x.recipient === 'alice'));
     assert(change.recipients.some(x => x.recipient === 'bob'));
     const dependencies = deriveDependencies(model);
-    assert(dependencies.find(x => x.actionId === invocation.action).writes.length > 0);
+    const dependency=dependencies.find(x => x.actionId === invocation.action);
+    assert(dependency&&dependency.writes.length > 0);
   }
 });
 
 test('routing is generic across renamed actions and other domains; pending is explicit', () => {
-  const model = structuredClone(issueModel);
-  model.actions['ticket.finish'] = model.actions['issue.resolve']; delete model.actions['issue.resolve'];
+  const {'issue.resolve':resolveIssue,...actions}=issueModel.actions;
+  const model = {...issueModel,actions:{...actions,'ticket.finish':resolveIssue}};
   const runtime = createInterpreter(model);
   const result = runtime.execute(issueState, {id: 'generic', action: 'ticket.finish', args: {issueId: 'i1'}, actor: 'maya', clock: 1});
   assert.equal(result.status, 'committed');

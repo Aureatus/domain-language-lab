@@ -1,4 +1,6 @@
 import {chromium} from 'playwright';
+import type {Page} from 'playwright';
+import type {AxeResults,RunOptions} from 'axe-core';
 import {createRequire} from 'node:module';
 import assert from 'node:assert/strict';
 import {mkdtemp, mkdir, writeFile} from 'node:fs/promises';
@@ -11,9 +13,9 @@ let server = await createWorkspaceServer({directory,port:0});
 const url = server.url, port = Number(new URL(url).port);
 const browser = await chromium.launch({headless:true});
 const context = await browser.newContext({viewport:{width:1440,height:1060}});
-const a = await context.newPage(), b = await context.newPage(), errors = [], checks=[];
+const a = await context.newPage(), b = await context.newPage(), errors:string[] = [], checks:string[]=[];
 for(const page of [a,b]) page.on('pageerror', e=>errors.push(e.message));
-export async function ready(page, profile='v1') { await page.locator('#revision').filter({hasText:`${profile} ·`}).waitFor(); await page.waitForFunction(()=>!document.querySelector('#action-form').inert); }
+export async function ready(page:Page, profile='v1') { await page.locator('#revision').filter({hasText:`${profile} ·`}).waitFor(); await page.waitForFunction(()=>document.querySelector<HTMLElement>('#action-form')?.inert===false); }
 export async function choose(page, profile, actor='alice') { await page.selectOption('#profile',profile); await page.selectOption('#actor',actor); await ready(page,profile); }
 export async function execute(page, action, args={}, clock=100) {
   await page.selectOption('#action',`reservation.${action}`);
@@ -52,16 +54,16 @@ try {
   assert.equal((await resume(pendingId)).code,'approval'); await stock(a,8);
   // Preserve a focused draft, selection and edited JSON through another session's grant push.
   await a.fill('#input-reservationId','draft-survives'); await a.locator('#input-reservationId').focus();
-  await a.locator('#input-reservationId').evaluate(el=>el.setSelectionRange(2,7));
+  await a.locator('#input-reservationId').evaluate(el=>{if(!(el instanceof HTMLInputElement))throw Error('Expected reservation input');el.setSelectionRange(2,7);});
   await grant(pendingId);
-  await a.waitForFunction(id=>document.querySelector(`[data-pending="${id}"]`).textContent.includes('granted by warehouse'),pendingId);
+  await a.waitForFunction(id=>document.querySelector(`[data-pending="${id}"]`)?.textContent?.includes('granted by warehouse'),pendingId);
   assert.equal(await a.locator('#input-reservationId').inputValue(),'draft-survives');
-  assert.deepEqual(await a.locator('#input-reservationId').evaluate(el=>[document.activeElement===el,el.selectionStart,el.selectionEnd]),[true,2,7]);
+  assert.deepEqual(await a.locator('#input-reservationId').evaluate(el=>el instanceof HTMLInputElement?[document.activeElement===el,el.selectionStart,el.selectionEnd]:null),[true,2,7]);
   const historyBefore=await a.locator('#history details').count();
   await server.close(); await a.locator('#connection').filter({hasText:'Reconnecting'}).waitFor();
   server=await createWorkspaceServer({directory,port});
   await Promise.all([a.locator('#connection').filter({hasText:'Connected'}).waitFor(),b.locator('#connection').filter({hasText:'Connected'}).waitFor()]);
-  await a.waitForFunction(id=>document.querySelector(`[data-pending="${id}"]`).textContent.includes('granted by warehouse'),pendingId);
+  await a.waitForFunction(id=>document.querySelector(`[data-pending="${id}"]`)?.textContent?.includes('granted by warehouse'),pendingId);
   assert.equal(await a.locator('#history details').count(),historyBefore);
   const competing=await execute(b,'reserve',{reservationId:'res-competing',quantity:1,expiresAt:200}); assert.equal(competing.status,'committed'); await stock(a,7);
   const stale=await resume(pendingId); assert.equal(stale.code,'stale'); await stock(b,7);
@@ -82,7 +84,7 @@ try {
   await grant(expiring.request.invocation.id); assert.equal((await resume(expiring.request.invocation.id,110)).code,'precondition');
   assert.match(await a.locator('#result').innerText(),/expiry/);
   // JSON is editable, uses the exact execute API and retains the same command ID for retry.
-  await a.locator('#tool-details').evaluate(el=>el.open=true);
+  await a.locator('#tool-details').evaluate(el=>{if(!(el instanceof HTMLDetailsElement))throw Error('Expected tool details');el.open=true;});
   const tool={id:'tool-retry-1',action:'reservation.reserve',actor:'alice',clock:100,args:{stockId:'camera',reservationId:'res-json',quantity:1,expiresAt:200}};
   await a.fill('#tool-json',JSON.stringify(tool));
   assert.equal((await operation(a,'#execute-json','execute')).status,'committed'); await stock(b,6);
@@ -118,7 +120,11 @@ try {
   await a.locator('#profile').focus(); await a.keyboard.press('Tab'); assert.equal(await a.locator('#actor').evaluate(el=>document.activeElement===el),true);
   await a.screenshot({path:new URL('workspace-mobile.png',artifacts).pathname,fullPage:true});
   await a.addScriptTag({path:createRequire(import.meta.url).resolve('axe-core/axe.min.js')});
-  const audit=await a.evaluate(()=>axe.run(document,{runOnly:{type:'tag',values:['wcag2a','wcag2aa','wcag21aa']}}));
+  const audit=await a.evaluate(()=>{
+    const global:typeof globalThis&{axe?:{run(document:Document,options:RunOptions):Promise<AxeResults>}}=globalThis;
+    if(!global.axe)throw Error('Accessibility audit script was not loaded.');
+    return global.axe.run(document,{runOnly:{type:'tag',values:['wcag2a','wcag2aa','wcag21aa']}});
+  });
   assert.deepEqual(audit.violations.map(v=>({id:v.id,nodes:v.nodes.map(n=>n.target)})),[]);
   checks.push('390px mobile no page overflow; keyboard actor navigation; axe WCAG A/AA automated scan');
   assert.deepEqual(errors,[]);

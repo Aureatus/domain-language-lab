@@ -7,9 +7,13 @@ import {model, obligation} from './fixture.ts';
 import {decodeJsonObject, encodeJsonPretty} from '../effect/json.ts';
 
 export const PINNED_LEAN = '/tmp/opencode/elan/toolchains/leanprover--lean4---v4.19.0/bin/lean';
+type Report = {format:string;status:'tool_error'|'not_checked'|'proof_checked'|'unsupported';
+  theorem_axioms:Record<string,string[]>;tool:{executable:string;version:string|null};scope:string;
+  metadata?:ReturnType<typeof generate>['metadata'];generator_sha256?:string;template_sha256?:string;
+  runner_sha256?:string;semantic_core_sha256?:string;detail?:string};
 export function check(source, law, directory, lean = process.env.LEAN || PINNED_LEAN) {
   mkdirSync(directory, {recursive: true});
-  const report = {format: 'generated-lean-evidence/1', status: 'tool_error', theorem_axioms: {}, tool: {executable: lean, version: null}, scope: 'Generated numeric kernel only; no runtime correspondence or full-action theorem.'};
+  const report: Report = {format: 'generated-lean-evidence/1', status: 'tool_error', theorem_axioms: {}, tool: {executable: lean, version: null}, scope: 'Generated numeric kernel only; no runtime correspondence or full-action theorem.'};
   let log = '';
   try {
     const {code, metadata} = generate(source, law);
@@ -21,8 +25,8 @@ export function check(source, law, directory, lean = process.env.LEAN || PINNED_
     writeFileSync(resolve(directory, 'Generated.lean'), code);
     writeFileSync(resolve(directory, 'metadata.json'), encodeJsonPretty(metadata) + '\n');
     const version = spawnSync(lean, ['--version'], {encoding: 'utf8', timeout: 30000});
-    report.tool.version = version.stdout?.trim();
-    if (version.error || version.status !== 0 || !/^Lean \(version 4\.19\.0(?:,|\))/.test(report.tool.version)) throw Error('Pinned Lean 4.19.0 unavailable or mismatched');
+    report.tool.version = version.stdout?.trim() ?? null;
+    if (version.error || version.status !== 0 || !report.tool.version || !/^Lean \(version 4\.19\.0(?:,|\))/.test(report.tool.version)) throw Error('Pinned Lean 4.19.0 unavailable or mismatched');
     const run = spawnSync(lean, ['Generated.lean'], {cwd: directory, encoding: 'utf8', timeout: 120000});
     log = (run.stdout || '') + (run.stderr || '');
     if (run.error) throw run.error;

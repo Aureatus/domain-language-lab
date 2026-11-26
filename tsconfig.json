@@ -1,6 +1,7 @@
 {
   "compilerOptions": {
     "target": "ES2023",
+    "lib": ["ES2024", "DOM", "DOM.Iterable"],
     "module": "NodeNext",
     "allowImportingTsExtensions": true,
     "erasableSyntaxOnly": true,
@@ -12,9 +13,10 @@
     "types": ["node"]
   },
   "include": [
-    "application/snapshot.ts",
-    "application/submission.ts",
-    "application/view-records.ts",
-    "semantic/v2/types.test.mts"
-  ]
+    "**/*.ts",
+    "**/*.tsx",
+    "**/*.mts",
+    "**/*.cts"
+  ],
+  "exclude": ["**/node_modules", "**/dist", "**/.lake", "artifacts"]
 }

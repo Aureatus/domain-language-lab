@@ -7,7 +7,7 @@ import leave from '../leave/model.ts';
 
 const browser=await chromium.launch({headless:true});
 try{for(const [declaration,action,actor,reviewer,field,stock,expectedApprover] of [[fixture,'supply.take','nora','quinn','quantity','stock','Quinn'],[renamedFixture(),'kit.issue','ari','devon','units','remaining','Quinn'],[extendedFixture(),'supply.take','nora','rory','quantity','stock','Rory']]){
-  const server=await createApplicationServer(declaration,{directory:await mkdtemp('/tmp/opencode/fixture-browser-')});const page=await browser.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));
+  const server=await createApplicationServer(declaration,{directory:await mkdtemp('/tmp/opencode/fixture-browser-')});const page=await browser.newPage(),errors: string[]=[];page.on('pageerror',e=>errors.push(e.message));
   try{
     await page.goto(server.url);const form=page.locator(`[data-action="${action}"]`);await form.waitFor();
     assert.equal(await form.locator('select').count(),2);assert.equal(await form.locator('[type="checkbox"]').count(),1);

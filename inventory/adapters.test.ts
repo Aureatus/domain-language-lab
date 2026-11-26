@@ -3,14 +3,20 @@ import assert from 'node:assert/strict';
 // Resolve the adapter-owned dependency without adding a root dependency.
 import * as SynchronizedRef from '../adapters/effect/node_modules/effect/dist/SynchronizedRef.js';
 import {Effect, execute, makeStore} from '../adapters/effect/index.ts';
+import type {Event, State} from '../semantic/types.ts';
 import {runtime, initialState, invocation} from './model.ts';
 
-const run = effect => Effect.runPromise(effect);
-const stock = state => state.records.stock.camera.values.available;
+const run = Effect.runPromise;
+const stock = (state: State) => {
+  const available = state.records.stock.camera.values.available;
+  assert.ok(typeof available === 'number');
+  return available;
+};
 
 test('actual inventory reserve/cancel/expire match interpreter state and routed events', async () => {
   const store = await run(makeStore(initialState));
-  let state = initialState, events = [];
+  let state = initialState;
+  const events: Event[] = [];
   const calls = [invocation('reserveA', 'reserve'), invocation('cancelA', 'cancel'),
     invocation('reserveB', 'reserve', 'slotB', 'bob', 10, 2, 30),
     invocation('early', 'expire', 'slotB', 'warehouse', 29),
@@ -24,7 +30,7 @@ test('actual inventory reserve/cancel/expire match interpreter state and routed 
     assert.deepEqual(published.state, state); assert.deepEqual(published.events, events);
     assert.equal(stock(state), [2, 5, 3, 3, 5][i]);
     assert.equal(actual.status, i === 3 ? 'rejected' : 'committed');
-    if (i === 3) assert.equal(actual.code, 'precondition');
+    if (i === 3) { assert.equal(actual.status, 'rejected'); assert.equal(actual.code, 'precondition'); }
   }
   assert.equal(state.records.reservation.slotA.values.status, 'cancelled');
   assert.equal(state.records.reservation.slotB.values.status, 'expired');
@@ -52,9 +58,14 @@ test('competing reservation fibers satisfy independent capacity oracle in either
     assert.equal(published.state.records.reservation[loser].values.status, 'free');
     assert.equal(published.state.records.reservation[loser].version, 0);
     const allocated = Object.values(published.state.records.reservation)
-      .filter(r => r.values.status === 'active').reduce((sum, r) => sum + r.values.quantity, 0);
+      .filter(r => r.values.status === 'active').reduce((sum, r) => {
+        assert.ok(typeof r.values.quantity === 'number');
+        return sum + r.values.quantity;
+      }, 0);
     assert.equal(stock(published.state) + allocated, 5);
-    assert.deepEqual(published.events, outcomes[winner].events);
+    const committed = outcomes[winner];
+    assert.equal(committed.status, 'committed');
+    assert.deepEqual(published.events, committed.events);
     assert.ok(published.events.every(e => e.invocationId === calls[winner].id));
     const before = published;
     assert.equal((await run(execute(runtime, store, calls[winner]))).status, 'duplicate');

@@ -9,10 +9,10 @@ const parsed=loadSource('leave/browser.domain'),html=moduleSourcePage('leave/bro
 await writeFile('artifacts/time-away-highlighted.html',html);
 await writeFile('artifacts/time-away-highlighted-inline.html',html);
 await writeFile('artifacts/time-away-source-preview.html',sourceExcerptPage(parsed.modules[0].source,{parsed}));
-const browser=await chromium.launch({headless:true}),report=[];
+const browser=await chromium.launch({headless:true}),report:{width:number;files:number;exactSource:boolean;allIdsVisible:boolean;download:boolean;keyboardNavigation:boolean}[]=[];
 try{
   for(const width of [1440,728,390]){
-    const page=await browser.newPage({viewport:{width,height:1000}}),errors=[];page.on('pageerror',e=>errors.push(e.message));
+    const page=await browser.newPage({viewport:{width,height:1000}}),errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));
     await page.goto(pathToFileURL(resolve('artifacts/time-away-highlighted.html')).href);
     assert.equal(await page.locator('iframe').count(),parsed.modules.length);
     for(const [i,module] of parsed.modules.entries()){

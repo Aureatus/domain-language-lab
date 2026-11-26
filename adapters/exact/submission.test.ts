@@ -7,12 +7,12 @@ test('only a bound 400 no-write disposition unlocks an Exact submission',async()
     let calls=0;
     const client=createClient({contract:{},contractId:'c'},'http://127.0.0.1:1',async(_,options)=>{
       calls++;
+      assert.ok(typeof options?.body==='string');
       const {submissionId}=JSON.parse(options.body);
-      return {ok:false,status:fault==='http'?500:400,json:async()=>{
-        if(fault==='json')throw Error('invalid JSON');
-        return {error:'Fix the input.',disposition:fault==='disposition'?'other':'not-submitted',
-          contractId:fault==='contract'?'other':'c',submissionId:fault==='id'?'other':submissionId};
-      }};
+      const status=fault==='http'?500:400;
+      if(fault==='json')return new Response('invalid JSON',{status});
+      return Response.json({error:'Fix the input.',disposition:fault==='disposition'?'other':'not-submitted',
+        contractId:fault==='contract'?'other':'c',submissionId:fault==='id'?'other':submissionId},{status});
     });
     const driver=submissionDriver(client,'a','x');
     const result=await driver.run('submit',{n:7});

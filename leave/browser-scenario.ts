@@ -8,8 +8,8 @@ export async function runLeaveBrowser({explain=false,record=false}={}){
   const directory=await mkdtemp('/tmp/opencode/derived-leave-browser-'),recordings=record?await mkdtemp('/tmp/opencode/derived-leave-recording-'):null;
   const artifacts=new URL('../artifacts/',import.meta.url);await mkdir(artifacts,{recursive:true});
   let server=await createLeaveServer({directory});const browser=await chromium.launch({headless:true});
-  const a=await browser.newContext({viewport:{width:explain?1920:1280,height:1080},...(record?{recordVideo:{dir:recordings,size:{width:explain?1920:1280,height:1080}}}:{})}),b=await browser.newContext({viewport:{width:1280,height:1000}});
-  const maya=await a.newPage(),sam=await b.newPage(),errors=[],checks=[];
+  const a=await browser.newContext({viewport:{width:explain?1920:1280,height:1080},...(recordings?{recordVideo:{dir:recordings,size:{width:explain?1920:1280,height:1080}}}:{})}),b=await browser.newContext({viewport:{width:1280,height:1000}});
+  const maya=await a.newPage(),sam=await b.newPage(),errors:string[]=[],checks:string[]=[];
   for(const page of [maya,sam])page.on('pageerror',e=>errors.push(e.message));
   const form=page=>page.locator('[data-action="leave.request"]');
   const balance=async(page,n)=>page.locator('[data-resource="employee"] [data-field="balance"]').filter({hasText:new RegExp(`^${n}$`)}).waitFor();

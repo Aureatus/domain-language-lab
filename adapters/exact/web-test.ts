@@ -6,7 +6,7 @@ const require=createRequire(`${process.env.EXACT_ROOT??'/tmp/opencode/exact-sour
 const {chromium}=require('playwright-core');
 const base=process.env.EXACT_URL??'http://127.0.0.1:4186';
 const browser=await chromium.launch({headless:true});
-const page=await browser.newPage({viewport:{width:390,height:844}}),errors=[];
+const page=await browser.newPage({viewport:{width:390,height:844}}),errors:string[]=[];
 page.on('pageerror',e=>errors.push(e.message));
 const snapshot=async()=>{const r=await fetch(base+'/api/snapshot');return r.json();};
 const balance=async()=> (await snapshot()).state.records.employee.maya.values.balance;

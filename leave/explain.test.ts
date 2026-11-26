@@ -1,5 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
+import {withStatus, observedEvents} from "../semantic/test-support.ts";
 import {explainEvaluation} from './explain.ts';
 import {initialState,runtime} from './model.ts';
 import {requestInvocation} from './test-support.ts';
@@ -21,19 +22,22 @@ test('multiline excerpts are exact contiguous authored source with complete decl
   }
 });
 test('diagnostic guards use interpreter semantics; evidence preserves actual outcomes',()=>{
-  for(const days of [1,2,3,6]){
+  for(const days of [1,2,3,6] as const){
     const inv=requestInvocation({id:`probe-${days}`,actor:'maya',start:'2026-11-23',end:({1:'2026-11-23',2:'2026-11-24',3:'2026-11-25',6:'2026-11-30'})[days],clock:1});
     const result=runtime.execute(initialState,inv),before=JSON.stringify(initialState);
     const e=explainEvaluation(initialState,inv,result);
-    assert.equal(e.outcome.status,result.status);assert.deepEqual(e.outcome.events,result.events??[]);
+    assert.equal(e.outcome.status,result.status);assert.deepEqual(e.outcome.events,observedEvents(result)??[]);
     assert.deepEqual(e.checks.map(c=>c.value),[false,days<3,3<=days,days<=5]);
     assert.match(e.method,/not a live/);assert.equal(JSON.stringify(initialState),before);
-    for(const c of e.checks){assert.ok(c.source.startsWith('leave/time-away.domain:'));assert.ok(c.excerpt.includes(c.id));assert.deepEqual(c.ast.when,runtime.model.actions['leave.request'][c.kind==='precondition'?'preconditions':'policies'].find(p=>p.id===c.id).when);}
+    for(const c of e.checks){assert.ok(c.source.startsWith('leave/time-away.domain:'));assert.ok(c.excerpt.includes(c.id));const declaration=runtime.model.actions['leave.request'][c.kind==='precondition'?'preconditions':'policies'].find(p=>p.id===c.id);assert.ok(declaration);assert.deepEqual(c.ast.when,declaration.when);}
   }
   const inv={...requestInvocation({id:'deny',actor:'maya',start:'2026-11-20',end:'2026-11-20',clock:1}),actor:'leo'};
-  const r=runtime.execute(initialState,inv);assert.equal(r.code,'denied');
+  const r=runtime.execute(initialState,inv);assert.equal(withStatus(r, "rejected").code,'denied');
   assert.equal(explainEvaluation(initialState,inv,r).checks[0].value,true);
-  const changed=structuredClone(initialState);changed.records.settings['leave-rule'].values.threshold=2;changed.records.employee.maya.values.manager='leo';
+  const settings=initialState.records.settings['leave-rule'],maya=initialState.records.employee.maya;
+  const changed={...initialState,records:{...initialState.records,
+    settings:{...initialState.records.settings,'leave-rule':{...settings,values:{...settings.values,threshold:2}}},
+    employee:{...initialState.records.employee,maya:{...maya,values:{...maya.values,manager:'leo'}}}}};
   const two=requestInvocation({id:'changed-inputs',actor:'maya',start:'2026-11-26',end:'2026-11-27',clock:1});
   const pending=runtime.prepare(changed,two),explanation=explainEvaluation(changed,two,pending);
   assert.deepEqual(explanation.checks.map(c=>c.value),[false,false,true,true]);

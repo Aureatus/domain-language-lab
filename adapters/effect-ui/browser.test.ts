@@ -15,7 +15,7 @@ test('Effect UI keeps Submit locked until the original receipt is recovered',{ti
   t.after(()=>app.close());
   const browser=await chromium.launch();
   t.after(()=>browser.close());
-  const page=await browser.newPage(),errors=[],executes=[];
+  const page=await browser.newPage(),errors: string[]=[],executes: {actor:string; submissionId:string; expectedContractId:string; args:Record<string,unknown>}[]=[];
   page.setDefaultTimeout(5000);
   page.on('pageerror',e=>errors.push(e.message));
   page.on('request',req=>{
@@ -28,7 +28,7 @@ test('Effect UI keeps Submit locked until the original receipt is recovered',{ti
   const first=form.getByLabel('From'),last=form.getByLabel('Last day');
   const snapshotVersion=version=>page.getByText(`Snapshot version: ${version}`,{exact:true});
   await snapshotVersion(0).waitFor();
-  assert.deepEqual(await form.locator('input').evaluateAll(inputs=>inputs.map(input=>input.name)),['start','end']);
+  assert.deepEqual(await form.locator('input').evaluateAll(inputs=>inputs.map(input=>input.getAttribute('name'))),['start','end']);
   await first.fill('2026-11-23');
   await last.fill('2026-11-25');
 
@@ -59,7 +59,7 @@ test('Effect UI keeps Submit locked until the original receipt is recovered',{ti
   assert.equal(await last.inputValue(),'2026-11-25');
   assert.equal(await submit.isDisabled(),true);
 
-  const deliver=Promise.withResolvers();
+  const deliver=Promise.withResolvers<void>();
   await page.route(reconcile,async route=>{
     await deliver.promise;
     await route.continue();

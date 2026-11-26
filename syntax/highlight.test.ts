@@ -19,7 +19,7 @@ test('highlighting preserves source and escapes HTML without interpreting string
 test('reader uses parser sections and excerpts retain actual line positions',()=>{
   const {sections}=parseSource(source);
   assert.deepEqual(sections.filter(s=>s.kind==='action').map(s=>s.line),source.split('\n').flatMap((line,i)=>line.startsWith('action ')?[i+1]:[]));
-  assert.equal(sections.at(-1).line,source.split('\n').indexOf('application')+1);
+  assert.equal(sections.at(-1)?.line,source.split('\n').indexOf('application')+1);
   const page=sourcePage(source,'<file>');assert.match(page,/Whole file/);assert.doesNotMatch(page,/<details|id="ids"|id="compact"/);
   assert.equal((page.match(/class="line"/g)??[]).length,source.trimEnd().split('\n').length);
   const excerpt=sourceExcerptPage(source);assert.match(excerpt,/settings.set-threshold/);
@@ -41,6 +41,6 @@ test('local editor manifest and TextMate regex grammar remain valid JSON and reg
   assert.deepEqual(manifest.contributes.languages[0].extensions,['.domain']);
   JSON.parse(readFileSync(new URL('language-configuration.json',root),'utf8'));
   const grammar=JSON.parse(readFileSync(new URL('domain.tmLanguage.json',root),'utf8'));
-  const visit=node=>{if(!node||typeof node!=='object')return;for(const [key,value] of Object.entries(node)){if(['match','begin','end'].includes(key))new RegExp(value);else visit(value)}};
+  const visit=(node:unknown)=>{if(!node||typeof node!=='object')return;for(const [key,value] of Object.entries(node)){if(['match','begin','end'].includes(key)){assert.equal(typeof value,'string');new RegExp(value);}else visit(value)}};
   visit(grammar);
 });

@@ -1,6 +1,28 @@
 /** Browser-local experimental runtime. No authentication or external delivery. */
 const ROLES = ['lead', 'member'];
 const PATHS = ['opener', 'assignee', 'watchers'];
+
+export interface FieldSchema {
+  type: string | string[];
+  title?: string;
+  label?: string;
+  minLength?: number;
+  maxLength?: number;
+  default?: string;
+  enum?: string[];
+  reference?: 'issues' | 'users';
+}
+export interface Rule {
+  label: string;
+  allowedRoles: string[];
+  notify: string[];
+  inputs: {type: 'object'; properties: Record<string, FieldSchema>; required: string[]; additionalProperties: false};
+}
+export interface LiveModel {
+  revision: number;
+  actions: Record<string, Rule>;
+}
+
 const copy = value => JSON.parse(JSON.stringify(value));
 const freeze = value => {
   if (value && typeof value === 'object') {
@@ -14,7 +36,7 @@ const snapshot = value => freeze(copy(value));
 const runtimeInternals = new WeakMap();
 
 /** Fork only runtime-owned, already validated immutable snapshots. No import bypass. */
-export function forkApp(runtime, options = {}) {
+export function forkApp(runtime, options: Record<string, unknown> = {}) {
   const capture = runtimeInternals.get(runtime);
   if (!capture) throw Error('Fork requires a trusted runtime');
   if (!object(options) || Object.keys(options).some(key => key !== 'clock')) throw Error('Unknown fork option');
@@ -57,7 +79,7 @@ function workspaceDocument(document) {
     ancestors.add(value);
     for (const key of keys) {
       const descriptor = Object.getOwnPropertyDescriptor(value, key);
-      if (typeof key !== 'string' || !descriptor.enumerable || !own(descriptor, 'value')) throw Error('Workspace must contain plain JSON properties');
+      if (typeof key !== 'string' || !descriptor?.enumerable || !own(descriptor, 'value')) throw Error('Workspace must contain plain JSON properties');
       inspect(descriptor.value, depth + 1);
     }
     ancestors.delete(value);
@@ -71,13 +93,13 @@ function workspaceDocument(document) {
   if (encoded.length > MAX_DOCUMENT_LENGTH) throw Error('Workspace document is too large');
   return JSON.parse(encoded);
 }
-const text = (maxLength, extra = {}) => ({type: 'string', minLength: 1, maxLength, ...extra});
+const text = (maxLength: number, extra: Partial<FieldSchema> = {}): FieldSchema => ({type: 'string', minLength: 1, maxLength, ...extra});
 const issueId = text(80, {reference: 'issues'});
-const inputs = (properties, required) => ({type: 'object', properties, required, additionalProperties: false});
-const declaration = (label, properties, required, allowedRoles = ROLES, notify = PATHS) =>
+const inputs = (properties: Rule['inputs']['properties'], required: string[]): Rule['inputs'] => ({type: 'object', properties, required, additionalProperties: false});
+const declaration = (label: string, properties: Rule['inputs']['properties'], required: string[], allowedRoles = ROLES, notify = PATHS): Rule =>
   ({label, allowedRoles: [...allowedRoles], notify: [...notify], inputs: inputs(properties, required)});
 
-function initialModel() {
+function initialModel(): LiveModel {
   return {revision: 1, actions: {
     create: declaration('Create issue', {
       title: text(160), description: {type: 'string', maxLength: 5000, default: ''},
@@ -112,7 +134,7 @@ function initialState() {
 }
 
 /** Validate this runtime's explicit schema subset; unknown constructs fail closed. */
-function validate(schema, value, state, path = 'args') {
+function validate(schema: FieldSchema & Partial<Omit<Rule['inputs'], 'type'>>, value, state, path = 'args') {
   const supported = ['type', 'properties', 'required', 'additionalProperties', 'minLength', 'maxLength', 'enum', 'default', 'reference'];
   if (!object(schema) || Object.keys(schema).some(key => !supported.includes(key))) throw Error(`Unsupported schema at ${path}`);
   const types = Array.isArray(schema.type) ? schema.type : [schema.type];
@@ -120,7 +142,7 @@ function validate(schema, value, state, path = 'args') {
   const actual = value === null ? 'null' : object(value) ? 'object' : typeof value;
   if (!types.includes(actual)) throw Error(`${path} must be ${types.join(' or ')}`);
   if (actual === 'object') {
-    if (!object(schema.properties) || !Array.isArray(schema.required) || schema.additionalProperties !== false) throw Error(`Unsupported object schema at ${path}`);
+    if (!schema.properties || !object(schema.properties) || !Array.isArray(schema.required) || schema.additionalProperties !== false) throw Error(`Unsupported object schema at ${path}`);
     if (Object.keys(value).some(key => !own(schema.properties, key))) throw Error(`Unknown input at ${path}`);
     for (const key of schema.required) if (!own(value, key)) throw Error(`Missing ${path}.${key}`);
     const result = {};
@@ -164,16 +186,17 @@ function route(issue, rule, actorId) {
  * @returns {object} Read-only state/model getters and dispatch, invokeTool, setRule,
  * tools, explain, explainAction and check methods. Commands return {ok:false,reason} on domain errors.
  */
-export function createApp(options = {}) {
+export function createApp(options: Record<string, unknown> = {}) {
   return createRuntime(options);
 }
 
-function createRuntime(options = {}, trusted) {
+function createRuntime(options: Record<string, unknown> = {}, trusted?) {
   if (!object(options) || Object.keys(options).some(key => !['clock', 'workspace'].includes(key))) throw Error('Unknown application option');
-  const clock = options.clock ?? Date.now;
-  if (typeof clock !== 'function') throw Error('clock must be a function');
+  const clockOption = options.clock ?? Date.now;
+  if (typeof clockOption !== 'function') throw Error('clock must be a function');
+  const clock = clockOption;
   let state = trusted?.state ?? snapshot(initialState());
-  let model = trusted?.model ?? snapshot(initialModel());
+  let model: LiveModel = trusted?.model ?? snapshot(initialModel());
   let journal = trusted?.journal ?? Object.freeze([]);
   let journalLength = trusted?.journalLength ?? JSON.stringify({format: WORKSPACE_FORMAT, seedVersion: SEED_VERSION, journal: []}).length;
   const initialVersions = trusted?.initialVersions ?? new Map(state.issues.map(issue => [issue.id, issue.version]));
@@ -190,7 +213,7 @@ function createRuntime(options = {}, trusted) {
     return snapshot({format: WORKSPACE_FORMAT, seedVersion: SEED_VERSION, journal});
   }
 
-  function reconstruct(document, count) {
+  function reconstruct(document, count?: number) {
     const validated = workspaceDocument(document);
     const limit = count ?? validated.journal.length;
     let recordedTime;
@@ -221,9 +244,9 @@ function createRuntime(options = {}, trusted) {
       model = candidate.model;
       journal = restored.journal;
       journalLength = restored.journalLength;
-      return {ok: true};
+      return {ok: true as const};
     } catch (error) {
-      return {ok: false, reason: error instanceof Error ? error.message : String(error)};
+      return {ok: false as const, reason: error instanceof Error ? error.message : String(error)};
     }
   }
 
@@ -231,16 +254,16 @@ function createRuntime(options = {}, trusted) {
     try {
       if (!Number.isInteger(stepCount) || stepCount < 0 || stepCount > journal.length) throw Error('Invalid workspace step count');
       const candidate = reconstruct(exportWorkspace(), stepCount);
-      return {ok: true, state: candidate.state, model: candidate.model};
+      return {ok: true as const, state: candidate.state, model: candidate.model};
     } catch (error) {
-      return {ok: false, reason: error instanceof Error ? error.message : String(error)};
+      return {ok: false as const, reason: error instanceof Error ? error.message : String(error)};
     }
   }
 
   /** Shared, effect-free preparation. Policy precedes input/reference inspection. */
   function prepareAction(action, args, actorId) {
     let category = 'action';
-    let missingRequirements = [];
+    let missingRequirements: string[] = [];
     try {
       if (typeof action !== 'string' || !own(model.actions, action)) throw Error(`Unknown action: ${action}`);
       const rule = model.actions[action];
@@ -257,10 +280,10 @@ function createRuntime(options = {}, trusted) {
       if (action === 'resolve' && before.status !== 'open') throw Error('Issue is already resolved');
       if (action === 'reopen' && before.status !== 'resolved') throw Error('Issue is already open');
       if (action === 'assign' && before.assignee === values.assignee) throw Error('Assignee is unchanged');
-      return {ok: true, rule, actor, values, before};
+      return {ok: true as const, rule, actor, values, before};
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error);
-      return {ok: false, reason, category: reason.startsWith('Missing args.') ? 'missing-input' : category, missingRequirements};
+      return {ok: false as const, reason, category: reason.startsWith('Missing args.') ? 'missing-input' : category, missingRequirements};
     }
   }
 
@@ -321,9 +344,9 @@ function createRuntime(options = {}, trusted) {
       state = next;
       journal = appended.journal;
       journalLength = appended.length;
-      return {ok: true, event: state.events.at(-1), value: state.issues.find(item => item.id === issue.id)};
+      return {ok: true as const, event: state.events.at(-1), value: state.issues.find(item => item.id === issue.id)};
     } catch (error) {
-      return {ok: false, reason: error instanceof Error ? error.message : String(error)};
+      return {ok: false as const, reason: error instanceof Error ? error.message : String(error)};
     }
   }
 
@@ -342,14 +365,14 @@ function createRuntime(options = {}, trusted) {
     restoreWorkspace,
     previewWorkspace,
     setRule(action, patch) {
-      if (typeof action !== 'string' || !own(model.actions, action)) return {ok: false, reason: `Unknown action: ${action}`};
+      if (typeof action !== 'string' || !own(model.actions, action)) return {ok: false as const, reason: `Unknown action: ${action}`};
       if (!object(patch) || !Object.keys(patch).length || Object.keys(patch).some(key => !['allowedRoles', 'notify'].includes(key))) {
-        return {ok: false, reason: 'Patch must contain only allowedRoles and/or notify'};
+        return {ok: false as const, reason: 'Patch must contain only allowedRoles and/or notify'};
       }
       for (const [key, values] of Object.entries(patch)) {
         const allowed = key === 'allowedRoles' ? ROLES : PATHS;
         if (!Array.isArray(values) || Array.from(values).some(value => !allowed.includes(value)) || new Set(values).size !== values.length) {
-          return {ok: false, reason: `Invalid ${key}`};
+          return {ok: false as const, reason: `Invalid ${key}`};
         }
       }
       try {
@@ -359,9 +382,9 @@ function createRuntime(options = {}, trusted) {
         model = next;
         journal = appended.journal;
         journalLength = appended.length;
-        return {ok: true};
+        return {ok: true as const};
       } catch (error) {
-        return {ok: false, reason: error instanceof Error ? error.message : String(error)};
+        return {ok: false as const, reason: error instanceof Error ? error.message : String(error)};
       }
     },
     tools() {

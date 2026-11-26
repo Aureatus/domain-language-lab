@@ -1,15 +1,16 @@
 import {createInterpreter, validateState} from '../../semantic/v2/core.ts';
+import type {Action, Expr, FieldSchema, Model, Scalar} from '../../semantic/v2/core.ts';
 
-const lit = value => ({op: 'literal', value});
-const input = name => ({op: 'input', name});
-const field = (binding, name) => ({op: 'field', binding, field: name});
-const bin = (op, left, right) => ({op, left, right});
-const integer = min => ({type: 'integer', min});
-const string = {type: 'string'};
-const condition = (id, when) => ({id, when});
-const update = (id, target, name, value) => ({id, target, field: name, value});
+const lit = (value: Scalar): Expr => ({op: 'literal', value});
+const input = (name: string): Expr => ({op: 'input', name});
+const field = (binding: string, name: string): Expr => ({op: 'field', binding, field: name});
+const bin = (op: Extract<Expr, {left: Expr}>['op'], left: Expr, right: Expr): Expr => ({op, left, right});
+const integer = (min: number): FieldSchema => ({type: 'integer', min});
+const string: FieldSchema = {type: 'string'};
+const condition = (id: string, when: Expr) => ({id, when});
+const update = (id: string, target: string, name: string, value: Expr) => ({id, target, field: name, value});
 
-function reserveAction() {
+function reserveAction(): Action {
   const stock = 'reserve.stock';
   const s = name => field(stock, name);
   return {
@@ -33,7 +34,7 @@ function reserveAction() {
   };
 }
 
-function terminalAction(kind) {
+function terminalAction(kind: 'cancel' | 'expire'): Action {
   const reservation = `${kind}.reservation`;
   const stock = `${kind}.stock`;
   const r = name => field(reservation, name);
@@ -67,7 +68,7 @@ const deleteTerminal = {
   policies: [{id: 'delete.owner', effect: 'allow', when: bin('eq', {op: 'actor'}, field('delete.reservation', 'owner'))}],
   updates: [], inserts: [], deletes: [{id: 'delete.remove-record', target: 'delete.reservation'}],
   observe: [{binding: 'delete.reservation', relationship: 'reservation.owner'}],
-};
+} satisfies Action;
 
 export const inventoryV2Model = {
   format: 'semantic-core/v2', id: 'inventory.v2',
@@ -85,7 +86,7 @@ export const inventoryV2Model = {
     'reservation.expire': terminalAction('expire'),
     'reservation.delete-terminal': deleteTerminal,
   },
-};
+} satisfies Model;
 
 export const initialState = validateState(inventoryV2Model, {
   revision: 0,
@@ -97,8 +98,15 @@ export const initialState = validateState(inventoryV2Model, {
 
 export const runtime = createInterpreter(inventoryV2Model);
 
+type InvocationOptions = {reservationId: string; actor?: string; clock?: number; stockId?: string; quantity?: number; expiresAt?: number};
+type Command<A> = {id: string; action: string; actor: string; clock: number; args: A};
+type InventoryArgs = Record<string, Scalar> & {reservationId: string};
+type ReserveArgs = InventoryArgs & {stockId: string; quantity: number; expiresAt: number};
+
 /** IDs: stock `camera`; reservation IDs are caller-chosen, e.g. `res-alice-1`. */
-export function invocation(id, kind, {reservationId, actor = 'alice', clock = 10, stockId = 'camera', quantity = 2, expiresAt = 30} = {}) {
+export function invocation(id: string, kind: 'reserve', options: InvocationOptions): Command<ReserveArgs>;
+export function invocation(id: string, kind: string, options: InvocationOptions): Command<InventoryArgs>;
+export function invocation(id: string, kind: string, {reservationId, actor = 'alice', clock = 10, stockId = 'camera', quantity = 2, expiresAt = 30}: Partial<InvocationOptions> = {}): Command<Record<string, Scalar | undefined>> {
   const action = `reservation.${kind}`;
   const args = kind === 'reserve' ? {stockId, reservationId, quantity, expiresAt}
     : kind === 'delete-terminal' ? {reservationId} : {stockId, reservationId};

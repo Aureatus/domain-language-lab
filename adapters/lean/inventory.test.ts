@@ -23,6 +23,7 @@ function crossCheck(name, source, cases) {
     pre.records.stock.camera.values.available = c.available ?? 5;
     const call = invocation(`cross${index}`, 'reserve', 'slotA', 'alice', 10, c.quantity ?? 3);
     const actual = createInterpreter(source).execute(pre, call);
+    assert.ok(actual.status === 'committed' || actual.status === 'rejected');
     assert.equal(actual.status === 'committed' ? 'committed' : actual.code, c.expected);
     const expected = actual.status === 'committed'
       ? `.committed ${record(actual.state.records.stock.camera.values.available, actual.state.revision, actual.state.records.stock.camera.version)}`
@@ -60,8 +61,9 @@ test('extracts actual numeric schemas and ASTs with complete original content bi
   assert.ok(metadata.excluded_ids.includes('reservation.reserve.slot'));
   assert.ok(metadata.excluded_ids.includes('stock.watchers'));
   // Numeric-only projection is deliberately not a full executable authorization model.
-  assert.equal(createInterpreter(model).execute({revision: 0, records: {stock: {camera: {version: 0, values: {capacity: 5, available: 5}}}}},
-    {id: 'notAuthorized', action: 'reservation.reserve', args: {quantity: 3}, actor: 'alice', clock: 10}).code, 'denied');
+  const denied=createInterpreter(model).execute({revision: 0, records: {stock: {camera: {version: 0, values: {capacity: 5, available: 5}}}}},
+    {id: 'notAuthorized', action: 'reservation.reserve', args: {quantity: 3}, actor: 'alice', clock: 10});
+  assert.equal(denied.status,'rejected'); assert.equal(denied.code,'denied');
   assert.throws(() => generate(inventoryModel, obligation), Unsupported);
 });
 

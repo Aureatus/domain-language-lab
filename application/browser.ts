@@ -3,12 +3,21 @@ import {acceptsSnapshot} from './snapshot.ts';
 import {viewRecords} from './view-records.ts';
 import {submissionStep,submissionControls} from './submission.ts';
 import {loadingPlan,loadingPresentation} from './loading.ts';
-import {createApplicationClient,inboxFor} from './client.ts';
-import {ApplicationSavedSubmissionsSchema,ApplicationSnapshotSchema,decodeStrictJson,decodeJson,encodeJson} from '../adapters/effect/json.ts';
-const $=id=>document.getElementById(id),params=new URLSearchParams(location.search);
+import {createApplicationClient,decodeApplicationSnapshot,inboxFor} from './client.ts';
+import {ApplicationSavedSubmissionsSchema,decodeStrictJson,encodeJson} from '../adapters/effect/json.ts';
+import type {State} from '../semantic/v2/types.ts';
+import type {ApplicationField} from './derive.ts';
+import type {SubmissionEvent} from './submission.ts';
+function required<T extends HTMLElement>(parent: ParentNode,selector: string,kind: new () => T): T {
+  const element=parent.querySelector(selector);
+  if(!(element instanceof kind))throw Error(`Missing application control: ${selector}`);
+  return element;
+}
+const $=(id: string)=>required(document,`#${id}`,HTMLElement),params=new URLSearchParams(location.search);
+const actorControl=required(document,'#actor',HTMLSelectElement);
 const client=createApplicationClient(location.origin);
 const {contract,contractId}=await client.contract().catch(error=>{
-  $('connection').textContent='Disconnected';$('actor').disabled=true;
+  $('connection').textContent='Disconnected';actorControl.disabled=true;
   $('notice').textContent='Could not load the application. ';$('notice').hidden=false;
   const retry=document.createElement('button');retry.textContent='Retry';retry.onclick=()=>location.reload();$('notice').append(retry);
   throw error;
@@ -21,7 +30,7 @@ const recovery=document.createElement('section');$('notice').after(recovery);
 // A tab reload interrupts the observation, not necessarily the durable write.
 const savedSubmissions=(()=>{
   try{return decodeStrictJson(ApplicationSavedSubmissionsSchema,sessionStorage.getItem(storageKey)??'[]');}
-  catch(error){$('connection').textContent='Disconnected';$('actor').disabled=true;notice(`Could not load saved submissions. ${error.message}`,true);throw error;}
+  catch(error){$('connection').textContent='Disconnected';actorControl.disabled=true;notice(`Could not load saved submissions. ${error.message}`,true);throw error;}
 })();
 for(const s of savedSubmissions){
   const k=JSON.stringify([s.body.actor,s.body.action]);submissions.set(k,{...s,phase:'unknown'});drafts.set(k,{...s.body.args});
@@ -31,32 +40,40 @@ function track(k,state){
   sessionStorage.setItem(storageKey,encodeJson([...submissions.values()],ApplicationSavedSubmissionsSchema));
   return state;
 }
-const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const escapes: Record<string,string>={'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'};
+const esc=(s: unknown)=>String(s??'').replace(/[&<>"']/g,c=>escapes[c]);
 const person=id=>{const a=contract.actors.find(a=>a.id===id);return a?.name??a?.label??id;};
 const key=action=>JSON.stringify([actor,action]);
 const value=v=>Array.isArray(v)?v.join(', '):String(v??'');
 document.title=contract.title;$('brand').textContent=contract.title;$('heading').textContent=contract.title;$('subtitle').textContent=contract.subtitle;$('scope').textContent=contract.scope;
 $('eyebrow').textContent=contract.eyebrow;$('eyebrow').hidden=!contract.eyebrow;
-$('actor').innerHTML=contract.actors.map(a=>`<option value="${esc(a.id)}">${esc(a.label)}</option>`).join('');$('actor').value=actor;
+actorControl.innerHTML=contract.actors.map(a=>`<option value="${esc(a.id)}">${esc(a.label)}</option>`).join('');actorControl.value=actor;
 if(params.get('watch')==='1')document.body.classList.add('watch');
 if(params.get('explain')==='1'){document.body.classList.add('explaining');$('companion').hidden=false;}
 function showEvidence(){const e=showSaved?lastEvidence:currentEvidence;$('evidence').textContent=e?JSON.stringify(e,null,2):'Choose an action to see its declaration and result.';}
 $('current-evidence').onclick=()=>{showSaved=false;showEvidence();};$('saved-evidence').onclick=()=>{showSaved=true;showEvidence();};
 function notice(message,error=false){$('notice').hidden=false;$('notice').textContent=message;$('notice').classList.toggle('error',error);}
-const api=(path,body)=>client[path.split('/').at(-1)](body);
+const api=(path,body)=>client[path.slice(path.lastIndexOf('/')+1)](body);
+const actionFor=(form:HTMLFormElement)=>{const action=form.dataset.action;if(!action)throw Error('Missing action for form');return action;};
 function getDraft(action){if(!drafts.has(key(action)))drafts.set(key(action),{...snapshot.defaults[actor][action]});return drafts.get(key(action));}
-function inputHTML(f,args,action){
+function inputHTML(f: ApplicationField,args,action){
   if(f.hidden)return '';
   const id=`input-${encodeURIComponent(action)}-${encodeURIComponent(f.name)}`,v=args[f.name];
-  const options=f.reference?Object.entries(snapshot.state.records[f.reference.resource]).map(([id,r])=>[id,f.reference.labelField?r.values[f.reference.labelField]:id]):f.schema.enum?.map(v=>[v,v]);
-  const control=options?`<select name="${esc(f.name)}" id="${id}">${options.map(([k,label])=>`<option value="${esc(k)}" ${k===v?'selected':''}>${esc(label)}</option>`).join('')}</select>`:`<input id="${id}" name="${esc(f.name)}" type="${f.widget}" ${f.widget==='checkbox'?(v?'checked':''):`value="${esc(v)}" required`} ${f.schema.min!==undefined?`min="${f.schema.min}"`:''} ${f.schema.max!==undefined?`max="${f.schema.max}"`:''} ${f.schema.type==='integer'?'step="1"':''}>`;
+  const {reference,schema}=f,records: State['records']=snapshot.state.records;
+  const options=reference?Object.entries(records[reference.resource]).map(([id,r])=>[id,reference.labelField?r.values[reference.labelField]:id]):schema.type==='string'?schema.enum?.map(v=>[v,v]):undefined;
+  const control=options?`<select name="${esc(f.name)}" id="${id}">${options.map(([k,label])=>`<option value="${esc(k)}" ${k===v?'selected':''}>${esc(label)}</option>`).join('')}</select>`:`<input id="${id}" name="${esc(f.name)}" type="${f.widget}" ${f.widget==='checkbox'?(v?'checked':''):`value="${esc(v)}" required`} ${schema.type==='integer'&&schema.min!==undefined?`min="${schema.min}"`:''} ${schema.type==='integer'&&schema.max!==undefined?`max="${schema.max}"`:''} ${schema.type==='integer'?'step="1"':''}>`;
   return `<label>${esc(f.label)}${control}</label>`;
 }
 function renderForms(){
   $('forms').innerHTML=Object.values(contract.actions).filter(a=>snapshot.availability[actor][a.id]).map(a=>`<form class="panel" data-action="${esc(a.id)}"><h2>${esc(a.label)}</h2><p class="muted">${esc(a.description)}</p><div class="fields">${a.fields.map(f=>inputHTML(f,getDraft(a.id),a.id)).join('')}</div><p class="preview" data-preview></p><button type="submit" ${busy?'disabled':''}>${esc(a.label)}</button></form>`).join('');
   for(const form of $('forms').querySelectorAll('form')){
-    form.addEventListener('input',()=>{const a=contract.actions[form.dataset.action],args=getDraft(a.id);for(const f of a.fields.filter(f=>!f.hidden)){const el=form.elements.namedItem(f.name);args[f.name]=f.schema.type==='integer'?Number(el.value):f.schema.type==='boolean'?el.checked:el.value;}preview(a.id);});
-    form.addEventListener('submit',e=>{e.preventDefault();command('actions/execute',{actor,action:form.dataset.action,args:getDraft(form.dataset.action)});});
+    const action=actionFor(form);
+    form.addEventListener('input',()=>{const a=contract.actions[action],args=getDraft(a.id);for(const f of a.fields.filter(f=>!f.hidden)){
+      const el=form.elements.namedItem(f.name);
+      if(!(el instanceof HTMLInputElement||el instanceof HTMLSelectElement))throw Error(`Missing input: ${f.name}`);
+      args[f.name]=f.schema.type==='integer'?Number(el.value):f.schema.type==='boolean'&&el instanceof HTMLInputElement?el.checked:el.value;
+    }preview(a.id);});
+    form.addEventListener('submit',e=>{e.preventDefault();command('actions/execute',{actor,action,args:getDraft(action)});});
   }
 }
 function renderViews(){
@@ -67,7 +84,7 @@ function renderViews(){
     }
     return value(x);
   };
-  const html={summary:[],list:[]};
+  const html: Record<'summary'|'list', string[]>={summary:[],list:[]};
   for(const v of contract.views){
     const records=viewRecords(snapshot,v,actor);
     if(v.kind==='summary'&&!records.length)continue;
@@ -82,7 +99,7 @@ function renderViews(){
   }).join(''):'<p class="empty">You’re all caught up. Requests waiting for you will appear here.</p>';
 }
 function showInitialViews(){
-  const placeholders={summary:[],list:[]};
+  const placeholders: Record<'summary'|'list',string[]>={summary:[],list:[]};
   for(const {index,label,strategy} of loadingPlan(contract)){
     const {placeholder}=loadingPresentation(strategy,{pending:true,failed:false,owned:false});
     if(!placeholder)continue;
@@ -93,16 +110,17 @@ function showInitialViews(){
   $('summaries').innerHTML=placeholders.summary.join('');$('lists').innerHTML=placeholders.list.join('');
 }
 function updateLocks(){
-  for(const el of document.querySelectorAll('[data-grant], [data-resume], #actor'))el.disabled=busy;
+  actorControl.disabled=busy;
+  for(const el of document.querySelectorAll<HTMLButtonElement>('[data-grant], [data-resume]'))el.disabled=busy;
   for(const form of $('forms').querySelectorAll('form')){
     const locked=busy||submissions.has(key(form.dataset.action));
-    for(const el of form.elements)el.disabled=locked||(el.type==='submit'&&form.dataset.invalid==='true');
+    for(const el of form.elements)if(el instanceof HTMLInputElement||el instanceof HTMLSelectElement||el instanceof HTMLButtonElement)el.disabled=locked||(el.type==='submit'&&form.dataset.invalid==='true');
   }
   recovery.replaceChildren();
   for(const [k,s] of submissions)if(s.body.actor===actor){
     const p=document.createElement('p');p.textContent=`${contract.actions[s.body.action].label}: ${s.phase==='retryable'?'No receipt found.':s.phase==='unknown'?'Outcome unknown.':s.phase==='checking'?'Checking submission…':'Submitting…'}`;
     const controls=submissionControls(s);
-    for(const [type,label] of [['check','Check submission'],['retry','Retry same submission']])if(controls[type]){
+    for(const [type,label] of [['check','Check submission'],['retry','Retry same submission']] as const)if(controls[type]){
       const b=document.createElement('button');b.textContent=label;b.disabled=busy;b.onclick=()=>sendSubmission(k,s,{type});p.append(' ',b);
     }
     recovery.append(p);
@@ -113,9 +131,9 @@ async function preview(action){
   const form=[...$('forms').querySelectorAll('form')].find(f=>f.dataset.action===action);if(!form)return;
   try{const r=await api('actions/preview',{actor,action,args:getDraft(action)});if(previews.get(k)!==token||key(action)!==k)return;
     const names=r.requirements?.flatMap(r=>r.approvers).map(person);
-    form.querySelector('[data-preview]').textContent=r.status==='pending'?`Needs ${[...new Set(names)].join(', ')}’s approval. No changes yet.`:r.message;
-    form.dataset.invalid=String(r.status==='rejected');form.querySelector('button[type=submit]').disabled=busy||submissions.has(k)||r.status==='rejected';currentEvidence=r.evidence;if(!showSaved)showEvidence();
-  }catch(e){if(previews.get(k)===token&&key(action)===k){form.querySelector('[data-preview]').textContent=e.message;form.querySelector('button[type=submit]').disabled=true;}}
+    required(form,'[data-preview]',HTMLElement).textContent=r.status==='pending'?`Needs ${[...new Set(names)].join(', ')}’s approval. No changes yet.`:r.message;
+    form.dataset.invalid=String(r.status==='rejected');required(form,'button[type=submit]',HTMLButtonElement).disabled=busy||submissions.has(k)||r.status==='rejected';currentEvidence=r.evidence;if(!showSaved)showEvidence();
+  }catch(e){if(previews.get(k)===token&&key(action)===k){required(form,'[data-preview]',HTMLElement).textContent=e.message;required(form,'button[type=submit]',HTMLButtonElement).disabled=true;}}
 }
 async function command(path,body){
   if(path==='actions/execute'){
@@ -126,7 +144,7 @@ async function command(path,body){
   try{const r=await api(path,body);if(r.evidence){lastEvidence=r.evidence;showSaved=true;showEvidence();}if(r.snapshot)accept(r.snapshot);notice(path==='approvals/resume'&&r.status==='rejected'?`Approval is saved, but completion failed. ${r.message}`:r.message,r.status==='rejected');}
   catch(e){notice(e.message,true);}finally{busy=false;updateLocks();for(const f of $('forms').querySelectorAll('form'))preview(f.dataset.action);}
 }
-async function sendSubmission(k,previous,event){
+async function sendSubmission(k,previous,event:SubmissionEvent){
   if(busy)return;
   let s=track(k,submissionStep(previous,event));busy=true;updateLocks();
   try{
@@ -140,13 +158,13 @@ async function sendSubmission(k,previous,event){
     notice(e.message,true);
   }finally{busy=false;updateLocks();for(const f of $('forms').querySelectorAll('form'))preview(f.dataset.action);}
 }
-$('inbox').addEventListener('click',e=>{const grant=e.target.closest('[data-grant]'),resume=e.target.closest('[data-resume]');if(grant)command('approvals/grant',{actor,requestId:grant.dataset.grant,policyId:grant.dataset.policy});if(resume)command('approvals/resume',{actor,requestId:resume.dataset.resume});});
+$('inbox').addEventListener('click',e=>{if(!(e.target instanceof Element))return;const grant=e.target.closest<HTMLButtonElement>('[data-grant]'),resume=e.target.closest<HTMLButtonElement>('[data-resume]');if(grant)command('approvals/grant',{actor,requestId:grant.dataset.grant,policyId:grant.dataset.policy});if(resume)command('approvals/resume',{actor,requestId:resume.dataset.resume});});
 function accept(next){if(next.contractId!==contractId){notice('The declaration changed. Reload before continuing.',true);return;}if(!acceptsSnapshot(snapshot,next,contractId))return;snapshot=next;renderViews();const visible=Object.values(contract.actions).filter(a=>snapshot.availability[actor][a.id]).map(a=>a.id);if(JSON.stringify([...$('forms').querySelectorAll('form')].map(f=>f.dataset.action))!==JSON.stringify(visible))renderForms();updateLocks();for(const f of $('forms').querySelectorAll('form'))preview(f.dataset.action);}
-$('actor').addEventListener('change',()=>{actor=$('actor').value;$('notice').hidden=true;renderForms();renderViews();updateLocks();for(const f of $('forms').querySelectorAll('form'))preview(f.dataset.action);});
-$('actor').disabled=true;showInitialViews();
+actorControl.addEventListener('change',()=>{actor=actorControl.value;$('notice').hidden=true;renderForms();renderViews();updateLocks();for(const f of $('forms').querySelectorAll('form'))preview(f.dataset.action);});
+actorControl.disabled=true;showInitialViews();
 try{accept(await client.snapshot());}catch(e){initialLoadError=true;$('summaries').replaceChildren();$('lists').replaceChildren();notice(`Could not load records. ${e.message}`,true);}
 const stream=new EventSource('/api/events');stream.addEventListener('open',()=>{$('connection').textContent='Live';});stream.addEventListener('error',()=>{$('connection').textContent='Reconnecting…';});stream.addEventListener('update',e=>{
-  try{accept(decodeJson(ApplicationSnapshotSchema,e.data));}
+  try{accept(decodeApplicationSnapshot(e.data));}
   catch(error){notice(`Could not load records. ${error.message}`,true);return;}
   if(initialLoadError&&snapshot){initialLoadError=false;$('notice').hidden=true;}
 });addEventListener('pagehide',()=>stream.close());

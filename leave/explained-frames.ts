@@ -6,7 +6,7 @@ function run(command,args){const r=spawnSync(command,args,{encoding:'utf8'});ass
 const probe=JSON.parse(run('ffprobe',['-v','error','-show_streams','-show_format','-of','json',video]));
 const stream=probe.streams.find(s=>s.codec_type==='video');assert.equal(stream.width,1920);assert.equal(stream.height,1080);assert.equal(stream.codec_name,'h264');assert.equal(probe.streams.some(s=>s.codec_type==='audio'),false);
 const duration=Number(probe.format.duration);assert.ok(duration>=140&&duration<=160);
-const frames=[];
+const frames:{second:number;path:string}[]=[];
 for(const second of [5,25,45,65,95,105,125,135]){
   const output=new URL(`time-off-explained-frame-${second}.png`,artifacts).pathname;
   run('ffmpeg',['-y','-ss',String(second),'-i',video,'-frames:v','1',output]);frames.push({second,path:output});

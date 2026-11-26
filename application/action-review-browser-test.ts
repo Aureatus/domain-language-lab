@@ -12,6 +12,10 @@ import {createApplicationServer} from './server.ts';
 import {writeAdapter} from '../adapters/exact/generate.ts';
 import declaration from '../leave/model.ts';
 import defaultCommand from '../leave/review-request.json' with {type:'json'};
+type DeliverySnapshot = {pending: {invocation:{clock?:number}}[]};
+declare global {
+  interface Window {deliveryGate: {held: DeliverySnapshot | null; release: () => void}}
+}
 
 const exec=promisify(execFile);
 const exactRevision='d8863f736172954b605c3bff22f51337c6983170';
@@ -34,9 +38,9 @@ async function readSchedule(path){
 // Install before application startup. Delay observation, not the actual
 // write, poll, or EventSource connection. Never fabricate an update payload.
 function installDeliveryGate(exact){
-  const gate=Promise.withResolvers();
-  const probe=window.deliveryGate={held:null,release:gate.resolve};
-  async function wait(snapshot){
+  const gate=Promise.withResolvers<void>();
+  const probe: Window['deliveryGate']=window.deliveryGate={held:null,release:gate.resolve};
+  async function wait(snapshot: DeliverySnapshot){
     if(snapshot.pending.length){probe.held=snapshot;await gate.promise;}
   }
   if(exact){
@@ -51,7 +55,9 @@ function installDeliveryGate(exact){
     EventSource.prototype.addEventListener=function(type,listener,...rest){
       if(type!=='update')return add.call(this,type,listener,...rest);
       return add.call(this,type,async event=>{
-        await wait(JSON.parse(event.data));listener.call(this,event);
+        if(event instanceof MessageEvent)await wait(JSON.parse(event.data));
+        if(typeof listener==='function')listener.call(this,event);
+        else listener?.handleEvent(event);
       },...rest);
     };
   }
@@ -79,10 +85,10 @@ async function mountExact(page,url,dir){
 async function trace(browser,exact,dir,schedule){
   const server=await createApplicationServer(declaration,{directory:join(dir,'db')});
   const page=await browser.newPage();
-  const release=Promise.withResolvers();
+  const release=Promise.withResolvers<void>();
   try{
     const command=schedule?.command??defaultCommand;
-    const {url}=server,{actor,action,args,submissionId}=command,errors=[],writes=[];
+    const {url}=server,{actor,action,args,submissionId}=command,errors: string[]=[],writes: string[]=[];
     page.setDefaultTimeout(15000);
     page.on('pageerror',e=>errors.push(e.message));
     page.on('request',r=>{if(r.method()==='POST'&&!r.url().endsWith('/preview'))writes.push(new URL(r.url()).pathname);});

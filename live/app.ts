@@ -1,17 +1,18 @@
 import { createApp } from './core.ts';
 import { describeChange } from './derive.ts';
 import { decodeJsonValue, decodeStrictJson, encodeJson, encodeJsonPretty, LiveWorkspaceDocumentSchema } from '../adapters/effect/json.ts';
+import type { runDerivedChecks } from './derive.ts';
 
 declare const __liveWorkerSource: string;
 
 const core = createApp();
 const storageKey = 'relay.workspace.v1';
-let view = core;
-let previewStep = null;
-let liveSelected;
+let view: Pick<typeof core, 'state' | 'model'> = core;
+let previewStep: number | null = null;
+let liveSelected: string | undefined;
 let storageBlocked = false;
 let saveStatus = 'Not saved yet · browser-local only.';
-let savedRaw = null;
+let savedRaw: string | null = null;
 try {
   savedRaw = localStorage.getItem(storageKey);
   if (savedRaw !== null) {
@@ -40,16 +41,16 @@ let unresolved = false;
 let assigned = false;
 let historyOpen = false;
 let actorId = core.state.users[0]?.id || 'u1';
-let selected = core.state.issues[0]?.id;
+let selected: string | undefined = core.state.issues[0]?.id;
 let labOpen = false;
 let feedback = 'Actor switching simulates local roles and inboxes; it is not login or shared access.';
 let failed = false;
 let toolName = 'comment';
 let toolOutput = '';
-let checkOutput = null;
-let derivedOutput = null;
+let checkOutput: ReturnType<typeof core.check> | null = null;
+let derivedOutput: ReturnType<typeof runDerivedChecks> | null = null;
 const ruleDrafts = new Map();
-let derivedJob = null;
+let derivedJob: {worker: Worker; url: string; timer: ReturnType<typeof setTimeout>} | null = null;
 let derivedGeneration = 0;
 function stopDerived() {
   derivedGeneration++;
@@ -61,7 +62,7 @@ function stopDerived() {
   }
 }
 function invalidateChecks() { stopDerived(); checkOutput=null; derivedOutput=null; }
-function derivedUnknown(reason) {
+function derivedUnknown(reason: string): ReturnType<typeof runDerivedChecks> {
   return {result:'unknown',revision:core.model.revision,scope:'Worker execution did not establish declaration-check evidence.',cases:[{id:'worker-execution',action:null,actorId:null,expected:{completed:true},actual:null,status:'unknown',reason}]};
 }
 function startDerived() {
@@ -69,12 +70,12 @@ function startDerived() {
   stopDerived(); derivedOutput=null; labOpen=true;
   const id=derivedGeneration;
   const state=core.state, model=core.model;
-  let worker, url;
+  let worker: Worker | undefined, url: string | undefined;
   try {
     if (typeof Worker !== 'function') throw Error('Web Worker unavailable; checks were not run. No synchronous fallback.');
     url=URL.createObjectURL(new Blob([__liveWorkerSource],{type:'text/javascript'}));
     worker=new Worker(url);
-    const finish=(report)=>{
+    const finish=(report: ReturnType<typeof runDerivedChecks>)=>{
       if (id !== derivedGeneration) return;
       if (previewStep !== null || core.state !== state || core.model !== model) {
         stopDerived(); derivedOutput=null; render(); return;
@@ -92,34 +93,41 @@ function startDerived() {
   }
   render();
 }
-const root = document.querySelector('#app');
-const modal = document.querySelector('#modal');
-const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function requiredElement<T extends Element>(selector: string, kind: new () => T, parent: ParentNode = document): T {
+  const element = parent.querySelector(selector);
+  if (!(element instanceof kind)) throw new Error(`Missing ${selector}`);
+  return element;
+}
+const root = requiredElement('#app', HTMLDivElement);
+const modal = requiredElement('#modal', HTMLDialogElement);
+const escapes: Record<string, string> = {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'};
+const esc = value => String(value ?? '').replace(/[&<>"']/g, c => escapes[c] ?? c);
 const user = id => view.state.users.find(u => u.id === id);
 const name = id => user(id)?.name || 'Unassigned';
 const availability = (action, args) => previewStep === null ? core.explainAction(action,args,actorId) : {available:false,category:'preview',reason:'Current availability explanations are disabled in read-only history. Return to live first.'};
 const allowed = action => {const e=availability(action,action==='create'?{}:{issueId:selected});return e.available || e.category==='missing-input'};
 const availabilityDetails = e => `<p>${esc(e.reason)}</p><details><summary>Availability details</summary><pre>${esc(JSON.stringify(e,null,2))}</pre></details>`;
 const unavailableButton = action => previewStep === null ? `<button class="link" data-unavailable="${action}">Why unavailable<span class="sr-only"> · ${esc(label(action))}</span></button>` : '';
-function formArgs(form) {
-  const args=Object.fromEntries(new FormData(form));
+function formArgs(form: HTMLFormElement) {
+  const args: Record<string, FormDataEntryValue | null | undefined>=Object.fromEntries(new FormData(form));
   if(form.dataset.action!=='create') args.issueId=selected;
   if(form.dataset.action==='assign' && args.assignee==='') args.assignee=null;
   return args;
 }
-function updateFormAvailability(form) {
+function updateFormAvailability(form: HTMLFormElement) {
   const e=availability(form.dataset.action,formArgs(form));
-  form.querySelector('.primary').disabled=!e.available;
-  form.querySelector('.availability').innerHTML=e.available ? '' : `<p>${esc(e.reason)}</p><details><summary>Why unavailable</summary><pre>${esc(JSON.stringify(e,null,2))}</pre></details>`;
+  requiredElement('.primary', HTMLButtonElement, form).disabled=!e.available;
+  requiredElement('.availability', HTMLElement, form).innerHTML=e.available ? '' : `<p>${esc(e.reason)}</p><details><summary>Why unavailable</summary><pre>${esc(JSON.stringify(e,null,2))}</pre></details>`;
 }
 const label = action => view.model.actions[action]?.label || action;
 const issue = () => view.state.issues.find(i => i.id === selected);
 const option = (value, text, current) => `<option value="${esc(value)}" ${value === current ? 'selected' : ''}>${esc(text)}</option>`;
 const whyButton = eventId => `<button class="link" data-why="${esc(eventId)}">Why<span class="sr-only"> event ${esc(eventId)}</span></button>`;
-function fields(action, values = {}, omit = []) {
+function fields(action: string, values: Record<string, unknown> = {}, omit: string[] = []) {
   const schema = view.model.actions[action].inputs;
   return Object.entries(schema.properties).filter(([key]) => !omit.includes(key)).map(([key, def]) => {
-    const title = def.title || def.label || ({issueId:'Issue',body:'Comment',assignee:'Assign to'}[key]) || key[0].toUpperCase()+key.slice(1);
+    const titles: Record<string, string> = {issueId:'Issue',body:'Comment',assignee:'Assign to'};
+    const title = def.title || def.label || titles[key] || key[0].toUpperCase()+key.slice(1);
     const required = schema.required?.includes(key) ? 'required' : '';
     let input;
     if (key === 'assignee') input = `<select name="${key}">${option('', 'Unassigned', values[key] ?? '')}${view.state.users.map(u=>option(u.id,u.name,values[key])).join('')}</select>`;
@@ -129,7 +137,7 @@ function fields(action, values = {}, omit = []) {
     return `<label>${esc(title)}${!required ? ' <small>Optional</small>' : ''}${input}</label>`;
   }).join('');
 }
-function actionForm(action, values = {}, omit = []) {
+function actionForm(action: string, values: Record<string, unknown> = {}, omit: string[] = []) {
   return `<form class="action-form" data-action="${action}">${fields(action, values, omit)}<div class="form-actions"><button class="primary">${esc(label(action))}</button></div><div class="availability"></div></form>`;
 }
 function renderDetail() {
@@ -170,12 +178,14 @@ function defaultArgs(a) {
   return ({create:{title:'Keyboard focus is lost after saving',description:'Keep focus on the updated issue.',priority:'normal'},assign:{issueId:selected,assignee:core.state.users[1]?.id},comment:{issueId:selected,body:'Reproduced in the keyboard flow.'},resolve:{issueId:selected},reopen:{issueId:selected},watch:{issueId:selected}})[a] || {};
 }
 function render() {
-  const active=document.activeElement;
-  const selection = typeof active?.selectionStart === 'number' ? [active.selectionStart, active.selectionEnd] : null;
+  const active=document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  const selection = (active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement) && active.selectionStart !== null && active.selectionEnd !== null
+    ? {start: active.selectionStart, end: active.selectionEnd}
+    : null;
   const focusIssue = active?.dataset?.issue;
   const focusId=active?.id;
-  const focusRule=active?.closest('[data-rule]')?.dataset.rule;
-  const focusAction=active?.closest('form[data-action]')?.dataset.action;
+  const focusRule=active?.closest<HTMLFormElement>('[data-rule]')?.dataset.rule;
+  const focusAction=active?.closest<HTMLFormElement>('form[data-action]')?.dataset.action;
   const focusRun=active?.dataset?.run;
   const focusEditor=active?.dataset?.editor;
   const notices=view.state.notifications.filter(n=>n.recipient===actorId).slice().reverse();
@@ -186,23 +196,25 @@ function render() {
     <div class="workspace"><nav class="queue" aria-label="Issue queue"></nav><section class="detail" aria-label="Issue detail">${renderDetail()}</section>
     <aside class="inbox" aria-label="Recipient inbox"><h2>${previewStep !== null ? 'Historical inbox' : 'Inbox'} <small>${notices.length}</small></h2><small>For ${esc(name(actorId))} · ${previewStep !== null ? 'captured' : 'live'} related updates</small><div class="notices">${notices.map(n=>`<article class="notice"><strong>${esc(view.state.issues.find(i=>i.id===n.issueId)?.title || n.issueId)}</strong><span>${esc(n.action)} · ${esc(n.issueId)}</span><br><small>Related through ${n.reasons.map(esc).join(' + ')}</small><br>${whyButton(n.eventId)}</article>`).join('') || '<p class="empty">Nothing for you yet.<br>Assignment, watching, and action rules determine what arrives here.</p>'}</div></aside></div>
     ${previewStep !== null ? '<p class="scope lab">Development tools are unavailable in read-only preview.</p>' : renderLab()}</main>`;
-  if (previewStep === null) root.querySelector('.lab').insertAdjacentHTML('beforeend', `<section class="derived-checks"><h2>Declaration-derived checks</h2><p class="scope">Cases generated from the applied live declaration and workspace, executed in isolated runtimes. Not the current-state audit, historic Lean evidence, a proof, or exhaustive property testing. Unapplied checkbox drafts are not checked.</p><button id="run-derived-checks">Run declaration checks</button>${renderDerivedChecks()}</section>`);
-  root.querySelector('.toolbar').insertAdjacentHTML('afterend', `<div class="local-controls"><p id="save-status" role="status">${esc(saveStatus)}</p><div class="workspace-actions"><button id="export-workspace">Export JSON</button><label class="import-label">Import JSON<input id="import-workspace" type="file" accept="application/json,.json" ${previewStep !== null ? 'disabled' : ''}></label>${storageBlocked ? '<button id="export-original">Export unreadable saved document</button>' : ''}</div><details id="history" ${historyOpen ? 'open' : ''}><summary>Workspace history · ${core.exportWorkspace().journal.length} steps</summary><div class="history-controls"><label>Preview step<input id="history-step" type="number" min="0" max="${core.exportWorkspace().journal.length}" value="${previewStep ?? core.exportWorkspace().journal.length}"></label><button id="preview">View read-only</button><button id="return-live" ${previewStep === null ? 'disabled' : ''}>Return to live</button></div><p class="scope">Local command reconstruction, not external delivery evidence.</p></details>${previewStep !== null ? `<p class="preview-banner" role="status">Read-only preview · step ${previewStep}. Live changes and drafts are untouched.</p>` : ''}</div>`);
-  const queue = root.querySelector('.queue');
+  if (previewStep === null) requiredElement('.lab', HTMLDetailsElement, root).insertAdjacentHTML('beforeend', `<section class="derived-checks"><h2>Declaration-derived checks</h2><p class="scope">Cases generated from the applied live declaration and workspace, executed in isolated runtimes. Not the current-state audit, historic Lean evidence, a proof, or exhaustive property testing. Unapplied checkbox drafts are not checked.</p><button id="run-derived-checks">Run declaration checks</button>${renderDerivedChecks()}</section>`);
+  requiredElement('.toolbar', HTMLElement, root).insertAdjacentHTML('afterend', `<div class="local-controls"><p id="save-status" role="status">${esc(saveStatus)}</p><div class="workspace-actions"><button id="export-workspace">Export JSON</button><label class="import-label">Import JSON<input id="import-workspace" type="file" accept="application/json,.json" ${previewStep !== null ? 'disabled' : ''}></label>${storageBlocked ? '<button id="export-original">Export unreadable saved document</button>' : ''}</div><details id="history" ${historyOpen ? 'open' : ''}><summary>Workspace history · ${core.exportWorkspace().journal.length} steps</summary><div class="history-controls"><label>Preview step<input id="history-step" type="number" min="0" max="${core.exportWorkspace().journal.length}" value="${previewStep ?? core.exportWorkspace().journal.length}"></label><button id="preview">View read-only</button><button id="return-live" ${previewStep === null ? 'disabled' : ''}>Return to live</button></div><p class="scope">Local command reconstruction, not external delivery evidence.</p></details>${previewStep !== null ? `<p class="preview-banner" role="status">Read-only preview · step ${previewStep}. Live changes and drafts are untouched.</p>` : ''}</div>`);
+  const queue = requiredElement('.queue', HTMLElement, root);
   const visible = view.state.issues.filter(i => (!unresolved || i.status !== 'resolved') && (!assigned || i.assignee === actorId) && `${i.id} ${i.title} ${i.description || ''}`.toLowerCase().includes(search.toLowerCase()));
   queue.innerHTML = `<div class="queue-head"><h2>Issues</h2><small>${visible.length} of ${view.state.issues.length}</small></div><div class="filters"><label>Search issues<input id="issue-search" type="search" value="${esc(search)}" placeholder="Title, ID, description"></label><label><input id="unresolved" type="checkbox" ${unresolved ? 'checked' : ''}>Unresolved</label><label><input id="assigned" type="checkbox" ${assigned ? 'checked' : ''}>Assigned to me</label></div>${visible.map(i=>`<button class="issue-row" data-issue="${esc(i.id)}" aria-current="${i.id===selected}"><div class="row-meta"><span class="status ${esc(i.status)}" aria-hidden="true"></span><span class="mono">${esc(i.id)}</span><span>${esc(i.status)}</span></div><strong>${esc(i.title)}</strong><div class="row-meta">${esc(name(i.assignee))} · ${esc(i.priority)}</div></button>`).join('') || '<p class="empty">No matching issues. Adjust your filters.</p>'}`;
   if (previewStep === null) {
-    root.querySelector('#tool-args').value = toolDrafts.get(toolName) ?? JSON.stringify(defaultArgs(toolName),null,2);
+    requiredElement('#tool-args', HTMLTextAreaElement, root).value = toolDrafts.get(toolName) ?? JSON.stringify(defaultArgs(toolName),null,2);
   }
   bind();
-  root.querySelectorAll('form[data-action]').forEach(updateFormAvailability);
+  root.querySelectorAll<HTMLFormElement>('form[data-action]').forEach(updateFormAvailability);
   if (previewStep === null) updateToolAvailability();
-  if (!allowed('create') && previewStep === null) root.querySelector('#new-issue').insertAdjacentHTML('afterend',unavailableButton('create'));
-  root.querySelectorAll('[data-unavailable]').forEach(b=>b.onclick=()=>showUnavailable(b.dataset.unavailable));
-  const target=(focusId && root.querySelector(`#${focusId}`)) || (focusRule && root.querySelector(`[data-rule="${focusRule}"] button`)) || (focusAction && root.querySelector(`form[data-action="${focusAction}"] textarea`)) || (focusRun && root.querySelector(`[data-run="${focusRun}"]`)) || (focusEditor && root.querySelector(`[data-editor="${focusEditor}"]`));
-  const restored = target || (focusIssue && root.querySelector(`[data-issue="${focusIssue}"]`));
-  restored?.focus({preventScroll:true});
-  if (selection && restored?.setSelectionRange && !['number','checkbox'].includes(restored.type)) restored.setSelectionRange(...selection);
+  if (!allowed('create') && previewStep === null) requiredElement('#new-issue', HTMLButtonElement, root).insertAdjacentHTML('afterend',unavailableButton('create'));
+  root.querySelectorAll<HTMLButtonElement>('[data-unavailable]').forEach(b=>b.onclick=()=>showUnavailable(b.dataset.unavailable));
+  const target=(focusId && root.querySelector<HTMLElement>(`#${focusId}`)) || (focusRule && root.querySelector<HTMLElement>(`[data-rule="${focusRule}"] button`)) || (focusAction && root.querySelector<HTMLElement>(`form[data-action="${focusAction}"] textarea`)) || (focusRun && root.querySelector<HTMLElement>(`[data-run="${focusRun}"]`)) || (focusEditor && root.querySelector<HTMLElement>(`[data-editor="${focusEditor}"]`));
+  const restored = target || (focusIssue && root.querySelector<HTMLElement>(`[data-issue="${focusIssue}"]`));
+  if (restored) restored.focus({preventScroll:true});
+  if (selection && (restored instanceof HTMLInputElement || restored instanceof HTMLTextAreaElement) && !['number','checkbox'].includes(restored.type)) {
+    restored.setSelectionRange(selection.start, selection.end);
+  }
 }
 function commit(action,args) {
   if (previewStep !== null) return {ok:false,reason:'Read-only preview; return to live first.'};
@@ -217,41 +229,42 @@ function commit(action,args) {
 function showEditor(action) {
   if (previewStep !== null) return;
   modal.innerHTML=`<div class="dialog-head"><h2 id="modal-title">${esc(label(action))}</h2><button data-close aria-label="Close dialog">×</button></div>${actionForm(action,action==='assign'?{assignee:issue()?.assignee}:{},action==='create'?[]:['issueId'])}`;
-  modal.querySelector('[data-close]').onclick=()=>modal.close();
-  const form=modal.querySelector('form');
+  requiredElement('[data-close]', HTMLButtonElement, modal).onclick=()=>modal.close();
+  const form=requiredElement('form', HTMLFormElement, modal);
   form.oninput=()=>updateFormAvailability(form);
   form.onchange=()=>updateFormAvailability(form);
   updateFormAvailability(form);
-  modal.querySelector('form').onsubmit=e=>{e.preventDefault();const args=Object.fromEntries(new FormData(e.target));if(action!=='create')args.issueId=selected;if(action==='assign' && args.assignee==='')args.assignee=null;const result=commit(action,args);if(result.ok)modal.close();else {let p=modal.querySelector('.dialog-error');if(!p){p=document.createElement('p');p.className='dialog-error fail';modal.append(p)}p.textContent=result.reason}render()};
+  form.onsubmit=e=>{e.preventDefault();const result=commit(action,formArgs(form));if(result.ok)modal.close();else {let p=modal.querySelector('.dialog-error');if(!p){p=document.createElement('p');p.className='dialog-error fail';modal.append(p)}p.textContent=result.reason ?? ''}render()};
   modal.showModal();
 }
 function showWhy(eventId) {
   const e=view.state.events.find(e=>e.id===eventId);
   const data=previewStep === null ? core.explain(eventId) : e;
   modal.innerHTML=`<div class="dialog-head"><h2 id="modal-title">Why this update?</h2><button data-close aria-label="Close dialog">×</button></div><div class="why-flow"><p><strong>${esc(name(e?.actorId))}</strong> invoked <strong>${esc(e?.action)}</strong> on ${esc(e?.issueId)}.</p><p>Captured declaration <strong>r${esc(e?.revision)}</strong> — not today's rule.</p><p>The captured policy allowed <strong>${esc(e?.actor?.role)}</strong>. Changed: ${e?.changes?.map(c=>esc(c.field)).join(', ') || 'none'}.</p></div><h3>Who received it, and through which relationship?</h3>${e?.recipients?.length ? e.recipients.map(r=>`<div class="notice"><strong>${esc(name(r.recipient))}</strong><span class="mono">${esc(e.issueId)} → ${r.reasons.map(esc).join(' + ')} → ${esc(r.recipient)}</span></div>`).join('') : '<p class="empty">No recipients matched the captured routing rule.</p>'}<p class="scope">The actor is excluded; overlapping paths produce one inbox item per recipient. These are event-time relationships, not a recalculation using today’s rule.</p><details><summary>Stored event JSON</summary><pre id="why-data">${esc(JSON.stringify(data,null,2))}</pre></details><p class="scope">Historical local execution record. No external delivery or authentication is asserted.</p>`;
-  modal.querySelector('[data-close]').onclick=()=>modal.close();modal.showModal();
+  requiredElement('[data-close]', HTMLButtonElement, modal).onclick=()=>modal.close();modal.showModal();
 }
 function showUnavailable(action) {
   if (previewStep !== null) return;
   const e=availability(action,action==='create'?{}:{issueId:selected});
   modal.innerHTML=`<div class="dialog-head"><h2 id="modal-title">Why unavailable · ${esc(label(action))}</h2><button data-close aria-label="Close dialog">×</button></div>${availabilityDetails(e)}<p class="scope">Current pre-execution query · not a historical event or an execution guarantee.</p>`;
-  modal.querySelector('[data-close]').onclick=()=>modal.close();modal.showModal();
+  requiredElement('[data-close]', HTMLButtonElement, modal).onclick=()=>modal.close();modal.showModal();
 }
 function updateToolAvailability() {
-  const form=root.querySelector('#tool-form');
+  const form=requiredElement('#tool-form', HTMLFormElement, root);
   let panel=form.querySelector('.availability');
   if(!panel){panel=document.createElement('div');panel.className='availability';form.append(panel)}
-  try {const e=availability(toolName,decodeJsonValue(root.querySelector('#tool-args').value));panel.innerHTML=`<strong>${e.available?'Available for current inputs':'Why unavailable'}</strong>${availabilityDetails(e)}`}
+  try {const e=availability(toolName,decodeJsonValue(requiredElement('#tool-args', HTMLTextAreaElement, root).value));panel.innerHTML=`<strong>${e.available?'Available for current inputs':'Why unavailable'}</strong>${availabilityDetails(e)}`}
   catch {panel.textContent='Why unavailable: enter valid JSON arguments. No policy or precondition result is claimed.'}
 }
 function bind() {
-  root.querySelector('#actor').onchange=e=>{actorId=e.target.value;feedback=`Working as ${name(actorId)}. Actions and inbox updated.`;failed=false;render()};
-  root.querySelector('#new-issue').onclick=()=>showEditor('create');
-  root.querySelector('#reset').onclick=()=>{
+  const actor = requiredElement('#actor', HTMLSelectElement, root);
+  actor.onchange=()=>{actorId=actor.value;feedback=`Working as ${name(actorId)}. Actions and inbox updated.`;failed=false;render()};
+  requiredElement('#new-issue', HTMLButtonElement, root).onclick=()=>showEditor('create');
+  requiredElement('#reset', HTMLButtonElement, root).onclick=()=>{
     if (previewStep !== null) return;
     modal.innerHTML='<div class="dialog-head"><h2 id="modal-title">Reset local workspace?</h2><button data-close aria-label="Close dialog">×</button></div><p class="scope">Replace the saved document and current workspace with the two seeded issues. Export first to keep a copy. Unsent drafts will also be cleared.</p><button id="confirm-reset">Clear persisted workspace and reset</button>';
-    modal.querySelector('[data-close]').onclick=()=>modal.close();
-    modal.querySelector('#confirm-reset').onclick=()=>{
+    requiredElement('[data-close]', HTMLButtonElement, modal).onclick=()=>modal.close();
+    requiredElement('#confirm-reset', HTMLButtonElement, modal).onclick=()=>{
       if (previewStep !== null) return;
       const result=core.restoreWorkspace(createApp().exportWorkspace());
       if (!result.ok) return;
@@ -261,12 +274,14 @@ function bind() {
     };
     modal.showModal();
   };
-  root.querySelector('#export-workspace').onclick=()=>download(encodeJsonPretty(core.exportWorkspace(),LiveWorkspaceDocumentSchema),'relay-workspace.json');
-  root.querySelector('#export-original')?.addEventListener('click',()=>download(savedRaw,'relay-unreadable-workspace.json'));
-  root.querySelector('#import-workspace').onchange=async e=>{
-    if (previewStep !== null || !e.target.files[0]) return;
+  requiredElement('#export-workspace', HTMLButtonElement, root).onclick=()=>download(encodeJsonPretty(core.exportWorkspace(),LiveWorkspaceDocumentSchema),'relay-workspace.json');
+  root.querySelector('#export-original')?.addEventListener('click',()=>{if(savedRaw !== null) download(savedRaw,'relay-unreadable-workspace.json')});
+  const importInput = requiredElement('#import-workspace', HTMLInputElement, root);
+  importInput.onchange=async ()=>{
+    const file = importInput.files?.[0];
+    if (previewStep !== null || !file) return;
     try {
-      const doc=decodeStrictJson(LiveWorkspaceDocumentSchema,await e.target.files[0].text());
+      const doc=decodeStrictJson(LiveWorkspaceDocumentSchema,await file.text());
       if (previewStep !== null) throw new Error('Return to live before importing.');
       const result=core.restoreWorkspace(doc);
       if (!result.ok) throw new Error(result.reason);
@@ -275,9 +290,10 @@ function bind() {
     } catch(error) {feedback=`Import rejected; workspace unchanged: ${error.message}`;failed=true}
     render();
   };
-  root.querySelector('#history').ontoggle=e=>{historyOpen=e.target.open};
-  root.querySelector('#preview').onclick=()=>{
-    const n=Number(root.querySelector('#history-step').value);
+  const history = requiredElement('#history', HTMLDetailsElement, root);
+  history.ontoggle=()=>{historyOpen=history.open};
+  requiredElement('#preview', HTMLButtonElement, root).onclick=()=>{
+    const n=Number(requiredElement('#history-step', HTMLInputElement, root).value);
     const result=core.previewWorkspace(n);
     if (!result.ok) {feedback=result.reason;failed=true;render();return}
     if (previewStep === null) liveSelected=selected;
@@ -285,42 +301,49 @@ function bind() {
     if (!issue()) selected=view.state.issues[0]?.id;
     feedback='History preview is read-only. Return to live to make changes.';failed=false;render();
   };
-  root.querySelector('#return-live').onclick=()=>{view=core;previewStep=null;selected=liveSelected;feedback='Returned to live workspace.';render()};
-  root.querySelector('#issue-search').oninput=e=>{search=e.target.value;render()};
-  root.querySelector('#unresolved').onchange=e=>{unresolved=e.target.checked;render()};
-  root.querySelector('#assigned').onchange=e=>{assigned=e.target.checked;render()};
-  root.querySelector('.queue').onkeydown=e=>{
-    if (!e.target.matches('[data-issue]') || !['ArrowDown','ArrowUp','Home','End'].includes(e.key)) return;
-    e.preventDefault();const rows=[...root.querySelectorAll('[data-issue]')];const index=rows.indexOf(e.target);
+  requiredElement('#return-live', HTMLButtonElement, root).onclick=()=>{view=core;previewStep=null;selected=liveSelected;feedback='Returned to live workspace.';render()};
+  const searchInput = requiredElement('#issue-search', HTMLInputElement, root);
+  searchInput.oninput=()=>{search=searchInput.value;render()};
+  const unresolvedInput = requiredElement('#unresolved', HTMLInputElement, root);
+  unresolvedInput.onchange=()=>{unresolved=unresolvedInput.checked;render()};
+  const assignedInput = requiredElement('#assigned', HTMLInputElement, root);
+  assignedInput.onchange=()=>{assigned=assignedInput.checked;render()};
+  requiredElement('.queue', HTMLElement, root).onkeydown=e=>{
+    if (!(e.target instanceof HTMLButtonElement) || !e.target.matches('[data-issue]') || !['ArrowDown','ArrowUp','Home','End'].includes(e.key)) return;
+    e.preventDefault();const rows=[...root.querySelectorAll<HTMLButtonElement>('[data-issue]')];const index=rows.indexOf(e.target);
     const next=e.key==='Home'?0:e.key==='End'?rows.length-1:Math.max(0,Math.min(rows.length-1,index+(e.key==='ArrowDown'?1:-1)));
     rows[next]?.focus();
   };
-  root.querySelectorAll('[data-issue]').forEach(b=>b.onclick=()=>{selected=b.dataset.issue;render()});
-  root.querySelectorAll('[data-editor]').forEach(b=>b.onclick=()=>showEditor(b.dataset.editor));
-  root.querySelectorAll('[data-run]').forEach(b=>b.onclick=()=>{commit(b.dataset.run,{issueId:selected});render()});
-  root.querySelectorAll('[data-why]').forEach(b=>b.onclick=()=>showWhy(b.dataset.why));
-  root.querySelectorAll('form[data-action]').forEach(f=>{
+  root.querySelectorAll<HTMLButtonElement>('[data-issue]').forEach(b=>b.onclick=()=>{selected=b.dataset.issue;render()});
+  root.querySelectorAll<HTMLButtonElement>('[data-editor]').forEach(b=>b.onclick=()=>showEditor(b.dataset.editor));
+  root.querySelectorAll<HTMLButtonElement>('[data-run]').forEach(b=>b.onclick=()=>{commit(b.dataset.run,{issueId:selected});render()});
+  root.querySelectorAll<HTMLButtonElement>('[data-why]').forEach(b=>b.onclick=()=>showWhy(b.dataset.why));
+  root.querySelectorAll<HTMLFormElement>('form[data-action]').forEach(f=>{
     f.addEventListener('input',()=>updateFormAvailability(f));
     f.addEventListener('change',()=>updateFormAvailability(f));
-    f.querySelector('textarea[name=body]')?.addEventListener('input',e=>commentDrafts.set(draftKey(),e.target.value));
+    const body = f.querySelector<HTMLTextAreaElement>('textarea[name=body]');
+    body?.addEventListener('input',()=>commentDrafts.set(draftKey(),body.value));
     f.onsubmit=e=>{e.preventDefault();const result=commit(f.dataset.action,{...Object.fromEntries(new FormData(f)),issueId:selected});if(result.ok && f.dataset.action==='comment')commentDrafts.delete(draftKey());render()};
   });
   if (previewStep !== null) return;
-  root.querySelector('.lab').ontoggle=e=>{labOpen=e.target.open};
-  root.querySelectorAll('[data-rule]').forEach(f=>{
+  const lab = requiredElement('.lab', HTMLDetailsElement, root);
+  lab.ontoggle=()=>{labOpen=lab.open};
+  root.querySelectorAll<HTMLFormElement>('[data-rule]').forEach(f=>{
     const patch=()=>{const data=new FormData(f);return {allowedRoles:data.getAll('allowedRoles'),notify:data.getAll('notify')}};
-    f.onchange=()=>{ruleDrafts.set(f.dataset.rule,patch());f.querySelector('.rule-impact').innerHTML=ruleImpact(f.dataset.rule,patch())};
+    f.onchange=()=>{ruleDrafts.set(f.dataset.rule,patch());requiredElement('.rule-impact', HTMLElement, f).innerHTML=ruleImpact(f.dataset.rule,patch())};
     f.onsubmit=e=>{e.preventDefault();if(previewStep!==null)return;const result=core.setRule(f.dataset.rule,patch());if(result.ok){invalidateChecks();ruleDrafts.delete(f.dataset.rule);persist()}failed=!result.ok;feedback=result.ok?`${f.dataset.rule} rule updated to r${core.model.revision}. Future actions use this declaration; past records are unchanged.`:result.reason;labOpen=true;render()};
   });
-   root.querySelector('#tool-args').oninput=e=>{toolDrafts.set(toolName,e.target.value);updateToolAvailability()};
-   root.querySelector('#tool-name').onchange=e=>{toolName=e.target.value;root.querySelector('#tool-args').value=toolDrafts.get(toolName) ?? JSON.stringify(defaultArgs(toolName),null,2);updateToolAvailability()};
-  root.querySelector('#tool-form').onsubmit=e=>{e.preventDefault();try{const args=decodeJsonValue(root.querySelector('#tool-args').value);toolOutput=JSON.stringify(commit(toolName,args),null,2)}catch(error){failed=true;feedback='Invalid JSON: '+error.message;toolOutput=feedback}labOpen=true;render()};
-  root.querySelector('#run-checks').onclick=()=>{checkOutput=core.check();labOpen=true;render()};
-   root.querySelector('#run-derived-checks').disabled=!!derivedJob;
-   root.querySelector('#run-derived-checks').onclick=startDerived;
+   const toolArgs = requiredElement('#tool-args', HTMLTextAreaElement, root);
+   const toolSelect = requiredElement('#tool-name', HTMLSelectElement, root);
+   toolArgs.oninput=()=>{toolDrafts.set(toolName,toolArgs.value);updateToolAvailability()};
+   toolSelect.onchange=()=>{toolName=toolSelect.value;toolArgs.value=toolDrafts.get(toolName) ?? JSON.stringify(defaultArgs(toolName),null,2);updateToolAvailability()};
+  requiredElement('#tool-form', HTMLFormElement, root).onsubmit=e=>{e.preventDefault();try{const args=decodeJsonValue(requiredElement('#tool-args', HTMLTextAreaElement, root).value);toolOutput=JSON.stringify(commit(toolName,args),null,2)}catch(error){failed=true;feedback='Invalid JSON: '+error.message;toolOutput=feedback}labOpen=true;render()};
+  requiredElement('#run-checks', HTMLButtonElement, root).onclick=()=>{checkOutput=core.check();labOpen=true;render()};
+   requiredElement('#run-derived-checks', HTMLButtonElement, root).disabled=!!derivedJob;
+   requiredElement('#run-derived-checks', HTMLButtonElement, root).onclick=startDerived;
    if (derivedJob) {
-     root.querySelector('#run-derived-checks').insertAdjacentHTML('afterend','<button id="cancel-derived-checks">Cancel declaration checks</button>');
-     root.querySelector('#cancel-derived-checks').onclick=()=>{stopDerived();derivedOutput=derivedUnknown('Cancelled; no completed result.');render()};
+     requiredElement('#run-derived-checks', HTMLButtonElement, root).insertAdjacentHTML('afterend','<button id="cancel-derived-checks">Cancel declaration checks</button>');
+     requiredElement('#cancel-derived-checks', HTMLButtonElement, root).onclick=()=>{stopDerived();derivedOutput=derivedUnknown('Cancelled; no completed result.');render()};
    }
 }
 function download(text, filename) {
@@ -330,4 +353,10 @@ function download(text, filename) {
 }
 render();
 // Inspectable for browser assertions, never an alternative execution path.
+export type LiveWorkspace = {core: typeof core; readonly selected: string | undefined; showWhy: typeof showWhy};
+declare global {
+  interface Window {
+    liveWorkspace: LiveWorkspace;
+  }
+}
 window.liveWorkspace = {core, get selected(){return selected}, showWhy};

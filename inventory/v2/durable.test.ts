@@ -17,7 +17,7 @@ function phase(path, scenario, name) {
     JSON.stringify([path, scenario, name])], {encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe']}));
 }
 // Independent quantity oracle; does not interpret declarations, results, or event deltas.
-function inventory(snapshot, active, terminal = {}) {
+function inventory(snapshot, active: Record<string, number>, terminal = {}) {
   assert.equal(snapshot.state.records.stock.camera.values.available,
     8 - Object.values(active).reduce((sum, quantity) => sum + quantity, 0));
   assert.deepEqual(Object.keys(snapshot.state.records.reservation).sort(), [...Object.keys(active), ...Object.keys(terminal)].sort());

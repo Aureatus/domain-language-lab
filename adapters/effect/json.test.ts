@@ -59,7 +59,7 @@ test('browser submission storage round-trips unresolved commands and rejects cor
 test('browser SSE codecs require snapshot and change envelopes without discarding JSON payloads', () => {
   const snapshot = { contractId: 'contract', snapshotVersion: 0, state: { revision: 0, records: {} }, pending: [], defaults: {}, availability: {} };
   const change = { sequence: 0, invalidations: [{ view: 'snapshot' }], recipients: [], reason: 'resync' };
-  for (const [schema, value] of [[ApplicationSnapshotSchema, snapshot], [WorkspaceChangeSchema, change]]) {
+  for (const [schema, value] of [[ApplicationSnapshotSchema, snapshot], [WorkspaceChangeSchema, change]] as const) {
     assert.deepEqual(decodeJson(schema, encodeJson(value)), value);
     for (const raw of ['', '{}', '{broken']) assert.throws(() => decodeJson(schema, raw));
   }
@@ -116,6 +116,7 @@ test('DurableOutcomeSchema and DurableOperationOutcomeSchema validate discrimina
       receipt: { format: 'semantic-approval-receipt/v2', request: { id: 'r1' }, policyId: 'p1', approver: 'bob', sig: 'ok' },
     }),
   );
+  assert.equal(approved.status, 'approved');
   assert.equal(approved.receipt.sig, 'ok');
   assert.throws(() => decodeJson(DurableReceiptSchema, '{"format":"wrong","request":{},"policyId":"p1","approver":"bob"}'));
 });

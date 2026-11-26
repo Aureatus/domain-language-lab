@@ -13,7 +13,8 @@ const context = await browser.newContext({ viewport: { width: 1440, height: 900 
   recordVideo: { dir, size: { width: 1440, height: 900 } } });
 const page = await context.newPage();
 const video = page.video();
-const marks = [];
+type Mark={selector:string;caption:string;beforeSeconds:number;pulseSeconds?:number;afterSeconds?:number};
+const marks:Mark[] = [];
 let started;
 try {
   await page.goto(pathToFileURL(resolve('artifacts/workbench.html')).href);
@@ -38,7 +39,7 @@ try {
   await page.mouse.move(cursor.x,cursor.y);
   const wait = ms => page.waitForTimeout(ms); // editorial pacing, not agent polling
   async function caption(text){await page.locator('#demo-caption').evaluate((el,text)=>el.textContent=text,text)}
-  async function click(selector,text,hold=2100,evidence=false){
+  async function click(selector:string,text:string,hold=2100,evidence=false){
     await caption(text);
     const target=page.locator(selector);
     await target.scrollIntoViewIfNeeded();
@@ -49,7 +50,7 @@ try {
     cursor=end;
     await target.evaluate(el=>{el.focus();el.classList.add('demo-target')});
     await wait(500);
-    const mark={selector,caption:text,beforeSeconds:(Date.now()-started)/1000};
+    const mark:Mark={selector,caption:text,beforeSeconds:(Date.now()-started)/1000};
     if(evidence)await page.screenshot({path:resolve(dir,'before-click.png')});
     await page.mouse.down();await wait(180);
     mark.pulseSeconds=(Date.now()-started)/1000;
@@ -78,6 +79,7 @@ try {
   await click('#tab-evidence','Evidence has limits: sampled histories and a Lean model, not runtime correspondence.',3000);
   await writeFile(resolve(dir,'interactions.json'),JSON.stringify({kind:'continuous-browser-video',cursor:'DOM pointer tracks actual Playwright mouse; pointerdown pulse',timing:'editorial, not execution latency',durationBeforeClose:(Date.now()-started)/1000,marks},null,2));
 } finally {await context.close();await browser.close()}
+if(!video)throw Error('Missing workbench recording');
 const source=await video.path();
 const output=resolve('artifacts/semantic-workbench-demo-v2.mp4');
 const result=spawnSync('ffmpeg',['-y','-i',source,'-vf','fps=30,format=yuv420p','-c:v','libx264','-crf','19','-preset','medium','-movflags','+faststart',output],{encoding:'utf8'});
