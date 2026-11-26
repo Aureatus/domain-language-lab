@@ -1,5 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { generateHistory, replayHistory, runProperties, shrinkHistory } from './property.ts';
 import type { Action, ReplayData } from './property.ts';
 
@@ -25,6 +30,30 @@ test('generated sampled reports are deterministic, serializable and non-vacuous'
   }
   assert.match(first.engine.sha256, /^[a-f0-9]{64}$/);
   assert.equal(first.engine.oracle, 'independent-snapshot-state-machine/1');
+});
+
+test('property CLI persists its bounded evidence and signals a deliberate counterexample', async t => {
+  const cwd = await mkdtemp(join(tmpdir(), 'premise-property-cli-'));
+  t.after(() => rm(cwd, { recursive: true, force: true }));
+  const path = fileURLToPath(new URL('./property.ts', import.meta.url));
+  const run = (...args: string[]) => spawnSync(process.execPath, [path, ...args], { cwd, encoding: 'utf8' });
+  const output = join(cwd, 'artifacts/property-report.json');
+  const options = { seed: 12345, samples: 40, maxSteps: 24, shrinkBudget: 100 };
+  const flags = ['--seed', '12345', '--samples', '40', '--max-steps', '24', '--shrink-budget', '100'];
+  for (const args of [['--samples'], ['--seed', ' '], ['--unknown', '1']]) {
+    const invalid = run(...args);
+    assert.equal(invalid.status, 1);
+    assert.match(invalid.stderr, /Invalid argument:/);
+  }
+  await assert.rejects(readFile(output), { code: 'ENOENT' });
+  const passing = run(...flags);
+  assert.equal(passing.status, 0, passing.stderr);
+  assert.match(passing.stdout, /sampled_pass: 40 sampled histories, 0 failures/);
+  assert.deepEqual(JSON.parse(await readFile(output, 'utf8')), runProperties(options));
+  const failing = run(...flags, '--mutant');
+  assert.equal(failing.status, 1, failing.stderr);
+  assert.match(failing.stdout, /counterexample: 40 sampled histories/);
+  assert.deepEqual(JSON.parse(await readFile(output, 'utf8')), runProperties({ ...options, staleApprovalMutant: true }));
 });
 
 test('seed zero is reproducible; seeds vary values, order and lengths inside bounds', () => {

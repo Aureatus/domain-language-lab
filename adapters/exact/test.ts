@@ -2,11 +2,14 @@ import {test} from 'node:test';
 import type {TestContext} from 'node:test';
 import './submission.test.ts';
 import assert from 'node:assert/strict';
+import {spawn} from 'node:child_process';
+import {once} from 'node:events';
 import {Agent,request} from 'node:http';
 import type {Socket} from 'node:net';
 import {mkdtemp,rm,writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
+import {createInterface} from 'node:readline';
 import {pathToFileURL} from 'node:url';
 import {createApplicationServer} from '../../application/server.ts';
 import declaration from '../../leave/model.ts';
@@ -23,6 +26,50 @@ async function scratch(t:TestContext,prefix:string){
   t.after(()=>rm(directory,{recursive:true,force:true}));
   return directory;
 }
+
+test('Exact gateway CLI serves the selected view and shuts down after SIGTERM',{timeout:15000},async t=>{
+  const directory=await scratch(t,'exact-cli-');
+  await writeFile(join(directory,'index.html'),'<title>Local fixture</title>');
+  await writeFile(join(directory,'payload.bin'),new Uint8Array([4,9]));
+  for(const model of ['leave/browser.domain','leave/model.ts']){
+    const child=spawn(process.execPath,['adapters/exact/serve.ts',model,directory,'0',directory],{stdio:['ignore','pipe','pipe']});
+    let stderr='';
+    child.stderr.setEncoding('utf8').on('data',chunk=>{stderr+=chunk;});
+    const stopped=once(child,'close');
+    t.after(async()=>{if(child.exitCode===null&&child.signalCode===null)child.kill('SIGKILL');await stopped;});
+    const stdout=createInterface({input:child.stdout});
+    const line=await Promise.race([once(stdout,'line').then(([line])=>String(line)),
+      stopped.then(([status])=>{throw Error(`Gateway exited before readiness (${status}): ${stderr}`);})]);
+    const url=present(line.match(/^Exact adapter (http:\/\/127\.0\.0\.1:\d+);/)?.[1]);
+    const page=await fetch(url);
+    assert.equal(page.headers.get('content-type'),'text/html');
+    assert.equal(await page.text(),'<title>Local fixture</title>');
+    const file=await fetch(url+'/payload.bin');
+    assert.equal(file.headers.get('content-type'),'application/octet-stream');
+    assert.deepEqual(await file.bytes(),new Uint8Array([4,9]));
+    assert.equal((await fetch(url+'/api/contract')).status,200);
+    for(const headers of [{origin:'http://localhost:1'},{'sec-fetch-site':'cross-site'}] satisfies HeadersInit[]){
+      const refused=await fetch(url+'/api/contract',{headers});
+      assert.equal(refused.status,403);
+      assert.match(await refused.text(),/Unexpected host or origin/);
+    }
+    assert.equal((await fetch(url+'/api/events')).status,404);
+    const oversized=await fetch(url+'/api/actions/execute',{method:'POST',body:'x'.repeat(16385)});
+    assert.equal(oversized.status,500);
+    assert.deepEqual(await oversized.json(),{error:'Request too large'});
+    child.kill('SIGTERM');
+    assert.deepEqual(await stopped,[0,null],stderr);
+  }
+});
+
+test('Exact gateway closes its backing application after a failed bind',async t=>{
+  const directory=await scratch(t,'exact-bind-failure-');
+  const first=await startGateway(declaration,{directory,root:directory});
+  t.after(()=>first.close());
+  const port=Number(new URL(first.url).port);
+  await assert.rejects(startGateway(declaration,{directory,root:directory,port}),{code:'EADDRINUSE'});
+  assert.equal((await fetch(first.url+'/api/snapshot')).status,200);
+});
 
 test('Exact gateway leaves no pooled API connection for an unanswered execute to replay on',async t=>{
   const directory=await scratch(t,'exact-gateway-');
